@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --subframe-font-family: 'Inter', sans-serif;
+  /* Subframe ana renkleri */
+  --brand-500: #6366f1; 
+  --brand-600: #4f46e5;
+}
+
+/* Subframe'in ihtiyaç duyduğu temel katman */
+@layer base {
+  body {
+    @apply antialiased text-slate-900 bg-white;
+  }
+}
