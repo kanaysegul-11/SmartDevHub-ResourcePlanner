@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard'; 
+import Analytics from './pages/Analaytics';
+import Team from './pages/Team';
 
 function App() {
   // Token varsa giriş yapılmış demektir
@@ -11,6 +13,8 @@ function App() {
       <Routes>
         {/* Giriş Sayfası */}
         <Route path="/login" element={<Login />} />
+        <Route path='/analytics' element={<Analytics />} />
+        <Route path='/team' element={<Team />} />
         
         {/* Ana Sayfa (Dashboard) - Korunmuş Rota */}
         <Route 

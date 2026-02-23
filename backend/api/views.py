@@ -8,6 +8,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from django.db.models import Count
+from rest_framework.decorators import api_view
+from django.contrib.auth.models import User
+from .serializers import UserSerializer
 
 #Kod Kütüphanesi Görünümü
 class SnippetViewSet(viewsets.ModelViewSet):
@@ -33,8 +37,9 @@ class EmployeeStatusViewSet(viewsets.ModelViewSet):
     queryset = EmploymentStatus.objects.all()
     serializer_class = StatusSerializer
 
-    def get_queryset(self):
-        return EmploymentStatus.objects.all().order_by('-last_updated')
+    # Bu fonksiyon veriyi kaydederken "user" alanına giriş yapmış kişiyi otomatik yazar
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 class CustomLoginView(ObtainAuthToken):
     def post(self, request, *args, **kwargs):
@@ -50,6 +55,21 @@ class CustomLoginView(ObtainAuthToken):
             'username': user.username
         })
 
+@api_view(['GET'])
+def analytics_data(request):
+    # Dillerine göre snippet sayılarını alalım
+    language_stats = Snippet.objects.values('language').annotate(total=Count('id'))
+    total_snippets = Snippet.objects.count()
+    
+    return Response({
+        'total_snippets': total_snippets,
+        'language_distribution': language_stats
+    })
+    
+class TeamViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
 # Çıkış yapıp token'ı silen view
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated] # Sadece giriş yapmış olanlar çıkış yapabilir

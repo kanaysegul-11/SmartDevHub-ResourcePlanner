@@ -19,6 +19,8 @@ class Snippet(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='snippets', null=True, blank=True)
+    usage_count = models.PositiveIntegerField(default=0) # Her kopyalandığında veya bakıldığında +1
+    happiness_score = models.IntegerField(default=100) # 0-100 arası puan
 
     def __str__(self):
         return self.title

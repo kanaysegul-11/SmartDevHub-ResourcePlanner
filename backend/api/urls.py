@@ -12,5 +12,7 @@ router.register(r'status', EmployeeStatusViewSet)
 urlpatterns = [
     path('', include(router.urls)),
     path('status/', EmployeeStatusViewSet.as_view({'get': 'list'}), name='status-list'),
+    path('login/', CustomLoginView.as_view(), name='login'),
+    path('logout/', LogoutView.as_view(), name='logout'),
     
 ]
