@@ -19,8 +19,7 @@ class Snippet(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='snippets', null=True, blank=True)
-    usage_count = models.PositiveIntegerField(default=0) # Her kopyalandığında veya bakıldığında +1
-    happiness_score = models.IntegerField(default=100) # 0-100 arası puan
+    
 
     def __str__(self):
         return self.title
@@ -34,16 +33,21 @@ class Comment(models.Model):
 
 #Çalışan Durumu
 class EmploymentStatus(models.Model):
-    STATUS_CHOICES = [
-        ('available', 'Müsait'),
-        ('busy', 'Meşgul'),
-        ('meeting', 'Toplantıda'),
-        ('out_of_office', 'Ofis Dışında'),
-    ]
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='status')
-    current_work = models.CharField(max_length=255, blank=True, help_text="Anlık ne ile meşgulsünüz?")
-    status_type = models.CharField(max_length=20, choices=STATUS_CHOICES, default='available')
+    # User'a bağlı değil, direkt isim yazılacak alan
+    employee_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="Çalışan İsmi")
+    position = models.CharField(max_length=100, blank=True, null=True, verbose_name="Pozisyon")
+    current_work = models.TextField(verbose_name="Şu Anki Görev")
+    status_type = models.CharField(
+        max_length=20, 
+        choices=[('available', 'Müsait'), ('busy', 'Meşgul')],
+        default='available',
+        verbose_name="Durum"
+    )
     last_updated = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        verbose_name = "Ekip Durumu"
+        verbose_name_plural = "Ekip Durumları"
+
     def __str__(self):
-        return f"{self.user.username} - {self.status_type}"
+        return self.employee_name

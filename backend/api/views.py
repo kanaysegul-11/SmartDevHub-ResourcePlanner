@@ -36,11 +36,9 @@ class CommentViewSet(viewsets.ModelViewSet):
 class EmployeeStatusViewSet(viewsets.ModelViewSet):
     queryset = EmploymentStatus.objects.all()
     serializer_class = StatusSerializer
-
-    # Bu fonksiyon veriyi kaydederken "user" alanına giriş yapmış kişiyi otomatik yazar
+    # perform_create içindeki her şeyi silebilirsin veya sadece save() bırakabilirsin
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
+        serializer.save()
 class CustomLoginView(ObtainAuthToken):
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data,

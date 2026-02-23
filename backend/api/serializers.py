@@ -7,12 +7,12 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username','first_name','last_name', 'email']
 
+# api/serializers.py
 class StatusSerializer(serializers.ModelSerializer):
-    user_details = UserSerializer(source='user', read_only=True)
-
     class Meta:
         model = EmploymentStatus
-        fields = ['id', 'user_details', 'current_work', 'status_type', 'last_updated']
+        # Sadece bu alanları bırak, user_details'i tamamen sil!
+        fields = ['id', 'employee_name', 'position', 'current_work', 'status_type', 'last_updated']
 
 class CommentSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)

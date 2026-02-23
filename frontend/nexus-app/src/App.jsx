@@ -3,6 +3,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard'; 
 import Analytics from './pages/Analaytics';
 import Team from './pages/Team';
+import Snippet from './pages/Snippet';
 
 function App() {
   // Token varsa giriş yapılmış demektir
@@ -11,12 +12,11 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Giriş Sayfası */}
+       
         <Route path="/login" element={<Login />} />
         <Route path='/analytics' element={<Analytics />} />
         <Route path='/team' element={<Team />} />
-        
-        {/* Ana Sayfa (Dashboard) - Korunmuş Rota */}
+        <Route path='/snippet' element={<Snippet />} />
         <Route 
           path="/" 
           element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />} 
