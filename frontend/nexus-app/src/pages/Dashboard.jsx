@@ -4,6 +4,9 @@ import axios from "axios";
 import Sidebar from "../component/layout/Sidebar";
 import Navbar from "../component/dashboard/DashboardNavbar";
 import DashboardSummary from "../component/dashboard/DashboardSummary";
+import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
+import { IconWithBackground } from "../ui/components/IconWithBackground";
+import { Badge } from "../ui/components/Badge";
 import {
   FeatherCode,
   FeatherUsers,
@@ -11,88 +14,129 @@ import {
 } from "@subframe/core";
 
 function Dashboard() {
-  const [stats, setStats] = useState({ totalSnippets: 0, activeTeam: 0, latestSnippet: null });
+  const [stats, setStats] = useState({
+    totalSnippets: 0,
+    activeTeam: 0,
+    latestSnippet: null,
+  });
   const [teamActivities, setTeamActivities] = useState([]);
 
-  // 1. Ekip aktivitelerini çek
+  // 1. Ekip aktivitelerini cek
   useEffect(() => {
     const fetchTeamActivities = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const res = await axios.get('http://localhost:8000/api/status/', {
-          headers: { Authorization: `Token ${token}` }
+        const token = localStorage.getItem("token");
+        const res = await axios.get("http://localhost:8000/api/status/", {
+          headers: { Authorization: `Token ${token}` },
         });
         setTeamActivities(res.data);
       } catch (err) {
-        console.error("Ekip aktiviteleri alınamadı:", err);
+        console.error("Ekip aktiviteleri alinamadi:", err);
       }
     };
     fetchTeamActivities();
   }, []);
 
-  // 2. İstatistikleri çek
+  // 2. Istatistikleri cek
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem("token");
         const config = { headers: { Authorization: `Token ${token}` } };
-        const snippetRes = await axios.get('http://localhost:8000/api/snippets/', config);
-        const teamRes = await axios.get('http://localhost:8000/api/status/', config);
+        const snippetRes = await axios.get("http://localhost:8000/api/snippets/", config);
+        const teamRes = await axios.get("http://localhost:8000/api/status/", config);
 
         setStats({
           totalSnippets: snippetRes.data.length,
           activeTeam: teamRes.data.length,
-          latestSnippet: snippetRes.data[0]
+          latestSnippet: snippetRes.data[0],
         });
       } catch (err) {
-        console.error("Dashboard veri hatası:", err);
+        console.error("Dashboard veri hatasi:", err);
       }
     };
     fetchData();
   }, []);
 
+  const statCards = [
+    {
+      key: "snippets",
+      label: "Toplam Snippet",
+      value: stats.totalSnippets,
+      icon: <FeatherCode />,
+      iconVariant: "brand",
+      valueClassName: "text-slate-800",
+      badge: null,
+    },
+    {
+      key: "team",
+      label: "Aktif Ekip",
+      value: stats.activeTeam,
+      icon: <FeatherUsers />,
+      iconVariant: "neutral",
+      valueClassName: "text-slate-800",
+      badge: null,
+    },
+    {
+      key: "system",
+      label: "Sistem",
+      value: "Çevrimiçi",
+      icon: <FeatherCheckCircle />,
+      iconVariant: "success",
+      valueClassName: "text-success-800",
+      badge: <Badge variant="success">Çalışıyor</Badge>,
+    },
+  ];
+
   return (
-    <div className="flex w-full items-start bg-slate-50 h-screen overflow-hidden text-slate-900">
+    <div className="flex h-screen w-full items-start overflow-hidden bg-slate-50 text-slate-900">
       <Sidebar />
 
-      {/* ANA İÇERİK */}
-      <div className="flex grow flex-col items-start self-stretch overflow-y-auto px-10 py-10 gap-8">
-        <Navbar />
+      <div className="flex grow flex-col items-start self-stretch overflow-y-auto bg-default-background">
+        <TopbarWithRightNav
+          className="sticky top-0 z-10 border-b border-solid border-neutral-border bg-white/95 px-8 py-4 backdrop-blur"
+          leftSlot={<Navbar />}
+          rightSlot={
+            <>
+              <Badge variant="neutral" icon={<FeatherCode />}>
+                Dashboard
+              </Badge>
+              <Badge variant="success">Canlı Veri</Badge>
+            </>
+          }
+        />
 
-        {/* ÖZET KARTLARI */}
-        <div className="grid grid-cols-1 md:grid-cols-3 w-full gap-6">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-xl transition-all">
-            <div className="h-14 w-14 rounded-2xl bg-purple-100 flex items-center justify-center text-purple-600 shadow-inner">
-              <FeatherCode size={28} />
-            </div>
-            <div>
-              <span className="text-sm font-bold text-slate-400 block uppercase tracking-tight">Toplam Snippet</span>
-              <span className="text-3xl font-black text-slate-800">{stats.totalSnippets}</span>
-            </div>
+        <div className="flex w-full flex-col gap-8 px-8 py-8">
+          <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-3">
+            {statCards.map((card) => (
+              <div
+                key={card.key}
+                className="flex items-center gap-4 rounded-2xl border border-solid border-neutral-border bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <IconWithBackground
+                  size="large"
+                  square={true}
+                  variant={card.iconVariant}
+                  icon={card.icon}
+                  className="shrink-0"
+                />
+                <div className="flex min-w-0 grow flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-caption-bold font-caption-bold uppercase tracking-wide text-subtext-color">
+                      {card.label}
+                    </span>
+                    {card.badge}
+                  </div>
+                  <span className={`text-3xl font-black ${card.valueClassName}`}>
+                    {card.value}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
 
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-xl transition-all">
-            <div className="h-14 w-14 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-600 shadow-inner">
-              <FeatherUsers size={28} />
-            </div>
-            <div>
-              <span className="text-sm font-bold text-slate-400 block uppercase tracking-tight">Aktif Ekip</span>
-              <span className="text-3xl font-black text-slate-800">{stats.activeTeam}</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-5 hover:shadow-xl transition-all">
-            <div className="h-14 w-14 rounded-2xl bg-green-100 flex items-center justify-center text-green-600 shadow-inner">
-              <FeatherCheckCircle size={28} />
-            </div>
-            <div>
-              <span className="text-sm font-bold text-slate-400 block uppercase tracking-tight">Sistem</span>
-              <span className="text-xl font-black text-green-600 uppercase">Çevrimiçi</span>
-            </div>
-          </div>
+          <DashboardSummary stats={stats} teamActivities={teamActivities} />
         </div>
-
-        <DashboardSummary stats={stats} teamActivities={teamActivities} />
       </div>
     </div>
   );

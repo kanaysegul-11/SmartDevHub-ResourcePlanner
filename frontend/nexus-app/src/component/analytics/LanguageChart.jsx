@@ -18,7 +18,7 @@ function LanguageChart({ data }) {
         <div className="rounded-lg bg-purple-100 p-2 text-purple-600">
           <FeatherActivity size={20} />
         </div>
-        Dil Populerligi
+        Dil Popülerliği
       </h3>
       <div className="h-80 w-full">
         <ResponsiveContainer width="100%" height="100%">

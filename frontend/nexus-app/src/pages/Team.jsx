@@ -5,7 +5,9 @@ import Sidebar from "../component/layout/Sidebar";
 import TeamHeader from "../component/team/TeamHeader.jsx";
 import TeamForm from "../component/team/TeamForm.jsx";
 import TeamList from "../component/team/TeamList.jsx";
-import { FeatherBriefcase, FeatherCoffee } from "@subframe/core";
+import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
+import { Badge } from "../ui/components/Badge";
+import { FeatherBriefcase, FeatherCoffee, FeatherUsers } from "@subframe/core";
 
 function Team() {
   const [teamMembers, setTeamMembers] = useState([]);
@@ -79,7 +81,17 @@ function Team() {
         logoClickable={true}
       />
 
-      <div className="flex grow flex-col items-start self-stretch overflow-y-auto pb-20">
+      <div className="flex grow flex-col items-start self-stretch overflow-y-auto bg-default-background pb-20">
+        <TopbarWithRightNav
+          className="border-b border-solid border-neutral-border bg-white px-8 py-3"
+          leftSlot={
+            <Badge variant="neutral" icon={<FeatherUsers />}>
+              Team Workspace
+            </Badge>
+          }
+          rightSlot={<Badge variant="success">Canlı</Badge>}
+        />
+
         <TeamHeader loading={loading} />
 
         <div className="flex w-full flex-col items-start gap-12 px-8 py-8">

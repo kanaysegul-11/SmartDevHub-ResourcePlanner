@@ -9,6 +9,9 @@ import AvatarUpload from "../component/settings/AvatarUpload";
 import ProfileForm from "../component/settings/ProfileForm";
 import PasswordForm from "../component/settings/PasswordForm";
 import NotificationsPanel from "../component/settings/NotificationsPanel";
+import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
+import { Badge } from "../ui/components/Badge";
+import { FeatherSettings } from "@subframe/core";
 
 function Settings() {
   const { userData, refreshUserData, setUserData } = useUser();
@@ -139,7 +142,17 @@ function Settings() {
         logoClickable={true}
       />
 
-      <div className="flex grow flex-col items-start self-stretch overflow-y-auto bg-slate-50/50">
+      <div className="flex grow flex-col items-start self-stretch overflow-y-auto bg-default-background">
+        <TopbarWithRightNav
+          className="border-b border-solid border-neutral-border bg-white px-8 py-3"
+          leftSlot={
+            <Badge variant="neutral" icon={<FeatherSettings />}>
+              Account Workspace
+            </Badge>
+          }
+          rightSlot={<Badge variant="success">Guvenli</Badge>}
+        />
+
         <SettingsHeader successMsg={successMsg} />
 
         <div className="flex w-full max-w-6xl gap-8 px-8 py-10">

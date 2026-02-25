@@ -6,6 +6,9 @@ import Sidebar from "../component/layout/Sidebar";
 import AnalyticsHeader from "../component/analytics/AnalyticsHeader";
 import LanguageChart from "../component/analytics/LanguageChart";
 import SentimentChart from "../component/analytics/SentimentChart";
+import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
+import { Badge } from "../ui/components/Badge";
+import { FeatherTrendingUp } from "@subframe/core";
 
 function Analytics() {
   const [snippets, setSnippets] = useState([]);
@@ -18,7 +21,7 @@ function Analytics() {
     axios
       .get("http://localhost:8000/api/snippets/", config)
       .then((res) => setSnippets(Array.isArray(res.data) ? res.data : []))
-      .catch((err) => console.error("Veriler alinamadi", err));
+      .catch((err) => console.error("Veriler alınamadı", err));
   }, []);
 
   const filteredSnippets = snippets.filter((snippet) => {
@@ -44,7 +47,7 @@ function Analytics() {
 
   const sentimentData = [
     { name: "Memnun", value: 70, color: "#9333ea" },
-    { name: "Notr", value: 20, color: "#3b82f6" },
+    { name: "Nötr", value: 20, color: "#3b82f6" },
     { name: "Mutsuz", value: 10, color: "#ec4899" },
   ];
 
@@ -56,7 +59,17 @@ function Analytics() {
         logoClickable={true}
       />
 
-      <div className="flex grow flex-col items-start self-stretch overflow-y-auto">
+      <div className="flex grow flex-col items-start self-stretch overflow-y-auto bg-default-background">
+        <TopbarWithRightNav
+          className="border-b border-solid border-neutral-border bg-white px-8 py-3"
+          leftSlot={
+            <Badge variant="neutral" icon={<FeatherTrendingUp />}>
+              Analytics Workspace
+            </Badge>
+          }
+          rightSlot={<Badge variant="success">Canlı Veri</Badge>}
+        />
+
         <AnalyticsHeader
           searchTerm={searchTerm}
           onSearchChange={(e) => setSearchTerm(e.target.value)}

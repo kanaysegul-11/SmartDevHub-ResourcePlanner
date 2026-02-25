@@ -48,7 +48,7 @@ function SnippetDetail() {
       setNewComment("");
       fetchDetail();
     } catch (err) {
-      alert("Hata!");
+      alert("Hata!",err);
     } finally {
       setIsSubmitting(false);
     }

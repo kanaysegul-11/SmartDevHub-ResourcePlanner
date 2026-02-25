@@ -10,7 +10,7 @@ function SentimentChart({ data }) {
         <div className="rounded-lg bg-pink-100 p-2 text-pink-600">
           <FeatherUsers size={20} />
         </div>
-        Kullanici Memnuniyeti
+        Kullanıcı Memnuniyeti
       </h3>
       <div className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
