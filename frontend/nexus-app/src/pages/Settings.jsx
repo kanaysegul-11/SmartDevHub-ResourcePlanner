@@ -238,7 +238,7 @@ function Settings() {
                     />
                   </TextField>
                   <Button type="submit" className="mt-4 bg-purple-600 text-white px-12 py-4 rounded-xl font-bold" disabled={loading}>
-                    {loading ? "Kaydediliyor..." : "Değişiklikleri Kaydet"}
+                   on
                   </Button>
                 </form>
               </div>

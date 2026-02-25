@@ -1,4 +1,7 @@
-from rest_framework import viewsets, filters, status, permissions
+from rest_framework import viewsets, filters, status
+from django.db.models import Count
+from django.contrib.auth.hashers import check_password
+from rest_framework import viewsets, filters, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view
@@ -10,6 +13,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .models import Snippet, Comment, EmploymentStatus
 from .serializers import SnippetSerializer, CommentSerializer, StatusSerializer
 from rest_framework.decorators import api_view, permission_classes
+from .models import Snippet, Comment, EmploymentStatus, UserProfile
 from rest_framework.response import Response
 from django.contrib.auth.hashers import check_password
 
@@ -83,14 +87,42 @@ def change_password(request):
     user.set_password(new_password)
     user.save()
     return Response({"message": "Şifre başarıyla güncellendi."})
+def _serialize_user(user, request):
+    avatar = ''
+    if hasattr(user, 'profile') and user.profile.profile_photo:
+        avatar = request.build_absolute_uri(user.profile.profile_photo.url)
 
-@api_view(['GET'])
+    return {
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'firstName': user.first_name,
+        'lastName': user.last_name,
+        'avatar': avatar,
+    }
+
+
+@api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def update_profile(request):
     user = request.user
-    if 'profile_photo' in request.FILES:
-        photo = request.FILES['profile_photo']
-        user.profile.profile_photo = photo
-        user.profile.save()
-    user.save()
-    return Response({"message": "Profil başarıyla güncellendi."})
+    if request.method == 'PATCH':
+        first_name = request.data.get('first_name')
+        last_name = request.data.get('last_name')
+        email = request.data.get('email')
+
+        if first_name is not None:
+            user.first_name = first_name
+        if last_name is not None:
+            user.last_name = last_name
+        if email is not None:
+            user.email = email
+
+        if 'profile_photo' in request.FILES:
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            profile.profile_photo = request.FILES['profile_photo']
+            profile.save()
+
+        user.save()
+
+    return Response(_serialize_user(user, request), status=status.HTTP_200_OK)
