@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-#Kod Parçacıkları modeli
+# Kod Parçacıkları Modeli
 class Snippet(models.Model):
     LANGUAGE_CHOICES = [
         ('python','Python'),
@@ -19,21 +19,23 @@ class Snippet(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='snippets', null=True, blank=True)
-    
 
     def __str__(self):
         return self.title
-#Yorum ve Deneyim
+
+# Yorum Modeli
 class Comment(models.Model):
     snippet = models.ForeignKey(Snippet, related_name='comments', on_delete=models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    content = models.TextField()
-    experience_raiting = models.IntegerField(default=5 , help_text="1-5 arasında bir puan veriniz.")
+    author = models.ForeignKey(User, on_delete=models.CASCADE) # İsmi 'author' olarak sabitledik
+    text = models.TextField() # İsmi 'text' olarak sabitledik
+    experience_rating = models.IntegerField(default=5, help_text="1-5 arasında bir puan veriniz.")
     created_at = models.DateTimeField(auto_now_add=True)
 
-#Çalışan Durumu
+    def __str__(self):
+        return f"{self.author.username} - {self.snippet.title}"
+
+# Çalışan Durumu Modeli
 class EmploymentStatus(models.Model):
-    # User'a bağlı değil, direkt isim yazılacak alan
     employee_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="Çalışan İsmi")
     position = models.CharField(max_length=100, blank=True, null=True, verbose_name="Pozisyon")
     current_work = models.TextField(verbose_name="Şu Anki Görev")
@@ -50,4 +52,4 @@ class EmploymentStatus(models.Model):
         verbose_name_plural = "Ekip Durumları"
 
     def __str__(self):
-        return self.employee_name
+        return self.employee_name if self.employee_name else "İsimsiz"

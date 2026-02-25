@@ -1,19 +1,19 @@
-from rest_framework import viewsets, filters, permissions
-from .models import Snippet, Comment, EmploymentStatus
-from .serializers import SnippetSerializer, CommentSerializer, StatusSerializer
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework.authtoken.models import Token
+from rest_framework import viewsets, filters, status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework import status
+from rest_framework.decorators import api_view
+from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count
-from rest_framework.decorators import api_view
-from django.contrib.auth.models import User
-from .serializers import UserSerializer
+from django_filters.rest_framework import DjangoFilterBackend
+from .models import Snippet, Comment, EmploymentStatus
+from .serializers import SnippetSerializer, CommentSerializer, StatusSerializer
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from django.contrib.auth.hashers import check_password
 
-#Kod Kütüphanesi Görünümü
+# Kod Kütüphanesi
 class SnippetViewSet(viewsets.ModelViewSet):
     queryset = Snippet.objects.all().order_by('-created_at')
     serializer_class = SnippetSerializer
@@ -24,38 +24,24 @@ class SnippetViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
 
-#Yorum Görünümü
+# Yorumlar
 class CommentViewSet(viewsets.ModelViewSet):
     queryset = Comment.objects.all()
     serializer_class = CommentSerializer
+    permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        # Modelde alan ismi 'author' olduğu için 'author=...' şeklinde kaydettik
+        serializer.save(author=self.request.user)
 
-#Çalışan Durum Takibi Görünümü
+# Ekip Durumu
 class EmployeeStatusViewSet(viewsets.ModelViewSet):
-    queryset = EmploymentStatus.objects.all()
+    queryset = EmploymentStatus.objects.all().order_by('-last_updated')
     serializer_class = StatusSerializer
-    # perform_create içindeki her şeyi silebilirsin veya sadece save() bırakabilirsin
-    def perform_create(self, serializer):
-        serializer.save()
-class CustomLoginView(ObtainAuthToken):
-    def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data,
-                                           context={'request': request})
-        serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data['user']
-        token, created = Token.objects.get_or_create(user=user)
-        return Response({
-            'token': token.key,
-            'user_id': user.pk,
-            'email': user.email,
-            'username': user.username
-        })
 
+# Analytics
 @api_view(['GET'])
 def analytics_data(request):
-    # Dillerine göre snippet sayılarını alalım
     language_stats = Snippet.objects.values('language').annotate(total=Count('id'))
     total_snippets = Snippet.objects.count()
     
@@ -63,15 +49,48 @@ def analytics_data(request):
         'total_snippets': total_snippets,
         'language_distribution': language_stats
     })
-    
-class TeamViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
-# Çıkış yapıp token'ı silen view
-class LogoutView(APIView):
-    permission_classes = [IsAuthenticated] # Sadece giriş yapmış olanlar çıkış yapabilir
 
+# Login
+class CustomLoginView(ObtainAuthToken):
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        token, created = Token.objects.get_or_create(user=user)
+        return Response({
+            'token': token.key,
+            'user_id': user.pk,
+            'username': user.username
+        })
+
+# Logout
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         request.user.auth_token.delete()
         return Response({"message": "Başarıyla çıkış yapıldı"}, status=status.HTTP_200_OK)
+    
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    user = request.user
+    old_password = request.data.get("old_password")
+    new_password = request.data.get("new_password")
+
+    if not check_password(old_password, user.password):
+        return Response({"error": "Mevcut şifre hatalı."}, status=400)
+    
+    user.set_password(new_password)
+    user.save()
+    return Response({"message": "Şifre başarıyla güncellendi."})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def update_profile(request):
+    user = request.user
+    if 'profile_photo' in request.FILES:
+        photo = request.FILES['profile_photo']
+        user.profile.profile_photo = photo
+        user.profile.save()
+    user.save()
+    return Response({"message": "Profil başarıyla güncellendi."})

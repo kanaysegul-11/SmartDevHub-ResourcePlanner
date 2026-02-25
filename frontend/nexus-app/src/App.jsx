@@ -3,7 +3,12 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard'; 
 import Analytics from './pages/Analaytics';
 import Team from './pages/Team';
-import Snippet from './pages/Snippet';
+import SnippetList from './pages/SnippetList';
+import SnippetDetail from './component/SnippetsDetails';
+import CreatSnippet from './component/CreatSnippets';
+import CreateMember from './component/CreateMember';
+import Settings from './pages/Settings';
+import UserContext from './UserContext.jsx';
 
 function App() {
   // Token varsa giriş yapılmış demektir
@@ -16,9 +21,12 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path='/analytics' element={<Analytics />} />
         <Route path='/team' element={<Team />} />
-        <Route path='/snippet' element={<Snippet />} />
-        <Route 
-          path="/" 
+        <Route path='/snippets' element={<SnippetList />} />
+        <Route path="/snippets/:id" element={<SnippetDetail />} />
+        <Route path="/add-snippets" element={<CreatSnippet />} />
+        <Route path="/add-member" element={<CreateMember />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path = "/" 
           element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />} 
         />
 
