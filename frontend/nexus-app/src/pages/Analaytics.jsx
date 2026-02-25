@@ -15,7 +15,8 @@ import {
 import { 
   FeatherZap, FeatherLayout, FeatherTrendingUp, FeatherUsers, 
   FeatherLogOut, FeatherSearch, FeatherActivity , FeatherCode, 
-  FeatherChevronDown, FeatherPlus // FeatherPlus EKLENDİ
+  FeatherChevronDown, FeatherPlus,FeatherSettings
+  
 } from "@subframe/core";
 
 function Analytics() {
@@ -129,7 +130,15 @@ const { userData } = useUser();
               </div>
             </div>
 
-            <Button className="w-full justify-start rounded-lg bg-purple-50 text-purple-600 font-bold" variant="neutral-tertiary" icon={<FeatherTrendingUp />} onClick={() => navigate('/analytics')}>Analytics</Button>    
+            <Button className="w-full justify-start rounded-lg bg-purple-50 text-purple-600 font-bold" variant="neutral-tertiary" icon={<FeatherTrendingUp />} onClick={() => navigate('/analytics')}>Analytics</Button>
+             <Button 
+              className={`w-full justify-start rounded-lg ${window.location.pathname === '/settings' ? "bg-purple-50 text-purple-600 font-bold" : ""}`} 
+              variant="neutral-tertiary" 
+              icon={<FeatherSettings />} // Import etmeyi unutma: FeatherSettings
+              onClick={() => navigate('/settings')}
+            >
+              Settings
+            </Button>    
           </div>
         </div>
 

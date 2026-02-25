@@ -11,7 +11,7 @@ import { useUser } from "../UserContext.jsx";
 import { 
   FeatherZap, FeatherLayout, FeatherTrendingUp, FeatherUsers, 
   FeatherLogOut, FeatherTrash2, FeatherPlus, FeatherActivity, FeatherCode,
-  FeatherMail, FeatherChevronDown, FeatherBriefcase, FeatherCoffee
+  FeatherMail, FeatherChevronDown, FeatherBriefcase, FeatherCoffee, FeatherSettings
 } from "@subframe/core";
 
 function Team() {
@@ -140,6 +140,14 @@ function Team() {
             </div>
 
             <Button className="w-full justify-start rounded-lg" variant="neutral-tertiary" icon={<FeatherTrendingUp />} onClick={() => navigate('/analytics')}>Analytics</Button>
+             <Button 
+              className={`w-full justify-start rounded-lg ${window.location.pathname === '/settings' ? "bg-purple-50 text-purple-600 font-bold" : ""}`} 
+              variant="neutral-tertiary" 
+              icon={<FeatherSettings />} // Import etmeyi unutma: FeatherSettings
+              onClick={() => navigate('/settings')}
+            >
+              Settings
+            </Button>
           </div>
         </div>
 

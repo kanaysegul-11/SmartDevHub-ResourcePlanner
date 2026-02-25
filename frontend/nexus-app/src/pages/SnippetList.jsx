@@ -9,7 +9,7 @@ import { useUser } from "../UserContext.jsx";
 import { 
   FeatherZap, FeatherLayout, FeatherTrendingUp, FeatherUsers, 
   FeatherLogOut, FeatherSearch, FeatherCode, FeatherPlus, 
-  FeatherChevronRight, FeatherMessageSquare, FeatherChevronDown 
+  FeatherChevronRight, FeatherMessageSquare, FeatherChevronDown, FeatherSettings
 } from "@subframe/core";
 
 function SnippetList() {
@@ -88,6 +88,14 @@ function SnippetList() {
               </div>
             </div>
             <Button className="w-full justify-start rounded-lg" variant="neutral-tertiary" icon={<FeatherTrendingUp />} onClick={() => navigate('/analytics')}>Analytics</Button>
+             <Button 
+  className={`w-full justify-start rounded-lg ${window.location.pathname === '/settings' ? "bg-purple-50 text-purple-600 font-bold" : ""}`} 
+  variant="neutral-tertiary" 
+  icon={<FeatherSettings />} // Import etmeyi unutma: FeatherSettings
+  onClick={() => navigate('/settings')}
+>
+  Settings
+</Button>
           </div>
         </div>
         <div className="flex w-full items-center gap-3 rounded-lg px-2 py-2 hover:bg-purple-50 cursor-pointer" onClick={() => {localStorage.clear(); navigate('/login');}}>
@@ -120,7 +128,6 @@ function SnippetList() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-            <Button className="bg-purple-600 text-white" icon={<FeatherPlus />} onClick={() => navigate('/add-snippet')}>Yeni Ekle</Button>
           </div>
         </div>
         )}

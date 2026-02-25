@@ -4,6 +4,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 
+
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     profile_photo = models.FileField(upload_to='profile_photos/', blank=True, null=True)
@@ -18,11 +19,12 @@ def create_or_update_user_profile(sender, instance, created, **kwargs):
         UserProfile.objects.create(user=instance)
     else:
         UserProfile.objects.get_or_create(user=instance)
+
 # Kod Parçacıkları Modeli
 class Snippet(models.Model):
     LANGUAGE_CHOICES = [
-        ('python','Python'),
-        ('javascript','JavaScript'),
+        ('python', 'Python'),
+        ('javascript', 'JavaScript'),
         ('react/js', 'React/JS'),
         ('csharp', 'C#'),
         ('css', 'CSS'),

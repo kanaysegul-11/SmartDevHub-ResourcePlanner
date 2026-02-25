@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import EmploymentStatus
+from .models import EmploymentStatus,UserProfile
 
 @admin.register(EmploymentStatus)
 class EmploymentStatusAdmin(admin.ModelAdmin):
@@ -11,3 +11,8 @@ class EmploymentStatusAdmin(admin.ModelAdmin):
     search_fields = ('employee_name',)
     # Sağ taraftaki filtre paneli
     list_filter = ('status_type',)
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ('user','profile_photo')
+    search_fields = ('user__username',)
