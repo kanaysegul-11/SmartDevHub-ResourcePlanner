@@ -1,12 +1,12 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard'; 
-import Analytics from './pages/Analaytics';
+import Analytics from './pages/Analytics';
 import Team from './pages/Team';
 import SnippetList from './pages/SnippetList';
-import SnippetDetail from './component/SnippetsDetails';
-import CreatSnippet from './component/CreatSnippets';
-import CreateMember from './component/CreateMember';
+import SnippetDetail from './pages/SnippetsDetails';
+import CreatSnippet from './pages/CreatSnippets';
+import CreateMember from './pages/CreateMember';
 import Settings from './pages/Settings';
 
 function App() {
