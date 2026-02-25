@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard'; 
 import Analytics from './pages/Analaytics';
@@ -8,15 +8,13 @@ import SnippetDetail from './component/SnippetsDetails';
 import CreatSnippet from './component/CreatSnippets';
 import CreateMember from './component/CreateMember';
 import Settings from './pages/Settings';
-import UserContext from './UserContext.jsx';
 
 function App() {
   // Token varsa giriş yapılmış demektir
   const isAuthenticated = !!localStorage.getItem('token');
 
   return (
-    <Router>
-      <Routes>
+    <Routes>
        
         <Route path="/login" element={<Login />} />
         <Route path='/analytics' element={<Analytics />} />
@@ -33,7 +31,6 @@ function App() {
         {/* Yanlış bir linke gidilirse ana sayfaya dön */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
-    </Router>
   );
 }
 

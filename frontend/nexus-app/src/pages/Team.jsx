@@ -7,6 +7,7 @@ import { Badge } from "../ui/components/Badge";
 import { Button } from "../ui/components/Button";
 import { IconButton } from "../ui/components/IconButton";
 import { TextField } from "../ui/components/TextField";
+import { useUser } from "../UserContext.jsx";
 import { 
   FeatherZap, FeatherLayout, FeatherTrendingUp, FeatherUsers, 
   FeatherLogOut, FeatherTrash2, FeatherPlus, FeatherActivity, FeatherCode,
@@ -28,7 +29,7 @@ function Team() {
     status_type: "available"
   });
 
-  const username = localStorage.getItem('username') || 'Kullanici';
+  const { userData } = useUser();
   const token = localStorage.getItem('token');
   const config = { headers: { Authorization: `Token ${token}` } };
 
@@ -143,9 +144,9 @@ function Team() {
         </div>
 
         <div className="flex w-full items-center gap-3 rounded-lg px-2 py-2 hover:bg-red-50 group cursor-pointer transition-colors" onClick={() => {localStorage.clear(); navigate('/login');}}>
-          <Avatar variant="brand" size="small">{username[0]?.toUpperCase()}</Avatar>
+          <Avatar variant="brand" size="small">{userData.avatar ? <img src={userData.avatar} alt="Profile" className="w-full h-full object-cover rounded-full" /> : (userData.username?.[0]?.toUpperCase() || "U")}</Avatar>
           <div className="flex flex-col grow">
-            <span className="text-sm font-bold text-slate-700">{username}</span>
+            <span className="text-sm font-bold text-slate-700">{userData.username || "Kullanici"}</span>
             <span className="text-[10px] text-slate-400 font-bold group-hover:text-red-500 uppercase">Çıkış Yap</span>
           </div>
           <FeatherLogOut className="text-slate-300 group-hover:text-red-500" size={16} />

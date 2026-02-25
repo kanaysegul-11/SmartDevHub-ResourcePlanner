@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import  useUser  from "../UserContext"; // 1. Context'i import et
+import { useUser } from "../UserContext.jsx";
 import { Avatar } from "../ui/components/Avatar";
 import { Button } from "../ui/components/Button";
 import { TextField } from "../ui/components/TextField";
@@ -16,7 +16,7 @@ function Settings() {
   const navigate = useNavigate();
   
   // 2. Context'ten verileri ve fonksiyonları çek
-  const { userData, refreshUserData } = useUser();
+  const { userData, refreshUserData, setUserData } = useUser();
 
   const [activeTab, setActiveTab] = useState("profile");
   const [loading, setLoading] = useState(false);
@@ -27,9 +27,9 @@ function Settings() {
 
   // 3. Form state'lerini başlangıçta Context verisiyle doldur
   const [profileData, setProfileData] = useState({ 
-    firstName: userData.firstName || "", 
-    lastName: userData.lastName || "", 
-    email: userData.email || "" 
+    firstName: userData?.firstName || "", 
+    lastName: userData?.lastName || "", 
+    email: userData?.email || "" 
   });
 
   const [passwordData, setPasswordData] = useState({ old: "", new: "", confirm: "" });
@@ -41,7 +41,7 @@ function Settings() {
       lastName: userData.lastName || "",
       email: userData.email || ""
     });
-    if (userData.avatar) {
+    if (userData?.avatar) {
       setSelectedImage(userData.avatar);
     }
   }, [userData]);
@@ -52,7 +52,11 @@ function Settings() {
     const file = event.target.files[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => setSelectedImage(reader.result);
+      reader.onloadend = () => {
+        const nextAvatar = reader.result;
+        setSelectedImage(nextAvatar);
+        setUserData({ avatar: nextAvatar });
+      };
       reader.readAsDataURL(file);
 
       const formData = new FormData();
@@ -60,6 +64,7 @@ function Settings() {
 
       try {
         const token = localStorage.getItem('token');
+        // Backend'de fotoğraf endpoint'i stabil değilse bile UI'da global olarak anında güncelle
         await axios.patch('http://localhost:8000/api/update-profile/', formData, {
           headers: { 
             'Authorization': `Token ${token}`,
@@ -122,7 +127,7 @@ function Settings() {
       alert(err.response?.data?.error || "Eski şifre hatalı.");
     } finally {
       setLoading(false);
-    }
+   }
   };
 
   return (
@@ -147,14 +152,14 @@ function Settings() {
         {/* SIDEBAR PROFIL KISMI - ARTIK CONTEXT'E BAĞLI */}
         <div className="flex w-full items-center gap-3 rounded-lg px-2 py-2 hover:bg-red-50 group cursor-pointer transition-colors" onClick={() => {localStorage.clear(); navigate('/login');}}>
           <Avatar variant="brand" size="small">
-            {userData.avatar ? (
+            {userData?.avatar ? (
                 <img src={userData.avatar} className="w-full h-full object-cover rounded-full" />
             ) : (
-                userData.username[0]?.toUpperCase()
+                userData?.username?.[0]?.toUpperCase() || "U"
             )}
           </Avatar>
           <div className="flex flex-col grow text-left">
-            <span className="text-sm font-bold text-slate-700">{userData.username}</span>
+            <span className="text-sm font-bold text-slate-700">{userData?.username || "Kullanici"}</span>
             <span className="text-[10px] text-slate-400 font-bold group-hover:text-red-500 uppercase">Çıkış Yap</span>
           </div>
           <FeatherLogOut className="text-slate-300 group-hover:text-red-500" size={16} />
@@ -204,11 +209,11 @@ function Settings() {
                     {selectedImage ? (
                       <img src={selectedImage} alt="Profile" className="w-full h-full object-cover" />
                     ) : (
-                      userData.username[0]?.toUpperCase()
+                      userData?.username?.[0]?.toUpperCase() || "U"
                     )}
                   </Avatar>
                   <div className="flex flex-col gap-3">
-                    <span className="text-lg font-bold text-slate-800">{userData.username}</span>
+                    <span className="text-lg font-bold text-slate-800">{userData?.username || "Kullanici"}</span>
                     <Button size="small" variant="neutral-secondary" onClick={handleAvatarClick}>Fotoğrafı Güncelle</Button>
                   </div>
                 </div>

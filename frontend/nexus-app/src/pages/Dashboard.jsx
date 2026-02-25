@@ -4,7 +4,7 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { Avatar } from "../ui/components/Avatar";
 import { Button } from "../ui/components/Button";
-import  useUser  from "../UserContext.jsx"; // 1. Context'i import et
+import { useUser } from "../UserContext.jsx";
 import { 
   FeatherZap, FeatherLayout, FeatherTrendingUp, FeatherUsers, 
   FeatherLogOut, FeatherCode, FeatherActivity, FeatherArrowUpRight,
@@ -18,7 +18,7 @@ function Dashboard() {
   const [isLibraryHovered, setIsLibraryHovered] = useState(false); // Hover durumu 
   const [isTeamHovered, setIsTeamHovered] = useState(false); // Hover durumu
   const navigate = useNavigate();
-  const userData = useUser(); // 2. Context'ten kullanıcı verilerini al
+  const { userData } = useUser();
 
   // 1. Ekip aktivitelerini çek
   useEffect(() => {
@@ -126,7 +126,7 @@ function Dashboard() {
                 </div>
               </Button>
 
-              <div className={`overflow-hidden transition-all duration-300 flex flex-col gap-1 pl-9 ${isLibraryHovered ? "max-h-20 opacity-100 mb-2" : "max-h-0 opacity-0 pointer-events-none"}`}>
+             <div className={`overflow-hidden transition-all duration-300 flex flex-col gap-1 pl-9 ${isLibraryHovered ? "max-h-20 opacity-100 mb-2" : "max-h-0 opacity-0 pointer-events-none"}`}>
                 <button 
                   onClick={() => navigate('/add-snippets')}
                   className="flex items-center gap-2 py-2 text-sm font-semibold text-slate-500 hover:text-purple-600 transition-colors"
@@ -150,10 +150,10 @@ function Dashboard() {
         </div>
 
         <div className="flex w-full items-center gap-3 rounded-lg px-2 py-2 hover:bg-red-50 group cursor-pointer transition-colors" onClick={() => {localStorage.clear(); navigate('/login');}}>
-          <Avatar variant="brand" size="small">{userData.avatar[0]?.toUpperCase()}</Avatar>
+          <Avatar variant="brand" size="small">{userData.avatar ? <img src={userData.avatar} alt="Profile" className="w-full h-full object-cover rounded-full" /> : (userData.username?.[0]?.toUpperCase() || "U")}</Avatar>
           <div className="flex flex-col grow">
-            <span className="text-sm font-bold text-slate-700">{userData.username}</span>
-            <span className="text-[10px] text-slate-400 font-bold group-hover:text-red-500 uppercase">{userData.email}</span>
+            <span className="text-sm font-bold text-slate-700">{userData.username || "Kullanici"}</span>
+            <span className="text-[10px] text-slate-400 font-bold group-hover:text-red-500 uppercase">{userData.email || ""}</span>
           </div>
           <FeatherLogOut className="text-slate-300 group-hover:text-red-500" size={16} />
         </div>
@@ -162,7 +162,7 @@ function Dashboard() {
       {/* ANA İÇERİK */}
       <div className="flex grow flex-col items-start self-stretch overflow-y-auto px-10 py-10 gap-8">
         <div className="flex flex-col gap-1">
-          <h1 className="text-4xl font-black text-slate-800 tracking-tight">Merhaba, {userData.username}! 👋</h1>
+          <h1 className="text-4xl font-black text-slate-800 tracking-tight">Merhaba, {userData.username || "Kullanici"}! 👋</h1>
           <p className="text-slate-500 font-medium text-lg">İşte projenin bugünlük özeti.</p>
         </div>
 

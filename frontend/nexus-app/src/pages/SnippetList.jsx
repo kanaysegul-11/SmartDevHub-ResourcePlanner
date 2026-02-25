@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Avatar } from "../ui/components/Avatar";
 import { Button } from "../ui/components/Button";
 import { TextField } from "../ui/components/TextField";
-import  {userData} from "../UserContext.jsx"; // 1. Context'i import et
+import { useUser } from "../UserContext.jsx";
 import { 
   FeatherZap, FeatherLayout, FeatherTrendingUp, FeatherUsers, 
   FeatherLogOut, FeatherSearch, FeatherCode, FeatherPlus, 
@@ -18,7 +18,7 @@ function SnippetList() {
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
   const [isLibraryHovered, setIsLibraryHovered] = useState(false);
- const userData = useUser(); // Context'ten kullanıcı verilerini al
+ const { userData } = useUser();
 
   const fetchSnippets = useCallback(async () => {
     setLoading(true);
@@ -66,7 +66,7 @@ function SnippetList() {
               onMouseLeave={() => setIsLibraryHovered(false)}
             >
               <Button 
-                className={`w-full justify-start rounded-lg transition-colors ${isLibraryHovered || window.location.pathname.includes('snippets') ? "bg-purple-50 text-purple-600" : ""}`}
+               className={`w-full justify-start rounded-lg transition-colors ${isLibraryHovered || window.location.pathname.includes('snippets') ? "bg-purple-50 text-purple-600" : ""}`}
                 variant="neutral-tertiary" 
                 icon={<FeatherCode />}
                 onClick={() => navigate('/snippets')}
@@ -91,9 +91,9 @@ function SnippetList() {
           </div>
         </div>
         <div className="flex w-full items-center gap-3 rounded-lg px-2 py-2 hover:bg-purple-50 cursor-pointer" onClick={() => {localStorage.clear(); navigate('/login');}}>
-          <Avatar variant="brand" size="small">{userData.avatar[0]?.toUpperCase()}</Avatar>
+          <Avatar variant="brand" size="small">{userData.avatar ? <img src={userData.avatar} alt="Profile" className="w-full h-full object-cover rounded-full" /> : (userData.username?.[0]?.toUpperCase() || "U")}</Avatar>
           <div className="flex flex-col grow">
-            <span className="text-sm font-bold">{userData.username}</span>
+            <span className="text-sm font-bold">{userData.username || "Kullanici"}</span>
             <span className="text-xs text-slate-400">Çıkış Yap</span>
           </div>
           <FeatherLogOut className="text-slate-400" size={16} />

@@ -7,7 +7,7 @@ import { Avatar } from "../ui/components/Avatar";
 import { Button } from "../ui/components/Button";
 import { IconButton } from "../ui/components/IconButton";
 import { TextField } from "../ui/components/TextField"; 
-import  useUser  from "../UserContext";
+import { useUser } from "../UserContext.jsx";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell 
@@ -134,10 +134,10 @@ const { userData } = useUser();
         </div>
 
         <div className="flex w-full items-center gap-3 rounded-lg px-2 py-2 hover:bg-red-50 group cursor-pointer transition-colors" onClick={handleLogout}>
-          <Avatar variant="brand" size="small">{userData.avatar[0]?.toUpperCase()}</Avatar>
+          <Avatar variant="brand" size="small">{userData.avatar ? <img src={userData.avatar} alt="Profile" className="w-full h-full object-cover rounded-full" /> : (userData.username?.[0]?.toUpperCase() || "U")}</Avatar>
           <div className="flex flex-col grow">
-            <span className="text-sm font-bold text-slate-700">{userData.username}</span>
-            <span className="text-[10px] text-slate-400 font-bold group-hover:text-red-500 uppercase">{userData.email}</span>
+            <span className="text-sm font-bold text-slate-700">{userData.username || "Kullanici"}</span>
+            <span className="text-[10px] text-slate-400 font-bold group-hover:text-red-500 uppercase">{userData.email || ""}</span>
             <span className="text-[10px] text-slate-400 font-bold group-hover:text-red-500 uppercase">Çıkış Yap</span>
           </div>
           <FeatherLogOut className="text-slate-300 group-hover:text-red-500" size={16} />
