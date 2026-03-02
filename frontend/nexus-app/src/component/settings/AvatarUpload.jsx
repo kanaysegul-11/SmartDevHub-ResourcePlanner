@@ -33,7 +33,7 @@ function AvatarUpload({
       <div className="flex flex-col gap-3">
         <span className="text-lg font-bold text-slate-800">{userData?.username || "Kullanici"}</span>
         <Button size="small" variant="neutral-secondary" onClick={onAvatarClick}>
-          Fotografi Guncelle
+          Fotoğrafi Güncelle
         </Button>
       </div>
     </div>

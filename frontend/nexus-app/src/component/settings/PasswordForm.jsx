@@ -7,14 +7,14 @@ function PasswordForm({ passwordData, setPasswordData, onSubmit, loading }) {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col gap-8">
       <div>
-        <h3 className="text-xl font-black text-slate-800">Sifre Yonetimi</h3>
+        <h3 className="text-xl font-black text-slate-800">Şifre Yönetimi</h3>
         <p className="text-sm font-medium text-slate-400">
-          Hesap guvenliginiz icin duzenli olarak sifre degistirin.
+          Hesap güvenliğiniz için duzenli olarak şifre değiştirin.
         </p>
       </div>
 
       <form onSubmit={onSubmit} className="flex max-w-md flex-col gap-6">
-        <TextField label="Mevcut Sifre" variant="filled">
+        <TextField label="Mevcut Şifre" variant="filled">
           <TextField.Input
             type="password"
             value={passwordData.old}
@@ -22,7 +22,7 @@ function PasswordForm({ passwordData, setPasswordData, onSubmit, loading }) {
             required
           />
         </TextField>
-        <TextField label="Yeni Sifre" variant="filled">
+        <TextField label="Yeni Şifre" variant="filled">
           <TextField.Input
             type="password"
             value={passwordData.new}
@@ -30,7 +30,7 @@ function PasswordForm({ passwordData, setPasswordData, onSubmit, loading }) {
             required
           />
         </TextField>
-        <TextField label="Yeni Sifre (Tekrar)" variant="filled">
+        <TextField label="Yeni Şifre (Tekrar)" variant="filled">
           <TextField.Input
             type="password"
             value={passwordData.confirm}
@@ -43,7 +43,7 @@ function PasswordForm({ passwordData, setPasswordData, onSubmit, loading }) {
           className="mt-2 rounded-xl bg-slate-900 py-4 font-bold text-white"
           disabled={loading}
         >
-          {loading ? "Isleniyor..." : "Sifreyi Guncelle"}
+          {loading ? "İşleniyor..." : "Şifreyi Güncelle"}
         </Button>
       </form>
     </div>

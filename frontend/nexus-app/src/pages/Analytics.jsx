@@ -1,7 +1,6 @@
 "use client";
-import "../ui/theme.css";
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+import React, { useState } from "react";
+import { useList } from "@refinedev/core";
 import Sidebar from "../component/layout/Sidebar";
 import AnalyticsHeader from "../component/analytics/AnalyticsHeader";
 import LanguageChart from "../component/analytics/LanguageChart";
@@ -11,18 +10,10 @@ import { Badge } from "../ui/components/Badge";
 import { FeatherTrendingUp } from "@subframe/core";
 
 function Analytics() {
-  const [snippets, setSnippets] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const { result: snippetsResult } = useList({ resource: "snippets" });
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    const config = { headers: { Authorization: `Token ${token}` } };
-
-    axios
-      .get("http://localhost:8000/api/snippets/", config)
-      .then((res) => setSnippets(Array.isArray(res.data) ? res.data : []))
-      .catch((err) => console.error("Veriler alınamadı", err));
-  }, []);
+  const snippets = snippetsResult?.data ?? [];
 
   const filteredSnippets = snippets.filter((snippet) => {
     if (!searchTerm.trim()) return true;

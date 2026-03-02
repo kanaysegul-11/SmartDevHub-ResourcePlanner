@@ -6,13 +6,13 @@ import { TextField } from "../../ui/components/TextField";
 function ProfileForm({ profileData, setProfileData, onSubmit, loading }) {
   return (
     <form onSubmit={onSubmit} className="grid grid-cols-1 gap-8 md:grid-cols-2">
-      <TextField label="Adiniz" variant="filled">
+      <TextField label="Adınız" variant="filled">
         <TextField.Input
           value={profileData.firstName}
           onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
         />
       </TextField>
-      <TextField label="Soyadiniz" variant="filled">
+      <TextField label="Soyadınız" variant="filled">
         <TextField.Input
           value={profileData.lastName}
           onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
@@ -29,7 +29,7 @@ function ProfileForm({ profileData, setProfileData, onSubmit, loading }) {
         className="mt-4 rounded-xl bg-purple-600 px-12 py-4 font-bold text-white"
         disabled={loading}
       >
-        {loading ? "Isleniyor..." : "Profili Guncelle"}
+        {loading ? "İşleniyor..." : "Profili Güncelle"}
       </Button>
     </form>
   );

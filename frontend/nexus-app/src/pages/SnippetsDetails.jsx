@@ -1,7 +1,7 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useOne, useCreate, useInvalidate } from "@refinedev/core";
 import Sidebar from "../component/layout/Sidebar";
 import SnippetDetailHeader from "../component/snippets/SnippetDetailHeader";
 import SnippetCodePanel from "../component/snippets/SnippetCodePanel";
@@ -10,51 +10,42 @@ import SnippetComments from "../component/snippets/SnippetComments";
 function SnippetDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [snippet, setSnippet] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchDetail = useCallback(async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get(`http://localhost:8000/api/snippets/${id}/`, {
-        headers: { Authorization: `Token ${token}` },
-      });
-      setSnippet(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  const { result: snippet, query: snippetQuery } = useOne({
+    resource: "snippets",
+    id,
+  });
 
-  useEffect(() => {
-    fetchDetail();
-  }, [fetchDetail]);
+  const { mutate: createComment, isLoading: isSubmitting } = useCreate();
+  const invalidate = useInvalidate();
 
-  const handleAddComment = async (e) => {
+  const handleAddComment = (e) => {
     e.preventDefault();
     if (!newComment.trim() || isSubmitting) return;
 
-    try {
-      setIsSubmitting(true);
-      const token = localStorage.getItem("token");
-      await axios.post(
-        "http://localhost:8000/api/comments/",
-        { snippet: id, text: newComment, experience_rating: 5 },
-        { headers: { Authorization: `Token ${token}` } }
-      );
-      setNewComment("");
-      fetchDetail();
-    } catch (err) {
-      alert("Hata!",err);
-    } finally {
-      setIsSubmitting(false);
-    }
+    createComment(
+      {
+        resource: "comments",
+        values: { snippet: id, text: newComment, experience_rating: 5 },
+      },
+      {
+        onSuccess: () => {
+          setNewComment("");
+          invalidate({
+            resource: "snippets",
+            id,
+            invalidates: ["detail"],
+          });
+        },
+        onError: (err) => {
+          alert("Hata!", err);
+        },
+      }
+    );
   };
 
-  if (loading) {
+  if (snippetQuery?.isLoading) {
     return (
       <div className="flex h-screen items-center justify-center font-bold text-purple-600">
         Yukleniyor...
@@ -76,7 +67,10 @@ function SnippetDetail() {
 
       <div className="flex grow overflow-hidden">
         <div className="flex flex-grow flex-col gap-6 overflow-y-auto px-10 py-8">
-          <SnippetDetailHeader title={snippet.title} onBack={() => navigate("/snippets")} />
+          <SnippetDetailHeader
+            title={snippet.title}
+            onBack={() => navigate("/snippets")}
+          />
           <SnippetCodePanel language={snippet.language} code={snippet.code} />
         </div>
 

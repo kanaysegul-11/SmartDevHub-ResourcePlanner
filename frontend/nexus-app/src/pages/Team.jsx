@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import React, { useState } from "react";
+import { useList, useCreate, useDelete, useInvalidate } from "@refinedev/core";
 import Sidebar from "../component/layout/Sidebar";
 import TeamHeader from "../component/team/TeamHeader.jsx";
 import TeamForm from "../component/team/TeamForm.jsx";
@@ -10,10 +10,7 @@ import { Badge } from "../ui/components/Badge";
 import { FeatherBriefcase, FeatherCoffee, FeatherUsers } from "@subframe/core";
 
 function Team() {
-  const [teamMembers, setTeamMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-
   const [formData, setFormData] = useState({
     employee_name: "",
     position: "",
@@ -21,54 +18,54 @@ function Team() {
     status_type: "available",
   });
 
-  const token = localStorage.getItem("token");
-  const config = { headers: { Authorization: `Token ${token}` } };
+  const { result: teamResult, query: teamQuery } = useList({
+    resource: "status",
+  });
+  const { mutate: createMember, isLoading: isCreating } = useCreate();
+  const { mutate: deleteMember } = useDelete();
+  const invalidate = useInvalidate();
 
-  const fetchTeamData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const storedToken = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:8000/api/status/", {
-        headers: { Authorization: `Token ${storedToken}` },
-      });
-      setTeamMembers(res.data);
-    } catch (err) {
-      console.error("Veri çekme hatası:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const teamMembers = teamResult?.data ?? [];
 
-  useEffect(() => {
-    fetchTeamData();
-  }, [fetchTeamData]);
+  const activeProjectMembers = teamMembers.filter(
+    (m) => m.status_type === "busy"
+  );
+  const availableMembers = teamMembers.filter(
+    (m) => m.status_type === "available"
+  );
 
-  const activeProjectMembers = teamMembers.filter((m) => m.status_type === "busy");
-  const availableMembers = teamMembers.filter((m) => m.status_type === "available");
-
-  const handleAddMember = async (e) => {
+  const handleAddMember = (e) => {
     e.preventDefault();
-    try {
-      const storedToken = localStorage.getItem("token");
-      await axios.post("http://localhost:8000/api/status/", formData, {
-        headers: { Authorization: `Token ${storedToken}` },
-      });
-      setFormData({ employee_name: "", position: "", current_work: "", status_type: "available" });
-      setShowForm(false);
-      fetchTeamData();
-    } catch (err) {
-      alert("Ekleme basarisiz!",err);
-    }
+    createMember(
+      { resource: "status", values: formData },
+      {
+        onSuccess: () => {
+          setFormData({
+            employee_name: "",
+            position: "",
+            current_work: "",
+            status_type: "available",
+          });
+          setShowForm(false);
+          invalidate({ resource: "status", invalidates: ["list"] });
+        },
+        onError: (err) => {
+          alert("Ekleme basarisiz!", err);
+        },
+      }
+    );
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Bu uyeyi silmek istedigine emin misin?")) {
-      try {
-        await axios.delete(`http://localhost:8000/api/status/${id}/`, config);
-        fetchTeamData();
-      } catch (err) {
-        console.error("Silme hatasi:", err);
-      }
+  const handleDelete = (id) => {
+    if (window.confirm("Bu üyeyi silmek istediğine emin misin?")) {
+      deleteMember(
+        { resource: "status", id },
+        {
+          onSuccess: () =>
+            invalidate({ resource: "status", invalidates: ["list"] }),
+          onError: (err) => console.error("Silme hatasi:", err),
+        }
+      );
     }
   };
 
@@ -92,7 +89,7 @@ function Team() {
           rightSlot={<Badge variant="success">Canlı</Badge>}
         />
 
-        <TeamHeader loading={loading} />
+        <TeamHeader loading={teamQuery?.isLoading || isCreating} />
 
         <div className="flex w-full flex-col items-start gap-12 px-8 py-8">
           <TeamForm
@@ -100,6 +97,7 @@ function Team() {
             formData={formData}
             setFormData={setFormData}
             onSubmit={handleAddMember}
+            isSubmitting={isCreating}
           />
 
           <TeamList

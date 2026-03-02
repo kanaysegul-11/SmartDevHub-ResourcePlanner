@@ -1,7 +1,7 @@
 from django import views
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import SnippetViewSet, CommentViewSet, EmployeeStatusViewSet
+from .views import SnippetViewSet, CommentViewSet, EmployeeStatusViewSet, PageConfigViewSet
 from django.urls import path
 from .views import CustomLoginView, LogoutView, change_password, update_profile
 
@@ -9,6 +9,7 @@ router = DefaultRouter()
 router.register(r'snippets', SnippetViewSet)    
 router.register(r'comments', CommentViewSet)
 router.register(r'status', EmployeeStatusViewSet)
+router.register(r'page-configs', PageConfigViewSet)
 
 
 urlpatterns = [

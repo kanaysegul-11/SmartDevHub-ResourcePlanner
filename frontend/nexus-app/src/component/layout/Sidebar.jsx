@@ -34,6 +34,8 @@ function Sidebar({
     activeItem ||
     (pathname === "/"
       ? "dashboard"
+      : pathname === "/puck"
+        ? "puck"
       : pathname === "/team"
         ? "team"
         : pathname.includes("snippets")
@@ -102,7 +104,7 @@ function Sidebar({
             <span
               className={`text-xs text-slate-400 ${logoutVariant === "danger" ? "text-[10px] font-bold uppercase group-hover:text-red-500" : ""}`}
             >
-              Cikis Yap
+              Çıkış Yap
             </span>
           </div>
           <FeatherLogOut className={logoutIconClass} size={16} />
@@ -199,6 +201,16 @@ function Sidebar({
             onClick={() => navigate("/analytics")}
           >
             Analytics
+          </SidebarWithSections.NavItem>
+        ) : null}
+
+        {menuPreset === "full" ? (
+          <SidebarWithSections.NavItem
+            selected={resolvedActive === "puck"}
+            icon={<FeatherLayout />}
+            onClick={() => navigate("/puck")}
+          >
+            Puck Editor
           </SidebarWithSections.NavItem>
         ) : null}
       </SidebarWithSections.NavSection>

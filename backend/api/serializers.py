@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Snippet, Comment, EmploymentStatus
+from .models import Snippet, Comment, EmploymentStatus, PageConfig
 from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
@@ -27,3 +27,9 @@ class SnippetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Snippet
         fields = ['id', 'title', 'description', 'code', 'language', 'created_at', 'author', 'author_details', 'comments']
+
+
+class PageConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PageConfig
+        fields = ['id', 'key', 'data', 'created_at', 'updated_at']

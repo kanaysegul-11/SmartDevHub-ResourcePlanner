@@ -32,7 +32,7 @@ const Item = React.forwardRef<HTMLDivElement, ItemProps>(function Item(
       className={SubframeUtils.twClassNames(
         "group/d5612535 flex h-10 cursor-pointer items-center justify-center gap-2 border-b border-solid border-neutral-border px-2.5 py-0.5",
         {
-          "border-b-2 border-solid border-brand-600 px-2.5 pt-0.5 pb-px":
+          "border-b-2 border-x-0 border-t-0 border-solid border-brand-600 px-2.5 pt-0.5 pb-px":
             active,
         },
         className

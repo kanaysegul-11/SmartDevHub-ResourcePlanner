@@ -8,7 +8,7 @@ function AnalyticsHeader({ searchTerm = "", onSearchChange }) {
     <div className="sticky top-0 z-10 flex w-full items-center gap-4 border-b bg-white px-8 py-5 shadow-sm">
       <div className="grow">
         <span className="block text-2xl font-black tracking-tight text-slate-800">Snippet Analytics</span>
-        <span className="text-sm font-medium text-slate-500">Kutuphanenizin performans verileri burada.</span>
+        <span className="text-sm font-medium text-slate-500">Kütüphanenizin performans verileri burada.</span>
       </div>
       <TextField
         className="w-72"

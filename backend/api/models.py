@@ -72,3 +72,17 @@ class EmploymentStatus(models.Model):
 
     def __str__(self):
         return self.employee_name if self.employee_name else "İsimsiz"
+
+
+class PageConfig(models.Model):
+    key = models.SlugField(unique=True)
+    data = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Page Config"
+        verbose_name_plural = "Page Configs"
+
+    def __str__(self):
+        return self.key

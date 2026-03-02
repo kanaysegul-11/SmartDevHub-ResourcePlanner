@@ -8,6 +8,7 @@ import SnippetDetail from "./pages/SnippetsDetails";
 import CreatSnippet from "./pages/CreatSnippets";
 import CreateMember from "./pages/CreateMember";
 import Settings from "./pages/Settings";
+import PuckEditor from "./pages/PuckEditor";
 
 function ProtectedRoutes() {
   const isAuthenticated = !!localStorage.getItem("token");
@@ -33,6 +34,7 @@ function App() {
         <Route path="/add-snippets" element={<CreatSnippet />} />
         <Route path="/add-member" element={<CreateMember />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/puck" element={<PuckEditor />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

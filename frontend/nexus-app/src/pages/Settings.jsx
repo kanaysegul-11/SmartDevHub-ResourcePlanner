@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
-import axios from "axios";
+import { apiClient } from "../refine/axios";
 import { useUser } from "../UserContext.jsx";
 import Sidebar from "../component/layout/Sidebar";
 import SettingsHeader from "../component/settings/SettingsHeader";
@@ -27,7 +27,11 @@ function Settings() {
     lastName: userData?.lastName || "",
     email: userData?.email || "",
   });
-  const [passwordData, setPasswordData] = useState({ old: "", new: "", confirm: "" });
+  const [passwordData, setPasswordData] = useState({
+    old: "",
+    new: "",
+    confirm: "",
+  });
 
   useEffect(() => {
     setProfileData({
@@ -64,17 +68,15 @@ function Settings() {
     formData.append("profile_photo", file);
 
     try {
-      const token = localStorage.getItem("token");
-      await axios.patch("http://localhost:8000/api/update-profile/", formData, {
+      await apiClient.patch("/update-profile/", formData, {
         headers: {
-          Authorization: `Token ${token}`,
           "Content-Type": "multipart/form-data",
         },
       });
       await refreshUserData();
-      flashSuccess("Profil fotografi guncellendi!");
+      flashSuccess("Profil fotografı güncellendi!");
     } catch (err) {
-      console.error("Yukleme hatasi:", err);
+      console.error("Yükleme hatasi:", err);
     }
   };
 
@@ -82,23 +84,16 @@ function Settings() {
     e.preventDefault();
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.patch(
-        "http://localhost:8000/api/update-profile/",
-        {
-          first_name: profileData.firstName,
-          last_name: profileData.lastName,
-          email: profileData.email,
-        },
-        {
-          headers: { Authorization: `Token ${token}` },
-        }
-      );
+      await apiClient.patch("/update-profile/", {
+        first_name: profileData.firstName,
+        last_name: profileData.lastName,
+        email: profileData.email,
+      });
 
       await refreshUserData();
-      flashSuccess("Profil guncellendi!");
+      flashSuccess("Profil güncellendi!");
     } catch (err) {
-      alert("Hata: Profil guncellenemedi.",err);
+      alert("Hata: Profil güncellenemedi.", err);
     } finally {
       setLoading(false);
     }
@@ -107,27 +102,20 @@ function Settings() {
   const handlePasswordChange = async (e) => {
     e.preventDefault();
     if (passwordData.new !== passwordData.confirm) {
-      alert("Sifreler uyusmuyor!");
+      alert("Şifreler uyuşmuyor!");
       return;
     }
 
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        "http://localhost:8000/api/change-password/",
-        {
-          old_password: passwordData.old,
-          new_password: passwordData.new,
-        },
-        {
-          headers: { Authorization: `Token ${token}` },
-        }
-      );
+      await apiClient.post("/change-password/", {
+        old_password: passwordData.old,
+        new_password: passwordData.new,
+      });
       setPasswordData({ old: "", new: "", confirm: "" });
-      flashSuccess("Sifre basariyla degistirildi!");
+      flashSuccess("Şifre başarıyla değiştirildi!");
     } catch (err) {
-      alert(err.response?.data?.error || "Eski sifre hatali.");
+      alert(err.response?.data?.error || "Eski şifre hatalı.");
     } finally {
       setLoading(false);
     }
@@ -136,9 +124,8 @@ function Settings() {
   return (
     <div className="flex h-screen w-full items-start overflow-hidden bg-slate-50 font-sans text-slate-900">
       <Sidebar
-        activeItem="settings"
-        menuPreset="settings"
-        logoutVariant="danger"
+        activeItem="analytics"
+        showTeamSubmenu={true}
         logoClickable={true}
       />
 
@@ -150,7 +137,7 @@ function Settings() {
               Account Workspace
             </Badge>
           }
-          rightSlot={<Badge variant="success">Guvenli</Badge>}
+          rightSlot={<Badge variant="success">Güvenli</Badge>}
         />
 
         <SettingsHeader successMsg={successMsg} />
@@ -161,7 +148,9 @@ function Settings() {
           <div className="min-h-[500px] flex-1 rounded-[2.5rem] border border-slate-200 bg-white p-12 shadow-sm">
             {activeTab === "profile" ? (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <h3 className="mb-8 text-xl font-black text-slate-800">Profil Ayarlari</h3>
+                <h3 className="mb-8 text-xl font-black text-slate-800">
+                  Profil Ayarları
+                </h3>
                 <AvatarUpload
                   fileInputRef={fileInputRef}
                   onFileChange={handleFileChange}

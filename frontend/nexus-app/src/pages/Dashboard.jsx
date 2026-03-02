@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import React from "react";
+import { useList } from "@refinedev/core";
 import Sidebar from "../component/layout/Sidebar";
 import Navbar from "../component/dashboard/DashboardNavbar";
 import DashboardSummary from "../component/dashboard/DashboardSummary";
@@ -14,49 +14,36 @@ import {
 } from "@subframe/core";
 
 function Dashboard() {
-  const [stats, setStats] = useState({
-    totalSnippets: 0,
-    activeTeam: 0,
-    latestSnippet: null,
+  const { result: snippetsResult, query: snippetsQuery } = useList({
+    resource: "snippets",
   });
-  const [teamActivities, setTeamActivities] = useState([]);
+  const { result: statusResult, query: statusQuery } = useList({
+    resource: "status",
+  });
 
-  // 1. Ekip aktivitelerini cek
-  useEffect(() => {
-    const fetchTeamActivities = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:8000/api/status/", {
-          headers: { Authorization: `Token ${token}` },
-        });
-        setTeamActivities(res.data);
-      } catch (err) {
-        console.error("Ekip aktiviteleri alinamadi:", err);
-      }
-    };
-    fetchTeamActivities();
-  }, []);
+  const snippets = snippetsResult?.data ?? [];
+  const teamActivities = statusResult?.data ?? [];
+  console.log("Dashboard raw", {
+    snippetsResult,
+    statusResult,
+    snippetsStatus: {
+      isLoading: snippetsQuery?.isLoading,
+      isError: snippetsQuery?.isError,
+      error: snippetsQuery?.error,
+    },
+    statusStatus: {
+      isLoading: statusQuery?.isLoading,
+      isError: statusQuery?.isError,
+      error: statusQuery?.error,
+    },
+  });
+  console.log("Dashboard data", { snippets, teamActivities });
 
-  // 2. Istatistikleri cek
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        const config = { headers: { Authorization: `Token ${token}` } };
-        const snippetRes = await axios.get("http://localhost:8000/api/snippets/", config);
-        const teamRes = await axios.get("http://localhost:8000/api/status/", config);
-
-        setStats({
-          totalSnippets: snippetRes.data.length,
-          activeTeam: teamRes.data.length,
-          latestSnippet: snippetRes.data[0],
-        });
-      } catch (err) {
-        console.error("Dashboard veri hatasi:", err);
-      }
-    };
-    fetchData();
-  }, []);
+  const stats = {
+    totalSnippets: snippets.length,
+    activeTeam: teamActivities.length,
+    latestSnippet: snippets[0] || null,
+  };
 
   const statCards = [
     {

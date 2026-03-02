@@ -8,7 +8,7 @@ function SettingsHeader({ successMsg }) {
       <div className="grow">
         <h1 className="block text-2xl font-black tracking-tight text-slate-800">Ayarlar</h1>
         <p className="text-sm font-medium text-slate-500">
-          Hesap tercihlerini ve guvenlik yapilandirmalarini buradan yonet.
+          Hesap tercihlerini ve güvenlik yapılandırmalarını buradan yönet.
         </p>
       </div>
       {successMsg ? (

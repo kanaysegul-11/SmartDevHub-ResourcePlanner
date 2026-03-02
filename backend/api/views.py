@@ -10,8 +10,8 @@ from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Snippet, Comment, EmploymentStatus
-from .serializers import SnippetSerializer, CommentSerializer, StatusSerializer
+from .models import Snippet, Comment, EmploymentStatus, PageConfig
+from .serializers import SnippetSerializer, CommentSerializer, StatusSerializer, PageConfigSerializer
 from rest_framework.decorators import api_view, permission_classes
 from .models import Snippet, Comment, EmploymentStatus, UserProfile
 from rest_framework.response import Response
@@ -42,6 +42,13 @@ class CommentViewSet(viewsets.ModelViewSet):
 class EmployeeStatusViewSet(viewsets.ModelViewSet):
     queryset = EmploymentStatus.objects.all().order_by('-last_updated')
     serializer_class = StatusSerializer
+
+
+class PageConfigViewSet(viewsets.ModelViewSet):
+    queryset = PageConfig.objects.all().order_by('-updated_at')
+    serializer_class = PageConfigSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = "key"
 
 # Analytics
 @api_view(['GET'])

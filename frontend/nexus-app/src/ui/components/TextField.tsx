@@ -9,7 +9,11 @@ import * as SubframeCore from "@subframe/core";
 import * as SubframeUtils from "../utils";
 
 interface InputProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "placeholder"> {
+  extends Omit<
+    React.InputHTMLAttributes<HTMLInputElement>,
+    "type" | "placeholder"
+  > {
+  type?: "text" | "password" | "email" | "number" | "tel" | "url" | "search";
   placeholder?: React.ReactNode;
   value?: string;
   onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -17,17 +21,32 @@ interface InputProps
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
-  { placeholder, className, ...otherProps }: InputProps,
+  { type = "text", placeholder, className, ...otherProps }: InputProps,
   ref
 ) {
   return (
     <input
       className={SubframeUtils.twClassNames(
-        "h-full w-full border-none bg-transparent px-0 py-0 text-body font-body text-default-font outline-none placeholder:text-neutral-400",
+        "group/b0d608f7 h-full w-full border-none bg-transparent px-0 py-0 text-body font-body text-default-font outline-none placeholder:text-neutral-400",
         className
       )}
       placeholder={placeholder as string}
       ref={ref}
+      type={
+        type === "search"
+          ? "search"
+          : type === "url"
+          ? "url"
+          : type === "tel"
+          ? "tel"
+          : type === "number"
+          ? "number"
+          : type === "email"
+          ? "email"
+          : type === "password"
+          ? "password"
+          : "text"
+      }
       {...otherProps}
     />
   );

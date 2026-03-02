@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import axios from "axios";
+import { apiClient } from "./refine/axios";
 
 const UserContext = createContext();
 
@@ -32,17 +32,13 @@ export const UserProvider = ({ children }) => {
       return merged;
     });
   };
+
   const refreshUserData = async () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
 
-      const response = await axios.get("http://localhost:8000/api/update-profile/", {
-        headers: {
-          Authorization: `Token ${token}`,
-        },
-      });
-
+      const response = await apiClient.get("/update-profile/");
       updateUserData(response.data || {});
     } catch (error) {
       console.error("User fetch error:", error);
@@ -55,7 +51,9 @@ export const UserProvider = ({ children }) => {
   }, []);
 
   return (
-    <UserContext.Provider value={{ userData, setUserData: updateUserData, refreshUserData }}>
+    <UserContext.Provider
+      value={{ userData, setUserData: updateUserData, refreshUserData }}
+    >
       {children}
     </UserContext.Provider>
   );
