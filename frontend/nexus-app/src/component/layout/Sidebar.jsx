@@ -32,10 +32,8 @@ function Sidebar({
 
   const resolvedActive =
     activeItem ||
-    (pathname === "/"
-      ? "dashboard"
-      : pathname === "/puck"
-        ? "puck"
+    (pathname === "/" || pathname === "/dashboard"
+        ? "dashboard"
       : pathname === "/team"
         ? "team"
         : pathname.includes("snippets")
@@ -63,7 +61,7 @@ function Sidebar({
       header={
         <div
           className={`flex w-full items-center gap-3 ${logoClickable ? "cursor-pointer" : ""}`}
-          onClick={logoClickable ? () => navigate("/") : undefined}
+          onClick={logoClickable ? () => navigate("/dashboard") : undefined}
         >
           <div className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 shadow-md">
             <FeatherZap className="text-[20px] text-white" />
@@ -115,7 +113,7 @@ function Sidebar({
         <SidebarWithSections.NavItem
           selected={resolvedActive === "dashboard"}
           icon={<FeatherLayout />}
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/dashboard")}
         >
           Dashboard
         </SidebarWithSections.NavItem>
@@ -204,15 +202,6 @@ function Sidebar({
           </SidebarWithSections.NavItem>
         ) : null}
 
-        {menuPreset === "full" ? (
-          <SidebarWithSections.NavItem
-            selected={resolvedActive === "puck"}
-            icon={<FeatherLayout />}
-            onClick={() => navigate("/puck")}
-          >
-            Puck Editor
-          </SidebarWithSections.NavItem>
-        ) : null}
       </SidebarWithSections.NavSection>
 
       <SidebarWithSections.NavSection label="Hesap">

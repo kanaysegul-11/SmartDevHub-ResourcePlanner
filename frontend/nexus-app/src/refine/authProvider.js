@@ -15,7 +15,7 @@ export const authProvider = {
         if (response.data?.user_id) {
           localStorage.setItem("user_id", String(response.data.user_id));
         }
-        return { success: true, redirectTo: "/" };
+        return { success: true, redirectTo: "/dashboard" };
       }
 
       return { success: false, error: { message: "Login failed." } };

@@ -12,6 +12,9 @@ import { FeatherTrendingUp } from "@subframe/core";
 function Analytics() {
   const [searchTerm, setSearchTerm] = useState("");
   const { result: snippetsResult } = useList({ resource: "snippets" });
+  const { result: commentsResult, query: commentsQuery } = useList({
+    resource: "comments",
+  });
 
   const snippets = snippetsResult?.data ?? [];
 
@@ -36,11 +39,59 @@ function Analytics() {
     return acc;
   }, []);
 
-  const sentimentData = [
-    { name: "Memnun", value: 70, color: "#9333ea" },
-    { name: "Nötr", value: 20, color: "#3b82f6" },
-    { name: "Mutsuz", value: 10, color: "#ec4899" },
-  ];
+  const comments = commentsResult?.data ?? [];
+  const isCommentsLoading =
+    commentsQuery?.isLoading || commentsQuery?.isFetching || false;
+
+  const ratingBuckets = comments.reduce(
+    (acc, comment) => {
+      const rating = Number(comment?.experience_rating);
+      if (rating >= 4) {
+        acc.happy += 1;
+      } else if (rating === 3) {
+        acc.neutral += 1;
+      } else if (rating > 0 && rating <= 2) {
+        acc.unhappy += 1;
+      }
+      return acc;
+    },
+    { happy: 0, neutral: 0, unhappy: 0 }
+  );
+
+  const totalComments = comments.length;
+  const toPercent = (count) => {
+    if (!totalComments) {
+      return 0;
+    }
+    return Math.round((count / totalComments) * 100);
+  };
+
+  const sentimentData = isCommentsLoading
+    ? [
+        { name: "Memnun", value: 1, color: "#22c55e", percentage: null },
+        { name: "Notr", value: 1, color: "#9333ea", percentage: null },
+        { name: "Mutsuz", value: 1, color: "#ef4444", percentage: null },
+      ]
+    : [
+        {
+          name: "Memnun",
+          value: toPercent(ratingBuckets.happy),
+          color: "#22c55e",
+          percentage: toPercent(ratingBuckets.happy),
+        },
+        {
+          name: "Notr",
+          value: toPercent(ratingBuckets.neutral),
+          color: "#9333ea",
+          percentage: toPercent(ratingBuckets.neutral),
+        },
+        {
+          name: "Mutsuz",
+          value: toPercent(ratingBuckets.unhappy),
+          color: "#ef4444",
+          percentage: toPercent(ratingBuckets.unhappy),
+        },
+      ];
 
   return (
     <div className="flex h-screen w-full items-start overflow-hidden bg-slate-50 font-sans text-slate-900">
@@ -58,7 +109,7 @@ function Analytics() {
               Analytics Workspace
             </Badge>
           }
-          rightSlot={<Badge variant="success">Canlı Veri</Badge>}
+          rightSlot={<Badge variant="success">Canli Veri</Badge>}
         />
 
         <AnalyticsHeader
@@ -69,7 +120,7 @@ function Analytics() {
         <div className="flex w-full flex-col items-start gap-8 px-8 py-8">
           <div className="grid w-full grid-cols-12 gap-8">
             <LanguageChart data={languageData} />
-            <SentimentChart data={sentimentData} />
+            <SentimentChart data={sentimentData} isLoading={isCommentsLoading} />
           </div>
         </div>
       </div>

@@ -26,7 +26,8 @@ function App() {
       <Route path="/login" element={<Login />} />
 
       <Route element={<ProtectedRoutes />}>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/team" element={<Team />} />
         <Route path="/snippets" element={<SnippetList />} />
@@ -34,10 +35,10 @@ function App() {
         <Route path="/add-snippets" element={<CreatSnippet />} />
         <Route path="/add-member" element={<CreateMember />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/puck" element={<PuckEditor />} />
+        <Route path="/admin/layout-editor" element={<PuckEditor />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

@@ -12,12 +12,12 @@ const Login = () => {
       { username, password },
       {
         onSuccess: (data) => {
-          window.location.href = data?.redirectTo || "/";
+          window.location.href = data?.redirectTo || "/dashboard";
         },
         onError: (error) => {
           const errorMsg =
             error?.response?.data?.non_field_errors?.[0] ||
-            "KullanÄ±cÄ± adÄ± veya ÅŸifre hatalÄ±.";
+            "Kullanıcı adı veya şifre hatalı.";
           alert(errorMsg);
         },
       }
@@ -31,7 +31,7 @@ const Login = () => {
         className="w-full max-w-md rounded-lg bg-white p-8 shadow-md"
       >
         <h2 className="mb-6 text-center text-2xl font-bold text-indigo-600">
-          Nexus GiriÅŸ
+          Nexus Giriş
         </h2>
         <div className="mb-4">
           <label className="mb-1 block text-sm font-medium text-gray-700">

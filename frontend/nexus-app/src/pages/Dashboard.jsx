@@ -1,83 +1,80 @@
 "use client";
-import React from "react";
-import { useList } from "@refinedev/core";
+import React, { useCallback, useEffect, useState } from "react";
+import { Render } from "@puckeditor/core";
+import "@puckeditor/core/puck.css";
 import Sidebar from "../component/layout/Sidebar";
 import Navbar from "../component/dashboard/DashboardNavbar";
-import DashboardSummary from "../component/dashboard/DashboardSummary";
 import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
-import { IconWithBackground } from "../ui/components/IconWithBackground";
 import { Badge } from "../ui/components/Badge";
+import { FeatherCode } from "@subframe/core";
+import PuckErrorBoundary from "../component/common/PuckErrorBoundary";
+import { createDefaultPuckData, puckConfig } from "../puck/config";
 import {
-  FeatherCode,
-  FeatherUsers,
-  FeatherCheckCircle,
-} from "@subframe/core";
+  fetchPageConfig,
+  PAGE_CONFIG_UPDATED_EVENT,
+  PAGE_KEY_DASHBOARD_LAYOUT,
+} from "../puck/pageConfigApi";
 
 function Dashboard() {
-  const { result: snippetsResult, query: snippetsQuery } = useList({
-    resource: "snippets",
-  });
-  const { result: statusResult, query: statusQuery } = useList({
-    resource: "status",
-  });
+  const [data, setData] = useState(() => createDefaultPuckData());
+  const [isLoading, setIsLoading] = useState(true);
 
-  const snippets = snippetsResult?.data ?? [];
-  const teamActivities = statusResult?.data ?? [];
-  console.log("Dashboard raw", {
-    snippetsResult,
-    statusResult,
-    snippetsStatus: {
-      isLoading: snippetsQuery?.isLoading,
-      isError: snippetsQuery?.isError,
-      error: snippetsQuery?.error,
-    },
-    statusStatus: {
-      isLoading: statusQuery?.isLoading,
-      isError: statusQuery?.isError,
-      error: statusQuery?.error,
-    },
-  });
-  console.log("Dashboard data", { snippets, teamActivities });
+  const loadLayout = useCallback(async (setLoading = false) => {
+    try {
+      if (setLoading) {
+        setIsLoading(true);
+      }
+      const payload = await fetchPageConfig(PAGE_KEY_DASHBOARD_LAYOUT);
+      setData(payload);
+    } catch (error) {
+      console.error("Dashboard layout load error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const stats = {
-    totalSnippets: snippets.length,
-    activeTeam: teamActivities.length,
-    latestSnippet: snippets[0] || null,
-  };
+  useEffect(() => {
+    let isMounted = true;
 
-  const statCards = [
-    {
-      key: "snippets",
-      label: "Toplam Snippet",
-      value: stats.totalSnippets,
-      icon: <FeatherCode />,
-      iconVariant: "brand",
-      valueClassName: "text-slate-800",
-      badge: null,
-    },
-    {
-      key: "team",
-      label: "Aktif Ekip",
-      value: stats.activeTeam,
-      icon: <FeatherUsers />,
-      iconVariant: "neutral",
-      valueClassName: "text-slate-800",
-      badge: null,
-    },
-    {
-      key: "system",
-      label: "Sistem",
-      value: "Çevrimiçi",
-      icon: <FeatherCheckCircle />,
-      iconVariant: "success",
-      valueClassName: "text-success-800",
-      badge: <Badge variant="success">Çalışıyor</Badge>,
-    },
-  ];
+    const loadSafely = async (setLoading = false) => {
+      if (!isMounted) {
+        return;
+      }
+      await loadLayout(setLoading);
+    };
+
+    const handleFocus = () => {
+      loadSafely();
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        loadSafely();
+      }
+    };
+
+    const handleConfigUpdate = (event) => {
+      if (event?.detail?.pageKey === PAGE_KEY_DASHBOARD_LAYOUT) {
+        loadSafely();
+      }
+    };
+
+    loadSafely(true);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener(PAGE_CONFIG_UPDATED_EVENT, handleConfigUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener(PAGE_CONFIG_UPDATED_EVENT, handleConfigUpdate);
+    };
+  }, [loadLayout]);
 
   return (
     <div className="flex h-screen w-full items-start overflow-hidden bg-slate-50 text-slate-900">
-      <Sidebar />
+      <Sidebar activeItem="dashboard" showTeamSubmenu={true} logoClickable={true} />
 
       <div className="flex grow flex-col items-start self-stretch overflow-y-auto bg-default-background">
         <TopbarWithRightNav
@@ -88,41 +85,21 @@ function Dashboard() {
               <Badge variant="neutral" icon={<FeatherCode />}>
                 Dashboard
               </Badge>
-              <Badge variant="success">Canlı Veri</Badge>
+              <Badge variant="success">Canli Veri</Badge>
             </>
           }
         />
 
         <div className="flex w-full flex-col gap-8 px-8 py-8">
-          <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-3">
-            {statCards.map((card) => (
-              <div
-                key={card.key}
-                className="flex items-center gap-4 rounded-2xl border border-solid border-neutral-border bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <IconWithBackground
-                  size="large"
-                  square={true}
-                  variant={card.iconVariant}
-                  icon={card.icon}
-                  className="shrink-0"
-                />
-                <div className="flex min-w-0 grow flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-caption-bold font-caption-bold uppercase tracking-wide text-subtext-color">
-                      {card.label}
-                    </span>
-                    {card.badge}
-                  </div>
-                  <span className={`text-3xl font-black ${card.valueClassName}`}>
-                    {card.value}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <DashboardSummary stats={stats} teamActivities={teamActivities} />
+          {isLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-sm font-semibold text-slate-500">
+              Dashboard yerlesimi yukleniyor...
+            </div>
+          ) : (
+            <PuckErrorBoundary>
+              <Render config={puckConfig} data={data} />
+            </PuckErrorBoundary>
+          )}
         </div>
       </div>
     </div>

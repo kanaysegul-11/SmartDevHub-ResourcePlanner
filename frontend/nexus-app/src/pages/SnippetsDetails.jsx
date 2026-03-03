@@ -56,7 +56,7 @@ function SnippetDetail() {
   if (!snippet) {
     return (
       <div className="flex h-screen items-center justify-center font-bold text-slate-500">
-        Snippet bulunamadi.
+        Snippet bulunamadı.
       </div>
     );
   }
