@@ -258,6 +258,7 @@ export const createDefaultPuckData = () => ({
     },
   ],
   root: { props: {} },
+  zones: {},
 });
 
 export const puckConfig = {

@@ -34,6 +34,8 @@ function Sidebar({
     activeItem ||
     (pathname === "/" || pathname === "/dashboard"
         ? "dashboard"
+        : pathname === "/puck" || pathname === "/admin/layout-editor"
+        ? "puck"
       : pathname === "/team"
         ? "team"
         : pathname.includes("snippets")
