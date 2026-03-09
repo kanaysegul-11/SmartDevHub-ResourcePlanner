@@ -1,14 +1,13 @@
-import { Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet, BrowserRouter } from "react-router-dom";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import Analytics from "./pages/Analytics";
+import Analytics from "./pages/Analytics"
 import Team from "./pages/Team";
 import SnippetList from "./pages/SnippetList";
 import SnippetDetail from "./pages/SnippetsDetails";
 import CreatSnippet from "./pages/CreatSnippets";
 import CreateMember from "./pages/CreateMember";
 import Settings from "./pages/Settings";
-import PuckEditor from "./pages/PuckEditor";
 
 function ProtectedRoutes() {
   const isAuthenticated = !!localStorage.getItem("token");
@@ -22,24 +21,25 @@ function ProtectedRoutes() {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
 
-      <Route element={<ProtectedRoutes />}>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/team" element={<Team />} />
-        <Route path="/snippets" element={<SnippetList />} />
-        <Route path="/snippets/:id" element={<SnippetDetail />} />
-        <Route path="/add-snippets" element={<CreatSnippet />} />
-        <Route path="/add-member" element={<CreateMember />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/admin/layout-editor" element={<PuckEditor />} />
-      </Route>
+        <Route element={<ProtectedRoutes />}>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/team" element={<Team />} />
+          <Route path="/snippets" element={<SnippetList />} />
+          <Route path="/snippets/:id" element={<SnippetDetail />} />
+          <Route path="/add-snippets" element={<CreatSnippet />} />
+          <Route path="/add-member" element={<CreateMember />} />
+          <Route path="/settings" element={<Settings />} />
+        </Route>
 
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

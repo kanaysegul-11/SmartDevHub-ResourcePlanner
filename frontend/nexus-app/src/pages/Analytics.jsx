@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import LanguageLeaderboard from "../component/analytics/Languageleaderboard";
 import { useList } from "@refinedev/core";
 import Sidebar from "../component/layout/Sidebar";
 import AnalyticsHeader from "../component/analytics/AnalyticsHeader";
@@ -121,6 +122,9 @@ function Analytics() {
           <div className="grid w-full grid-cols-12 gap-8">
             <LanguageChart data={languageData} />
             <SentimentChart data={sentimentData} isLoading={isCommentsLoading} />
+          </div>
+          <div className="w-full">
+            <LanguageLeaderboard/>
           </div>
         </div>
       </div>
