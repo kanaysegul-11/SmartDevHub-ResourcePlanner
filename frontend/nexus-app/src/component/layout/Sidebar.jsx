@@ -1,20 +1,23 @@
 "use client";
+
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Avatar } from "../../ui/components/Avatar";
-import { SidebarWithSections } from "../../ui/components/SidebarWithSections";
-import { useUser } from "../../UserContext.jsx";
+import { useLogout } from "@refinedev/core";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
-  FeatherZap,
+  FeatherChevronDown,
+  FeatherCode,
   FeatherLayout,
+  FeatherLogOut,
+  FeatherPlus,
+  FeatherSettings,
   FeatherTrendingUp,
   FeatherUsers,
-  FeatherLogOut,
-  FeatherCode,
-  FeatherPlus,
-  FeatherChevronDown,
-  FeatherSettings,
+  FeatherZap,
 } from "@subframe/core";
+
+import { useUser } from "../../UserContext.jsx";
+import { Avatar } from "../../ui/components/Avatar";
+import { SidebarWithSections } from "../../ui/components/SidebarWithSections";
 
 function Sidebar({
   activeItem,
@@ -25,20 +28,20 @@ function Sidebar({
   menuPreset = "full",
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { mutate: logout } = useLogout();
   const { userData } = useUser();
   const [isLibraryHovered, setIsLibraryHovered] = useState(false);
   const [isTeamHovered, setIsTeamHovered] = useState(false);
-  const pathname = typeof window !== "undefined" ? window.location.pathname : "";
 
+  const pathname = location.pathname;
   const resolvedActive =
     activeItem ||
     (pathname === "/" || pathname === "/dashboard"
-        ? "dashboard"
-        : pathname === "/puck" || pathname === "/admin/layout-editor"
-        ? "puck"
-      : pathname === "/team"
+      ? "dashboard"
+      : pathname === "/team" || pathname === "/add-member"
         ? "team"
-        : pathname.includes("snippets")
+        : pathname.startsWith("/snippets") || pathname === "/add-snippets"
           ? "snippets"
           : pathname === "/analytics"
             ? "analytics"
@@ -48,7 +51,7 @@ function Sidebar({
 
   const logoutContainerClass =
     logoutVariant === "danger"
-      ? "hover:bg-red-50 group transition-colors"
+      ? "group transition-colors hover:bg-red-50"
       : "hover:bg-brand-50";
   const logoutIconClass =
     logoutVariant === "danger"
@@ -62,7 +65,9 @@ function Sidebar({
       className="z-20 w-64 flex-none self-stretch bg-white shadow-lg"
       header={
         <div
-          className={`flex w-full items-center gap-3 ${logoClickable ? "cursor-pointer" : ""}`}
+          className={`flex w-full items-center gap-3 ${
+            logoClickable ? "cursor-pointer" : ""
+          }`}
           onClick={logoClickable ? () => navigate("/dashboard") : undefined}
         >
           <div className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 shadow-md">
@@ -74,10 +79,7 @@ function Sidebar({
       footer={
         <div
           className={`flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2 ${logoutContainerClass}`}
-          onClick={() => {
-            localStorage.clear();
-            navigate("/login");
-          }}
+          onClick={() => logout()}
         >
           <Avatar variant="brand" size="small">
             {userData.avatar ? (
@@ -96,15 +98,21 @@ function Sidebar({
             </span>
             {showUserEmail ? (
               <span
-                className={`text-[10px] font-bold uppercase text-slate-400 ${logoutVariant === "danger" ? "group-hover:text-red-500" : ""}`}
+                className={`text-[10px] font-bold uppercase text-slate-400 ${
+                  logoutVariant === "danger" ? "group-hover:text-red-500" : ""
+                }`}
               >
                 {userData.email || ""}
               </span>
             ) : null}
             <span
-              className={`text-xs text-slate-400 ${logoutVariant === "danger" ? "text-[10px] font-bold uppercase group-hover:text-red-500" : ""}`}
+              className={`text-xs text-slate-400 ${
+                logoutVariant === "danger"
+                  ? "text-[10px] font-bold uppercase group-hover:text-red-500"
+                  : ""
+              }`}
             >
-              Çıkış Yap
+              Cikis Yap
             </span>
           </div>
           <FeatherLogOut className={logoutIconClass} size={16} />
@@ -133,7 +141,9 @@ function Sidebar({
                 rightSlot={
                   <FeatherChevronDown
                     size={14}
-                    className={`transition-transform duration-300 ${isTeamHovered ? "rotate-180" : ""}`}
+                    className={`transition-transform duration-300 ${
+                      isTeamHovered ? "rotate-180" : ""
+                    }`}
                   />
                 }
                 onClick={() => navigate("/team")}
@@ -141,7 +151,11 @@ function Sidebar({
                 Team
               </SidebarWithSections.NavItem>
               <div
-                className={`flex flex-col gap-1 overflow-hidden pl-9 transition-all duration-300 ${isTeamHovered ? "mb-2 max-h-20 opacity-100" : "pointer-events-none max-h-0 opacity-0"}`}
+                className={`flex flex-col gap-1 overflow-hidden pl-9 transition-all duration-300 ${
+                  isTeamHovered
+                    ? "mb-2 max-h-20 opacity-100"
+                    : "pointer-events-none max-h-0 opacity-0"
+                }`}
               >
                 <button
                   onClick={() => navigate("/add-member")}
@@ -174,7 +188,9 @@ function Sidebar({
               rightSlot={
                 <FeatherChevronDown
                   size={14}
-                  className={`transition-transform duration-300 ${isLibraryHovered ? "rotate-180" : ""}`}
+                  className={`transition-transform duration-300 ${
+                    isLibraryHovered ? "rotate-180" : ""
+                  }`}
                 />
               }
               onClick={() => navigate("/snippets")}
@@ -182,7 +198,11 @@ function Sidebar({
               Code Library
             </SidebarWithSections.NavItem>
             <div
-              className={`flex flex-col gap-1 overflow-hidden pl-9 transition-all duration-300 ${isLibraryHovered ? "mb-2 max-h-20 opacity-100" : "pointer-events-none max-h-0 opacity-0"}`}
+              className={`flex flex-col gap-1 overflow-hidden pl-9 transition-all duration-300 ${
+                isLibraryHovered
+                  ? "mb-2 max-h-20 opacity-100"
+                  : "pointer-events-none max-h-0 opacity-0"
+              }`}
             >
               <button
                 onClick={() => navigate("/add-snippets")}
@@ -203,7 +223,6 @@ function Sidebar({
             Analytics
           </SidebarWithSections.NavItem>
         ) : null}
-
       </SidebarWithSections.NavSection>
 
       <SidebarWithSections.NavSection label="Hesap">

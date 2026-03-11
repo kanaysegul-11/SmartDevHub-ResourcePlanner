@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.core.validators import MaxValueValidator, MinValueValidator
 
 
 
@@ -47,7 +48,11 @@ class Comment(models.Model):
     snippet = models.ForeignKey(Snippet, related_name='comments', on_delete=models.CASCADE)
     author = models.ForeignKey(User, on_delete=models.CASCADE) # İsmi 'author' olarak sabitledik
     text = models.TextField() # İsmi 'text' olarak sabitledik
-    experience_rating = models.IntegerField(default=5, help_text="1-5 arasında bir puan veriniz.")
+    experience_rating = models.IntegerField(
+    default=5, 
+    validators=[MinValueValidator(1), MaxValueValidator(5)],
+    help_text="1-5 arasında bir puan veriniz."
+)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

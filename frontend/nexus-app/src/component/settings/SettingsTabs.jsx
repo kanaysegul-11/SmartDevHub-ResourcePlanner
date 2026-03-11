@@ -4,7 +4,7 @@ import { FeatherUser, FeatherLock, FeatherBell } from "@subframe/core";
 
 const tabs = [
   { id: "profile", label: "Profil Bilgileri", icon: <FeatherUser size={18} /> },
-  { id: "security", label: "Guvenlik", icon: <FeatherLock size={18} /> },
+  { id: "security", label: "Güvenlik", icon: <FeatherLock size={18} /> },
   { id: "notifications", label: "Bildirimler", icon: <FeatherBell size={18} /> },
 ];
 

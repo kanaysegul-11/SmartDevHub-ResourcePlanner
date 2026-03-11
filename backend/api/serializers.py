@@ -27,7 +27,19 @@ class SnippetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Snippet
         fields = ['id', 'title', 'description', 'code', 'language', 'created_at', 'author', 'author_details', 'comments']
-
+    def validate_code(self, value):
+        # Kodun başındaki ve sonundaki boşlukları temizleyerek kontrol et
+        normalized_code = value.strip()
+        
+        # Mevcut bir kaydı güncelliyorsak (update), kendisiyle çakışmasın diye 'exclude' ediyoruz
+        snippet_id = self.instance.id if self.instance else None
+        
+        exists = Snippet.objects.filter(code=normalized_code).exclude(id=snippet_id).exists()
+        
+        if exists:
+            raise serializers.ValidationError("Bu kod zaten kütüphanede mevcut!")
+        
+        return value
 
 class PageConfigSerializer(serializers.ModelSerializer):
     class Meta:

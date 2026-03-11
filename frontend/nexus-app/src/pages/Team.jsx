@@ -1,72 +1,84 @@
 "use client";
-import React, { useState } from "react";
-import { useList, useCreate, useDelete, useInvalidate } from "@refinedev/core";
-import Sidebar from "../component/layout/Sidebar";
-import TeamHeader from "../component/team/TeamHeader.jsx";
-import TeamForm from "../component/team/TeamForm.jsx";
-import TeamList from "../component/team/TeamList.jsx";
-import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
-import { Badge } from "../ui/components/Badge";
+
+import React from "react";
+import {
+  useCreate,
+  useDelete,
+  useInvalidate,
+  useList,
+  useUpdate,
+} from "@refinedev/core";
 import { FeatherBriefcase, FeatherCoffee, FeatherUsers } from "@subframe/core";
 
-function Team() {
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({
-    employee_name: "",
-    position: "",
-    current_work: "",
-    status_type: "available",
-  });
+import Sidebar from "../component/layout/Sidebar";
+import TeamDirectoryManager from "../component/team/TeamDirectoryManager.jsx";
+import TeamHeader from "../component/team/TeamHeader.jsx";
+import TeamList from "../component/team/TeamList.jsx";
+import { Badge } from "../ui/components/Badge";
+import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
 
-  const { result: teamResult, query: teamQuery } = useList({
+function Team() {
+  const teamQuery = useList({
     resource: "status",
   });
   const { mutate: createMember, isLoading: isCreating } = useCreate();
+  const { mutate: updateMember, isLoading: isUpdating } = useUpdate();
   const { mutate: deleteMember } = useDelete();
   const invalidate = useInvalidate();
 
-  const teamMembers = teamResult?.data ?? [];
-
+  const teamMembers = teamQuery.data?.data ?? [];
   const activeProjectMembers = teamMembers.filter(
-    (m) => m.status_type === "busy"
+    (member) => member.status_type === "busy"
   );
   const availableMembers = teamMembers.filter(
-    (m) => m.status_type === "available"
+    (member) => member.status_type === "available"
   );
 
-  const handleAddMember = (e) => {
-    e.preventDefault();
+  const refreshTeam = () => {
+    invalidate({ resource: "status", invalidates: ["list", "detail"] });
+  };
+
+  const handleCreateMember = (values) => {
     createMember(
-      { resource: "status", values: formData },
+      { resource: "status", values },
       {
-        onSuccess: () => {
-          setFormData({
-            employee_name: "",
-            position: "",
-            current_work: "",
-            status_type: "available",
-          });
-          setShowForm(false);
-          invalidate({ resource: "status", invalidates: ["list"] });
-        },
-        onError: (err) => {
-          alert("Ekleme basarisiz!", err);
+        onSuccess: refreshTeam,
+        onError: (error) => {
+          console.error("Ekleme hatasi:", error);
+          alert("Uye eklenemedi.");
         },
       }
     );
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm("Bu üyeyi silmek istediğine emin misin?")) {
-      deleteMember(
-        { resource: "status", id },
-        {
-          onSuccess: () =>
-            invalidate({ resource: "status", invalidates: ["list"] }),
-          onError: (err) => console.error("Silme hatasi:", err),
-        }
-      );
+  const handleUpdateMember = (id, values) => {
+    updateMember(
+      { resource: "status", id, values },
+      {
+        onSuccess: refreshTeam,
+        onError: (error) => {
+          console.error("Guncelleme hatasi:", error);
+          alert("Uye guncellenemedi.");
+        },
+      }
+    );
+  };
+
+  const handleDeleteMember = (id) => {
+    if (!window.confirm("Bu uyeyi silmek istedigine emin misin?")) {
+      return;
     }
+
+    deleteMember(
+      { resource: "status", id },
+      {
+        onSuccess: refreshTeam,
+        onError: (error) => {
+          console.error("Silme hatasi:", error);
+          alert("Uye silinemedi.");
+        },
+      }
+    );
   };
 
   return (
@@ -86,38 +98,42 @@ function Team() {
               Team Workspace
             </Badge>
           }
-          rightSlot={<Badge variant="success">Canlı</Badge>}
+          rightSlot={<Badge variant="success">Canli</Badge>}
         />
 
-        <TeamHeader loading={teamQuery?.isLoading || isCreating} />
+        <TeamHeader
+          loading={teamQuery.isLoading || teamQuery.isFetching || isCreating}
+        />
 
-        <div className="flex w-full flex-col items-start gap-12 px-8 py-8">
-          <TeamForm
-            show={showForm}
-            formData={formData}
-            setFormData={setFormData}
-            onSubmit={handleAddMember}
-            isSubmitting={isCreating}
-          />
+        <div className="grid w-full grid-cols-1 gap-8 px-8 py-8 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="flex min-w-0 flex-col items-start gap-12">
+            <TeamList
+              title="Aktif Projede Olanlar"
+              count={activeProjectMembers.length}
+              icon={<FeatherBriefcase size={20} />}
+              members={activeProjectMembers}
+              variant="busy"
+              onDelete={handleDeleteMember}
+              emptyMessage="Su an aktif projede kimse bulunmuyor."
+            />
 
-          <TeamList
-            title="Aktif Projede Olanlar"
-            count={activeProjectMembers.length}
-            icon={<FeatherBriefcase size={20} />}
-            members={activeProjectMembers}
-            variant="busy"
-            onDelete={handleDelete}
-            emptyMessage="Şu an aktif projede kimse bulunmuyor."
-          />
+            <TeamList
+              title="Yeni Proje Icin Musait"
+              count={availableMembers.length}
+              icon={<FeatherCoffee size={20} />}
+              members={availableMembers}
+              variant="available"
+              onDelete={handleDeleteMember}
+              emptyMessage="Tum ekip uyeleri su an mesgul."
+            />
+          </div>
 
-          <TeamList
-            title="Yeni Proje İçin Müsait"
-            count={availableMembers.length}
-            icon={<FeatherCoffee size={20} />}
-            members={availableMembers}
-            variant="available"
-            onDelete={handleDelete}
-            emptyMessage="Tüm ekip üyeleri şu an meşgul."
+          <TeamDirectoryManager
+            members={teamMembers}
+            isSubmitting={isCreating || isUpdating}
+            onCreate={handleCreateMember}
+            onUpdate={handleUpdateMember}
+            onDelete={handleDeleteMember}
           />
         </div>
       </div>

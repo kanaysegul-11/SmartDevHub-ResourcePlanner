@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { apiClient } from "./refine/axios";
 
-const UserContext = createContext();
+const UserContext = createContext(null);
 
 export const UserProvider = ({ children }) => {
   const [userData, setUserData] = useState({
@@ -59,4 +59,12 @@ export const UserProvider = ({ children }) => {
   );
 };
 
-export const useUser = () => useContext(UserContext);
+export const useUser = () => {
+  const context = useContext(UserContext);
+
+  if (!context) {
+    throw new Error("useUser must be used within a UserProvider.");
+  }
+
+  return context;
+};

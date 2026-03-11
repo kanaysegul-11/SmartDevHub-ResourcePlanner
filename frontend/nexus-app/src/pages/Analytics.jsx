@@ -12,12 +12,12 @@ import { FeatherTrendingUp } from "@subframe/core";
 
 function Analytics() {
   const [searchTerm, setSearchTerm] = useState("");
-  const { result: snippetsResult } = useList({ resource: "snippets" });
-  const { result: commentsResult, query: commentsQuery } = useList({
+  const snippetsQuery = useList({ resource: "snippets" });
+  const commentsQuery = useList({
     resource: "comments",
   });
 
-  const snippets = snippetsResult?.data ?? [];
+  const snippets = snippetsQuery.data?.data ?? [];
 
   const filteredSnippets = snippets.filter((snippet) => {
     if (!searchTerm.trim()) return true;
@@ -40,9 +40,8 @@ function Analytics() {
     return acc;
   }, []);
 
-  const comments = commentsResult?.data ?? [];
-  const isCommentsLoading =
-    commentsQuery?.isLoading || commentsQuery?.isFetching || false;
+  const comments = commentsQuery.data?.data ?? [];
+  const isCommentsLoading = commentsQuery.isLoading || commentsQuery.isFetching || false;
 
   const ratingBuckets = comments.reduce(
     (acc, comment) => {

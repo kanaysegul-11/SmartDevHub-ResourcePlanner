@@ -1,31 +1,21 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './App.css'
-import App from './App.jsx'
-import { UserProvider } from './UserContext.jsx'
-import { Refine } from '@refinedev/core'
-import { dataProvider } from './refine/dataProvider.js'
-import { authProvider } from './refine/authProvider.js'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import App from "./App.jsx";
+import { UserProvider } from "./UserContext.jsx";
+import "./App.css";
 
-const queryClient = new QueryClient()
-
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <UserProvider>
-      <QueryClientProvider client={queryClient}>
-        <Refine
-          dataProvider={dataProvider}
-          authProvider={authProvider}
-          resources={[
-            { name: 'snippets' },
-            { name: 'status' },
-            { name: 'comments' },
-          ]}
-        >
-          <App />
-        </Refine>
-      </QueryClientProvider>
-    </UserProvider>
-  </StrictMode>
-)
+createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
+      <UserProvider>
+        <App />
+      </UserProvider>
+    </BrowserRouter>
+  </React.StrictMode>
+);
