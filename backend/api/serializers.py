@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Snippet, Comment, EmploymentStatus, PageConfig
+from .models import Snippet, Comment, EmploymentStatus, PageConfig, TeamMessage, Project, Task
 from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
@@ -45,3 +45,78 @@ class PageConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = PageConfig
         fields = ['id', 'key', 'data', 'created_at', 'updated_at']
+
+
+class TeamMessageSerializer(serializers.ModelSerializer):
+    sender_details = UserSerializer(source='sender', read_only=True)
+    recipient_name = serializers.CharField(
+        source='recipient.employee_name',
+        read_only=True,
+    )
+
+    class Meta:
+        model = TeamMessage
+        fields = [
+            'id',
+            'recipient',
+            'recipient_name',
+            'sender',
+            'sender_details',
+            'content',
+            'created_at',
+        ]
+        read_only_fields = ['sender']
+
+
+class ProjectSerializer(serializers.ModelSerializer):
+    owner_details = UserSerializer(source='owner', read_only=True)
+    team_member_details = StatusSerializer(source='team_members', many=True, read_only=True)
+
+    class Meta:
+        model = Project
+        fields = [
+            'id',
+            'name',
+            'client_name',
+            'summary',
+            'status',
+            'priority',
+            'progress',
+            'start_date',
+            'end_date',
+            'tech_stack',
+            'owner',
+            'owner_details',
+            'team_members',
+            'team_member_details',
+            'created_at',
+            'updated_at',
+        ]
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    assignee_details = UserSerializer(source='assignee', read_only=True)
+    created_by_details = UserSerializer(source='created_by', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+
+    class Meta:
+        model = Task
+        fields = [
+            'id',
+            'title',
+            'description',
+            'project',
+            'project_name',
+            'assignee',
+            'assignee_details',
+            'created_by',
+            'created_by_details',
+            'status',
+            'priority',
+            'deadline',
+            'estimated_hours',
+            'actual_hours',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['created_by']

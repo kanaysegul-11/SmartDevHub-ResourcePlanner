@@ -19,6 +19,9 @@ import Team from "./pages/Team";
 import CreateMember from "./pages/CreateMember";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
+import Register from "./pages/Register";
+import Projects from "./pages/Projects";
+import Tasks from "./pages/Tasks";
 
 function App() {
   return (
@@ -52,9 +55,29 @@ function App() {
           },
         },
         {
+          name: "projects",
+          list: "/projects",
+          meta: {
+            label: "Projects",
+          },
+        },
+        {
+          name: "tasks",
+          list: "/tasks",
+          meta: {
+            label: "Tasks",
+          },
+        },
+        {
           name: "comments",
           meta: {
             label: "Comments",
+          },
+        },
+        {
+          name: "team-messages",
+          meta: {
+            label: "Team Messages",
           },
         },
         {
@@ -91,6 +114,8 @@ function App() {
           <Route path="/snippets/:id" element={<SnippetDetail />} />
           <Route path="/add-snippets" element={<CreateSnippet />} />
           <Route path="/team" element={<Team />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/tasks" element={<Tasks />} />
           <Route path="/add-member" element={<CreateMember />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/settings" element={<Settings />} />
@@ -104,6 +129,7 @@ function App() {
           }
         >
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
         </Route>
 
         <Route path="*" element={<CatchAllNavigate to="/dashboard" />} />

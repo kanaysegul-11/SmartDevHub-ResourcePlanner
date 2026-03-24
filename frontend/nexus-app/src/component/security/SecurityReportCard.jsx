@@ -1,46 +1,55 @@
 import React from "react";
 import { FeatherAlertTriangle, FeatherInfo, FeatherShieldCheck } from "@subframe/core";
+import { useI18n } from "../../I18nContext.jsx";
 
 const SecurityReportCard = ({ risks = [] }) => {
+  const { t } = useI18n();
+
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between mb-6 border-b pb-4">
-        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-          <FeatherShieldCheck size={20} className="text-blue-500" />
-          NEXUS GÜVENLİK ANALİZİ
-        </h3>
-        <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${
-          risks.length > 0 ? 'bg-red-50 text-red-600 animate-pulse' : 'bg-green-50 text-green-600'
-        }`}>
-          {risks.length > 0 ? `${risks.length} TEHLİKE TESPİT EDİLDİ` : 'SİSTEM GÜVENLİ'}
+    <div className="rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,255,255,0.92))] p-6 shadow-[0_20px_50px_rgba(148,163,184,0.14)]">
+      <div className="flex flex-col gap-4 border-b border-slate-200/80 pb-5 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.2em] text-slate-800">
+            <FeatherShieldCheck size={18} className="text-sky-600" />
+            {t("snippets.securityTitle")}
+          </h3>
+          <p className="mt-3 text-sm leading-7 text-slate-500">
+            {t("snippets.securityBody")}
+          </p>
+        </div>
+        <span
+          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+            risks.length > 0 ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"
+          }`}
+        >
+          {risks.length > 0 ? `${risks.length} ${t("snippets.riskDetected")}` : t("snippets.systemSecure")}
         </span>
       </div>
 
-      <div className="space-y-4">
+      <div className="mt-6 space-y-4">
         {risks.length > 0 ? (
           risks.map((risk, index) => (
-            <div 
-              key={index} 
-              className="flex flex-col gap-2 p-4 rounded-xl bg-slate-50 border-l-4 border-red-500 hover:bg-red-50/30 transition-colors"
+            <div
+              key={index}
+              className="rounded-[24px] border border-rose-200/80 bg-[linear-gradient(180deg,rgba(255,241,242,0.95),rgba(255,255,255,0.98))] p-5"
             >
               <div className="flex items-center gap-2">
-                <FeatherAlertTriangle size={16} className="text-red-500" />
-                <span className="text-xs font-black text-slate-700 uppercase">
-                   BULGU: <span className="text-red-600 underline">{risk.label}</span>
+                <FeatherAlertTriangle size={16} className="text-rose-600" />
+                <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-700">
+                  {t("snippets.finding")}:
                 </span>
-                <span className="ml-auto text-[10px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded">
-                  {risk.level || "KRİTİK"}
+                <span className="text-sm font-bold text-rose-700">{risk.label}</span>
+                <span className="ml-auto rounded-full bg-rose-100 px-2.5 py-1 text-[11px] font-semibold text-rose-700">
+                  {risk.level || t("snippets.critical")}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium italic leading-relaxed">
-                "{risk.message}"
-              </p>
+              <p className="mt-3 text-sm leading-7 text-slate-600">{risk.message}</p>
             </div>
           ))
         ) : (
-          <div className="flex items-center gap-3 p-4 rounded-xl bg-green-50 text-green-700 text-xs font-bold">
-            <FeatherInfo size={18} />
-            Sistem tarandı: Herhangi bir siber risk tespit edilmedi. Kod temiz görünüyor.
+          <div className="flex items-start gap-3 rounded-[24px] border border-emerald-200/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.98),rgba(255,255,255,0.98))] p-5 text-sm leading-7 text-emerald-800">
+            <FeatherInfo size={18} className="mt-0.5 shrink-0" />
+            <span>{t("snippets.safeMessage")}</span>
           </div>
         )}
       </div>

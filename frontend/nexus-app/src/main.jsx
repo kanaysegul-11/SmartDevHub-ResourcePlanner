@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 import { UserProvider } from "./UserContext.jsx";
+import { I18nProvider } from "./I18nContext.jsx";
 import "./App.css";
 
 createRoot(document.getElementById("root")).render(
@@ -14,7 +15,9 @@ createRoot(document.getElementById("root")).render(
       }}
     >
       <UserProvider>
-        <App />
+        <I18nProvider>
+          <App />
+        </I18nProvider>
       </UserProvider>
     </BrowserRouter>
   </React.StrictMode>

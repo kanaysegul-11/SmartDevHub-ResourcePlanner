@@ -7,8 +7,22 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 
 
 class UserProfile(models.Model):
+    LANGUAGE_CHOICES = [
+        ("en", "English"),
+        ("tr", "Turkish"),
+        ("de", "German"),
+        ("fr", "French"),
+        ("es", "Spanish"),
+        ("ar", "Arabic"),
+    ]
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     profile_photo = models.FileField(upload_to='profile_photos/', blank=True, null=True)
+    language = models.CharField(
+        max_length=10,
+        choices=LANGUAGE_CHOICES,
+        default="en",
+    )
 
     def __str__(self):
         return f"{self.user.username} profile"
@@ -77,6 +91,131 @@ class EmploymentStatus(models.Model):
 
     def __str__(self):
         return self.employee_name if self.employee_name else "İsimsiz"
+
+
+class TeamMessage(models.Model):
+    recipient = models.ForeignKey(
+        EmploymentStatus,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    sender = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="team_messages",
+    )
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        verbose_name = "Team Message"
+        verbose_name_plural = "Team Messages"
+
+    def __str__(self):
+        recipient_name = self.recipient.employee_name or "Recipient"
+        return f"{self.sender.username} -> {recipient_name}"
+
+
+class Project(models.Model):
+    STATUS_CHOICES = [
+        ("planning", "Planning"),
+        ("active", "Active"),
+        ("blocked", "Blocked"),
+        ("completed", "Completed"),
+    ]
+    PRIORITY_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+        ("critical", "Critical"),
+    ]
+
+    name = models.CharField(max_length=160)
+    client_name = models.CharField(max_length=160, blank=True)
+    summary = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="planning")
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default="medium")
+    progress = models.PositiveIntegerField(default=0)
+    start_date = models.DateField(blank=True, null=True)
+    end_date = models.DateField(blank=True, null=True)
+    tech_stack = models.CharField(max_length=255, blank=True)
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name="owned_projects",
+        null=True,
+        blank=True,
+    )
+    team_members = models.ManyToManyField(
+        EmploymentStatus,
+        related_name="projects",
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-created_at"]
+        verbose_name = "Project"
+        verbose_name_plural = "Projects"
+
+    def __str__(self):
+        return self.name
+
+
+class Task(models.Model):
+    STATUS_CHOICES = [
+        ("todo", "To Do"),
+        ("in_progress", "In Progress"),
+        ("review", "Review"),
+        ("done", "Done"),
+    ]
+    PRIORITY_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+        ("critical", "Critical"),
+    ]
+
+    title = models.CharField(max_length=180)
+    description = models.TextField(blank=True)
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="tasks",
+        null=True,
+        blank=True,
+    )
+    assignee = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name="tasks",
+        null=True,
+        blank=True,
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name="created_tasks",
+        null=True,
+        blank=True,
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="todo")
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default="medium")
+    deadline = models.DateField(null=True, blank=True)
+    estimated_hours = models.PositiveIntegerField(default=0)
+    actual_hours = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["status", "deadline", "-updated_at"]
+        verbose_name = "Task"
+        verbose_name_plural = "Tasks"
+
+    def __str__(self):
+        return self.title
 
 
 class PageConfig(models.Model):

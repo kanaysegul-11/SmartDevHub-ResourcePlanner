@@ -1,22 +1,26 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { apiClient } from "./refine/axios";
 
 const UserContext = createContext(null);
 
 export const UserProvider = ({ children }) => {
   const [userData, setUserData] = useState({
-    username: localStorage.getItem("username") || "Kullanici",
+    username: localStorage.getItem("username") || "User",
     email: "",
     firstName: "",
     lastName: "",
     avatar: localStorage.getItem("userAvatar") || "",
+    isAdmin: localStorage.getItem("is_admin") === "true",
+    language: localStorage.getItem("language") || "en",
   });
 
   const syncFromStorage = () => {
     setUserData((prev) => ({
       ...prev,
-      username: localStorage.getItem("username") || prev.username || "Kullanici",
+      username: localStorage.getItem("username") || prev.username || "User",
       avatar: localStorage.getItem("userAvatar") || prev.avatar || "",
+      isAdmin: localStorage.getItem("is_admin") === "true",
+      language: localStorage.getItem("language") || prev.language || "en",
     }));
   };
 
@@ -29,6 +33,10 @@ export const UserProvider = ({ children }) => {
       if (typeof merged.avatar === "string") {
         localStorage.setItem("userAvatar", merged.avatar);
       }
+      if (merged.language) {
+        localStorage.setItem("language", merged.language);
+      }
+      localStorage.setItem("is_admin", merged.isAdmin ? "true" : "false");
       return merged;
     });
   };
@@ -68,3 +76,4 @@ export const useUser = () => {
 
   return context;
 };
+

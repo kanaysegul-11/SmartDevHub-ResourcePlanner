@@ -1,11 +1,17 @@
+"use client";
+
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { useGo, useLogin } from "@refinedev/core";
+import GoogleAuthButton from "../component/auth/GoogleAuthButton.jsx";
+import { useI18n } from "../I18nContext.jsx";
 
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const go = useGo();
   const { mutate: login, isLoading } = useLogin();
+  const { t } = useI18n();
 
   const handleLogin = (event) => {
     event.preventDefault();
@@ -22,7 +28,7 @@ const Login = () => {
         onError: (error) => {
           const errorMessage =
             error?.response?.data?.non_field_errors?.[0] ||
-            "Kullanici adi veya sifre hatali.";
+            t("auth.invalidCredentials");
           alert(errorMessage);
         },
       }
@@ -30,49 +36,93 @@ const Login = () => {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-slate-50">
-      <form
-        onSubmit={handleLogin}
-        className="w-full max-w-md rounded-lg bg-white p-8 shadow-md"
-      >
-        <h2 className="mb-6 text-center text-2xl font-bold text-indigo-600">
-          Nexus Giris
-        </h2>
-
-        <div className="mb-4">
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Kullanici Adi
-          </label>
-          <input
-            type="text"
-            className="w-full rounded border p-2 outline-none focus:ring-2 focus:ring-indigo-500"
-            onChange={(event) => setUsername(event.target.value)}
-            required
-          />
+    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(251,191,36,0.12),transparent_26%),linear-gradient(180deg,#f8fbff_0%,#eef4f8_100%)] px-4 py-10">
+      <div className="grid w-full max-w-5xl grid-cols-1 overflow-hidden rounded-[36px] border border-white/60 bg-white/75 shadow-[0_32px_90px_rgba(15,23,42,0.14)] backdrop-blur lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="bg-slate-950 p-8 text-white lg:p-10">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+            {t("auth.loginTag")}
+          </p>
+          <h1 className="mt-4 font-['Newsreader'] text-5xl font-medium leading-tight tracking-tight">
+            {t("auth.loginTitle")}
+          </h1>
+          <p className="mt-4 max-w-md text-base leading-8 text-slate-300">
+            {t("auth.loginBody")}
+          </p>
         </div>
 
-        <div className="mb-6">
-          <label className="mb-1 block text-sm font-medium text-gray-700">
-            Sifre
-          </label>
-          <input
-            type="password"
-            className="w-full rounded border p-2 outline-none focus:ring-2 focus:ring-indigo-500"
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-        </div>
+        <div className="p-8 lg:p-10">
+          <div className="mx-auto flex w-full max-w-md flex-col gap-6">
+            <div>
+              <h2 className="text-3xl font-black tracking-tight text-slate-950">
+                {t("auth.loginHeading")}
+              </h2>
+              <p className="mt-2 text-sm leading-7 text-slate-500">
+                {t("auth.loginSubheading")}
+              </p>
+            </div>
 
-        <button
-          type="submit"
-          className="w-full rounded bg-indigo-600 p-2 font-semibold text-white transition-colors hover:bg-indigo-700"
-          disabled={isLoading}
-        >
-          {isLoading ? "Giris Yapiliyor..." : "Giris Yap"}
-        </button>
-      </form>
+            <GoogleAuthButton
+              mode="login"
+              onSuccess={() => go({ to: "/dashboard", type: "replace" })}
+            />
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-white px-4 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  {t("auth.or")}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  {t("auth.username")}
+                </label>
+                <input
+                  type="text"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-sky-400 focus:bg-white"
+                  onChange={(event) => setUsername(event.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  {t("auth.password")}
+                </label>
+                <input
+                  type="password"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-sky-400 focus:bg-white"
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="mt-2 w-full rounded-2xl bg-slate-950 p-3 font-semibold text-white transition-colors hover:bg-slate-800"
+                disabled={isLoading}
+              >
+                {isLoading ? t("auth.signingIn") : t("auth.signIn")}
+              </button>
+            </form>
+
+            <p className="text-sm text-slate-500">
+              {t("auth.noAccount")}{" "}
+              <Link to="/register" className="font-semibold text-slate-950 hover:underline">
+                {t("auth.createAccount")}
+              </Link>
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
 
 export default Login;
+

@@ -2,22 +2,56 @@
 import React from "react";
 import { TextField } from "../../ui/components/TextField";
 import { FeatherSearch } from "@subframe/core";
+import { useI18n } from "../../I18nContext.jsx";
 
-function AnalyticsHeader({ searchTerm = "", onSearchChange }) {
+function AnalyticsHeader({ searchTerm = "", onSearchChange, resultsCount = 0, totalComments = 0, averageRating = 0 }) {
+  const { t } = useI18n();
   return (
-    <div className="sticky top-0 z-10 flex w-full items-center gap-4 border-b bg-white px-8 py-5 shadow-sm">
-      <div className="grow">
-        <span className="block text-2xl font-black tracking-tight text-slate-800">Snippet Analytics</span>
-        <span className="text-sm font-medium text-slate-500">Kütüphanenizin performans verileri burada.</span>
+    <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.15fr)_330px]">
+      <div className="rounded-[34px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(255,255,255,0.88))] p-7 shadow-[0_24px_70px_rgba(148,163,184,0.16)] backdrop-blur lg:p-8">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold tracking-[0.18em] text-emerald-700">
+            {t("analytics.liveData")}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold tracking-[0.18em] text-slate-500">
+            {t("analytics.workspace")}
+          </span>
+        </div>
+        <h1 className="mt-4 max-w-3xl font-['Newsreader'] text-4xl font-medium leading-tight tracking-tight text-slate-950">
+          {t("analytics.heroTitle")}
+        </h1>
+        <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">{t("analytics.heroBody")}</p>
+        <div className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+          <TextField
+            className="w-full"
+            placeholder={t("analytics.searchPlaceholder")}
+            icon={<FeatherSearch />}
+            value={searchTerm}
+            onChange={onSearchChange}
+          />
+          <div className="rounded-[22px] border border-slate-200/80 bg-white/85 px-5 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("analytics.searchMatches")}</p>
+            <p className="mt-2 text-2xl font-black tracking-tight text-slate-950">{resultsCount}</p>
+          </div>
+        </div>
       </div>
-      <TextField
-        className="w-72"
-        placeholder="Analizlerde ara..."
-        icon={<FeatherSearch />}
-        value={searchTerm}
-        onChange={onSearchChange}
-      />
-    </div>
+
+      <div className="rounded-[34px] border border-white/65 bg-slate-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{t("analytics.insightPanel")}</p>
+        <p className="mt-3 text-2xl font-black tracking-tight text-white">{t("analytics.insightTitle")}</p>
+        <p className="mt-3 text-sm leading-7 text-slate-300">{t("analytics.insightBody")}</p>
+        <div className="mt-6 grid gap-3">
+          <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("analytics.feedbackEntries")}</p>
+            <p className="mt-2 text-2xl font-black text-white">{totalComments}</p>
+          </div>
+          <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("analytics.averageRating")}</p>
+            <p className="mt-2 text-2xl font-black text-white">{averageRating.toFixed(1)} / 5</p>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

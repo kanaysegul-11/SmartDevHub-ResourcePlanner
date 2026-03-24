@@ -1,56 +1,54 @@
 export const scanCodeSecurity = (code = "") => {
-  // Eğer kod boşsa direkt boş dizi dön (Hata almamak için)
   if (!code) return [];
 
   const rules = [
-    { 
-      pattern: /password|secret|api_key|token|atob|btoa/gi, 
+    {
+      pattern: /password|secret|api_key|token|atob|btoa/gi,
       patternString: "password|secret|api_key|token|atob|btoa",
-      level: "Kritik", 
-      label: "HASSAS VERİ", 
-      message: "Kod içinde ham şifre, API anahtarı veya Base64 işleme (JWT) tespit edildi." 
+      level: "Critical",
+      label: "Sensitive Data",
+      message: "Raw passwords, API keys, or risky Base64 token handling were detected in the code.",
     },
-    { 
-      pattern: /sudo|rm\s+-rf|chmod\s+777/gi, 
+    {
+      pattern: /sudo|rm\s+-rf|chmod\s+777/gi,
       patternString: "sudo|rm\\s+-rf|chmod\\s+777",
-      level: "Yüksek", 
-      label: "SİSTEM KOMUTU", 
-      message: "Yönetici yetkisi veya tehlikeli dosya silme/izin komutu tespit edildi." 
+      level: "High",
+      label: "System Command",
+      message: "Administrator privilege usage or destructive file permission commands were detected.",
     },
-    { 
-      pattern: /eval\(|exec\(|Function\(/g, 
+    {
+      pattern: /eval\(|exec\(|Function\(/g,
       patternString: "eval\\(|exec\\(|Function\\(",
-      level: "Kritik", 
-      label: "KOD ENJEKSİYONU", 
-      message: "Dinamik kod yürütme fonksiyonları (eval/exec) ciddi güvenlik açığı oluşturur." 
+      level: "Critical",
+      label: "Code Injection",
+      message: "Dynamic execution functions such as eval or exec can create serious security vulnerabilities.",
     },
-    { 
-      pattern: /<script|innerHTML|document\.write/gi, 
+    {
+      pattern: /<script|innerHTML|document\.write/gi,
       patternString: "<script|innerHTML|document\\.write",
-      level: "Yüksek", 
-      label: "XSS RİSKİ", 
-      message: "Doğrudan DOM müdahalesi veya script enjeksiyonu (XSS) riski tespit edildi." 
+      level: "High",
+      label: "XSS Risk",
+      message: "Direct DOM manipulation or script injection patterns that may lead to XSS were detected.",
     },
-    { 
-      pattern: /http:\/\/|ftp:\/\//gi, 
+    {
+      pattern: /http:\/\/|ftp:\/\//gi,
       patternString: "http:\\/\\/|ftp:\\/\\/",
-      level: "Orta", 
-      label: "GÜVENSİZ PROTOKOL", 
-      message: "Şifrelenmemiş (HTTP/FTP) bağlantı tespit edildi. HTTPS kullanılması önerilir." 
-    }
+      level: "Medium",
+      label: "Insecure Protocol",
+      message: "Unencrypted HTTP or FTP usage was detected. Prefer HTTPS whenever possible.",
+    },
   ];
 
-  let detectedRisks = [];
+  const detectedRisks = [];
 
-  rules.forEach(r => {
-    // ÖNEMLİ: Regex state'ini sıfırlamak için her seferinde yeni test yapıyoruz
-    const regex = new RegExp(r.pattern);
+  rules.forEach((rule) => {
+    const regex = new RegExp(rule.pattern);
     if (regex.test(code)) {
       detectedRisks.push({
-        level: r.level,
-        label: r.label,
-        message: r.message,
-        patternString: r.patternString // Vurgulama işlemi için bu şart
+        level: rule.level,
+        label: rule.label,
+        message: rule.message,
+        patternString: rule.patternString,
       });
     }
   });

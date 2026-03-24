@@ -2,6 +2,7 @@
 import React from "react";
 import { Avatar } from "../../ui/components/Avatar";
 import { Button } from "../../ui/components/Button";
+import { useI18n } from "../../I18nContext.jsx";
 
 function AvatarUpload({
   fileInputRef,
@@ -10,6 +11,8 @@ function AvatarUpload({
   selectedImage,
   userData,
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="mb-12 flex items-center gap-8 rounded-3xl border border-slate-100 bg-slate-50 p-6">
       <input
@@ -31,9 +34,11 @@ function AvatarUpload({
         )}
       </Avatar>
       <div className="flex flex-col gap-3">
-        <span className="text-lg font-bold text-slate-800">{userData?.username || "Kullanici"}</span>
+        <span className="text-lg font-bold text-slate-800">
+          {userData?.username || t("app.user")}
+        </span>
         <Button size="small" variant="neutral-secondary" onClick={onAvatarClick}>
-          Fotoğrafi Güncelle
+          {t("settings.updateProfile")}
         </Button>
       </div>
     </div>
@@ -41,3 +46,4 @@ function AvatarUpload({
 }
 
 export default AvatarUpload;
+

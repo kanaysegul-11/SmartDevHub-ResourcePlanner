@@ -15,6 +15,13 @@ export const authProvider = {
         if (response.data?.user_id) {
           localStorage.setItem("user_id", String(response.data.user_id));
         }
+        if (response.data?.language) {
+          localStorage.setItem("language", response.data.language);
+        }
+        localStorage.setItem(
+          "is_admin",
+          response.data?.is_admin ? "true" : "false"
+        );
         return { success: true, redirectTo: "/dashboard" };
       }
 
@@ -37,6 +44,8 @@ export const authProvider = {
       localStorage.removeItem("token");
       localStorage.removeItem("username");
       localStorage.removeItem("user_id");
+      localStorage.removeItem("is_admin");
+      localStorage.removeItem("language");
       delete apiClient.defaults.headers.common.Authorization;
     }
     return { success: true, redirectTo: "/login" };
@@ -57,6 +66,8 @@ export const authProvider = {
     return {
       id: userId || "",
       name: username || "",
+      isAdmin: localStorage.getItem("is_admin") === "true",
+      language: localStorage.getItem("language") || "en",
     };
   },
 };

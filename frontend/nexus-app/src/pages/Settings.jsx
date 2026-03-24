@@ -1,7 +1,6 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
-import { apiClient } from "../refine/axios";
-import { useUser } from "../UserContext.jsx";
+import { FeatherSettings } from "@subframe/core";
 import Sidebar from "../component/layout/Sidebar";
 import SettingsHeader from "../component/settings/SettingsHeader";
 import SettingsTabs from "../component/settings/SettingsTabs";
@@ -9,17 +8,24 @@ import AvatarUpload from "../component/settings/AvatarUpload";
 import ProfileForm from "../component/settings/ProfileForm";
 import PasswordForm from "../component/settings/PasswordForm";
 import NotificationsPanel from "../component/settings/NotificationsPanel";
+import LanguagePreferences from "../component/settings/LanguagePreferences";
 import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
 import { Badge } from "../ui/components/Badge";
-import { FeatherSettings } from "@subframe/core";
+import { apiClient } from "../refine/axios";
+import { useUser } from "../UserContext.jsx";
+import { useI18n } from "../I18nContext.jsx";
 
 function Settings() {
   const { userData, refreshUserData, setUserData } = useUser();
+  const { t, language, setLanguage } = useI18n();
 
   const [activeTab, setActiveTab] = useState("profile");
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedLanguage, setSelectedLanguage] = useState(
+    userData?.language || language || "en"
+  );
   const fileInputRef = useRef(null);
 
   const [profileData, setProfileData] = useState({
@@ -39,11 +45,12 @@ function Settings() {
       lastName: userData?.lastName || "",
       email: userData?.email || "",
     });
+    setSelectedLanguage(userData?.language || language || "en");
 
     if (userData?.avatar) {
       setSelectedImage(userData.avatar);
     }
-  }, [userData]);
+  }, [language, userData]);
 
   const flashSuccess = (message) => {
     setSuccessMsg(message);
@@ -74,14 +81,14 @@ function Settings() {
         },
       });
       await refreshUserData();
-      flashSuccess("Profil fotografı güncellendi!");
-    } catch (err) {
-      console.error("Yükleme hatasi:", err);
+      flashSuccess(t("settings.avatarUpdated"));
+    } catch (error) {
+      console.error("Avatar upload error:", error);
     }
   };
 
-  const handleProfileUpdate = async (e) => {
-    e.preventDefault();
+  const handleProfileUpdate = async (event) => {
+    event.preventDefault();
     setLoading(true);
     try {
       await apiClient.patch("/update-profile/", {
@@ -91,18 +98,18 @@ function Settings() {
       });
 
       await refreshUserData();
-      flashSuccess("Profil güncellendi!");
-    } catch (err) {
-      alert("Hata: Profil güncellenemedi.", err);
+      flashSuccess(t("settings.profileUpdated"));
+    } catch (error) {
+      alert(t("settings.profileError"));
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePasswordChange = async (e) => {
-    e.preventDefault();
+  const handlePasswordChange = async (event) => {
+    event.preventDefault();
     if (passwordData.new !== passwordData.confirm) {
-      alert("Şifreler uyuşmuyor!");
+      alert(t("settings.passwordMismatch"));
       return;
     }
 
@@ -113,9 +120,26 @@ function Settings() {
         new_password: passwordData.new,
       });
       setPasswordData({ old: "", new: "", confirm: "" });
-      flashSuccess("Şifre başarıyla değiştirildi!");
-    } catch (err) {
-      alert(err.response?.data?.error || "Eski şifre hatalı.");
+      flashSuccess(t("settings.passwordUpdated"));
+    } catch (error) {
+      alert(error.response?.data?.error || t("settings.passwordError"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLanguageSave = async () => {
+    setLoading(true);
+    try {
+      await apiClient.patch("/update-profile/", {
+        language: selectedLanguage,
+      });
+      setLanguage(selectedLanguage);
+      setUserData({ language: selectedLanguage });
+      await refreshUserData();
+      flashSuccess(t("settings.languageSaved"));
+    } catch (error) {
+      console.error("Language update error:", error);
     } finally {
       setLoading(false);
     }
@@ -124,7 +148,7 @@ function Settings() {
   return (
     <div className="flex h-screen w-full items-start overflow-hidden bg-slate-50 font-sans text-slate-900">
       <Sidebar
-        activeItem="analytics"
+        activeItem="settings"
         showTeamSubmenu={true}
         logoClickable={true}
       />
@@ -134,10 +158,10 @@ function Settings() {
           className="border-b border-solid border-neutral-border bg-white px-8 py-3"
           leftSlot={
             <Badge variant="neutral" icon={<FeatherSettings />}>
-              Account Workspace
+              {t("settings.workspace")}
             </Badge>
           }
-          rightSlot={<Badge variant="success">Güvenli</Badge>}
+          rightSlot={<Badge variant="success">{t("settings.secure")}</Badge>}
         />
 
         <SettingsHeader successMsg={successMsg} />
@@ -149,7 +173,7 @@ function Settings() {
             {activeTab === "profile" ? (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <h3 className="mb-8 text-xl font-black text-slate-800">
-                  Profil Ayarları
+                  {t("settings.profileTitle")}
                 </h3>
                 <AvatarUpload
                   fileInputRef={fileInputRef}
@@ -177,6 +201,15 @@ function Settings() {
             ) : null}
 
             {activeTab === "notifications" ? <NotificationsPanel /> : null}
+
+            {activeTab === "language" ? (
+              <LanguagePreferences
+                selectedLanguage={selectedLanguage}
+                onSelectLanguage={setSelectedLanguage}
+                onSave={handleLanguageSave}
+                loading={loading}
+              />
+            ) : null}
           </div>
         </div>
       </div>
@@ -185,3 +218,4 @@ function Settings() {
 }
 
 export default Settings;
+
