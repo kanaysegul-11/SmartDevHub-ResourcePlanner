@@ -1,24 +1,30 @@
 "use client";
 
 import React from "react";
-import { FeatherArrowUpRight, FeatherClock, FeatherMessageCircle, FeatherUser } from "@subframe/core";
+import { FeatherArrowUpRight, FeatherMessageCircle, FeatherUser } from "@subframe/core";
 import { Avatar } from "../../ui/components/Avatar";
 import { Badge } from "../../ui/components/Badge";
-import { Button } from "../../ui/components/Button";
 import { useI18n } from "../../I18nContext.jsx";
 
 function ProfileCard({ member, isOpen, onClose, onMessageClick, showCloseButton = true }) {
   const { language, t } = useI18n();
 
   if (!isOpen || !member) return null;
+  const projectCount = Number(member.projectCount || 0);
+  const canOpenMessaging = typeof onMessageClick === "function";
+  const projectName = member.currentProjectName || "";
+  const clientName = member.currentProjectClient || "";
+
+  const memberStatus =
+    member.effectiveStatus || member.effective_status || member.status_type || "available";
 
   const statusVariant =
-    member.status_type === "busy" ? "warning" : member.status_type === "available" ? "success" : "neutral";
+    memberStatus === "busy" ? "warning" : memberStatus === "available" ? "success" : "neutral";
 
   const statusLabel =
-    member.status_type === "busy"
+    memberStatus === "busy"
       ? t("team.busy")
-      : member.status_type === "available"
+      : memberStatus === "available"
         ? t("team.reachable")
         : t("team.unknown");
 
@@ -64,11 +70,11 @@ function ProfileCard({ member, isOpen, onClose, onMessageClick, showCloseButton 
                 <Avatar variant="brand" size="x-large" className="border-4 border-white/20 shadow-lg">
                   {member.employee_name?.[0]?.toUpperCase() || "U"}
                 </Avatar>
-                <div>
-                  <h2 className="text-3xl font-black tracking-tight text-white">
+                <div className="min-w-0">
+                  <h2 className="break-words text-3xl font-black tracking-tight text-white">
                     {member.employee_name || t("team.notSpecified")}
                   </h2>
-                  <p className="mt-2 text-sm font-medium uppercase tracking-[0.18em] text-slate-400">
+                  <p className="mt-2 break-words text-sm font-medium uppercase tracking-[0.18em] text-slate-400">
                     {member.position || t("team.notSpecified")}
                   </p>
                 </div>
@@ -79,22 +85,35 @@ function ProfileCard({ member, isOpen, onClose, onMessageClick, showCloseButton 
                   {t("team.currentTask")}
                 </p>
                 <p className="mt-3 text-sm leading-7 text-slate-200">
-                  {member.current_work || t("team.notSpecified")}
+                  {member.profileNote || member.current_work || t("team.notSpecified")}
                 </p>
+
+                <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      {t("team.projectCount")}
+                    </p>
+                    <p className="mt-2 text-2xl font-black tracking-tight text-white">
+                      {projectCount}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      {t("projects.delivery")}
+                    </p>
+                    <p className="mt-2 text-sm leading-7 text-slate-200">
+                      {member.currentProjectEndDate ? formatDate(member.currentProjectEndDate) : t("projects.notSet")}
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="mt-8 grid grid-cols-1 gap-4">
                 <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                     {t("team.lastUpdate")}
                   </p>
                   <p className="mt-3 text-sm leading-7 text-slate-200">{formatDate(member.last_updated)}</p>
-                </div>
-                <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                    {t("team.nextStep")}
-                  </p>
-                  <p className="mt-3 text-sm leading-7 text-slate-200">{t("team.nextStepBody")}</p>
                 </div>
               </div>
             </div>
@@ -105,42 +124,90 @@ function ProfileCard({ member, isOpen, onClose, onMessageClick, showCloseButton 
                   {t("team.profileActions")}
                 </p>
                 <div className="mt-5 flex flex-col gap-3">
-                  <Button
-                    variant="brand-secondary"
-                    className="h-12 justify-between rounded-2xl bg-slate-950 px-4 text-white hover:bg-slate-800"
-                    icon={<FeatherMessageCircle />}
-                    onClick={() => onMessageClick?.(member)}
-                  >
-                    {t("team.openMessaging")}
-                  </Button>
-                  <Button
-                    variant="neutral-secondary"
-                    className="h-12 justify-between rounded-2xl border-slate-200 bg-white px-4"
-                    icon={<FeatherArrowUpRight />}
-                    onClick={() => onMessageClick?.(member)}
-                  >
-                    {t("team.goToTeamChat")}
-                  </Button>
+                  {canOpenMessaging ? (
+                    <>
+                      <button
+                        type="button"
+                        className="inline-flex h-12 w-full items-center justify-between gap-3 rounded-2xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800"
+                        onClick={() => onMessageClick(member)}
+                      >
+                        <span className="inline-flex items-center gap-2 text-white">
+                          <FeatherMessageCircle size={16} />
+                          {t("team.openMessaging")}
+                        </span>
+                        <FeatherArrowUpRight size={16} className="text-white" />
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-12 w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                        onClick={() => onMessageClick(member)}
+                      >
+                        <span>{t("team.goToTeamChat")}</span>
+                        <FeatherArrowUpRight size={16} />
+                      </button>
+                    </>
+                  ) : (
+                    <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/90 px-4 py-5 text-sm text-slate-500" />
+                  )}
                 </div>
               </div>
 
               <div className="rounded-[30px] border border-slate-200/80 bg-white/75 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-[18px] bg-sky-100 text-sky-700">
-                    <FeatherClock size={18} />
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                  {t("team.profileCard")}
+                </p>
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      {t("team.projectCount")}
+                    </p>
+                    <p className="mt-2 text-2xl font-black text-slate-950">{projectCount}</p>
                   </div>
-                  <div>
-                    <p className="text-sm font-black text-slate-900">{t("team.actionFocused")}</p>
-                    <p className="text-sm leading-7 text-slate-500">{t("team.actionFocusedBody")}</p>
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      {t("projects.delivery")}
+                    </p>
+                    <p className="mt-2 break-words text-sm font-semibold leading-6 text-slate-700">
+                      {member.currentProjectEndDate
+                        ? formatDate(member.currentProjectEndDate)
+                        : t("projects.notSet")}
+                    </p>
                   </div>
                 </div>
-              </div>
 
-              <div className="rounded-[30px] border border-dashed border-slate-200 bg-slate-50/75 p-6">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
-                  {t("team.whyImportant")}
-                </p>
-                <p className="mt-3 text-sm leading-7 text-slate-600">{t("team.whyImportantBody")}</p>
+                {projectName || clientName ? (
+                  <div className="mt-4 rounded-[22px] border border-slate-200 bg-slate-50/80 p-4">
+                    {projectName ? (
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          {t("projects.projectName")}
+                        </p>
+                        <p className="mt-2 break-words text-sm font-bold text-slate-900">
+                          {projectName}
+                        </p>
+                      </div>
+                    ) : null}
+                    {clientName ? (
+                      <div className={projectName ? "mt-4" : ""}>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          {t("projects.clientDepartment")}
+                        </p>
+                        <p className="mt-2 break-words text-sm font-semibold leading-6 text-slate-700">
+                          {clientName}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="mt-4 rounded-[22px] border border-slate-200 bg-slate-50/80 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    {t("team.lastUpdate")}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-700">
+                    {formatDate(member.last_updated)}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -151,4 +218,3 @@ function ProfileCard({ member, isOpen, onClose, onMessageClick, showCloseButton 
 }
 
 export default ProfileCard;
-

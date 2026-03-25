@@ -27,7 +27,7 @@ function DashboardPanel({ children, className = "" }) {
   );
 }
 
-function StatCard({ icon, label, value, hint, accentClass }) {
+function StatCard({ icon, label, value, accentClass }) {
   return (
     <DashboardPanel className="p-6 lg:p-7">
       <div className="flex items-start justify-between gap-4">
@@ -40,7 +40,6 @@ function StatCard({ icon, label, value, hint, accentClass }) {
       </div>
       <p className="mt-7 text-sm font-semibold text-slate-500">{label}</p>
       <p className="mt-3 text-3xl font-black tracking-tight text-slate-950">{value}</p>
-      <p className="mt-3 max-w-xs text-sm leading-7 text-slate-500">{hint}</p>
     </DashboardPanel>
   );
 }
@@ -64,6 +63,14 @@ function formatRelativeDate(value, language, t) {
 }
 
 function getActivityConfig(type, t) {
+  if (type === "project") {
+    return {
+      icon: <FeatherTrendingUp size={16} />,
+      label: t("sidebar.projects"),
+      tone: "bg-violet-100 text-violet-700",
+    };
+  }
+
   if (type === "comment") {
     return {
       icon: <FeatherMessageCircle size={16} />,
@@ -95,20 +102,28 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
     ? Math.round((stats.busyMembers / stats.totalMembers) * 100)
     : 0;
   const topLanguages = stats?.languageSpread?.slice(0, 4) ?? [];
-  const overloadedMembers = teamActivities
-    .filter((member) => member.status_type === "busy")
-    .slice(0, 3);
+  const capacityMembers = [...teamActivities]
+    .filter((member) => Number(member.projectCount || 0) > 0)
+    .sort((left, right) => {
+      const projectDifference = Number(right.projectCount || 0) - Number(left.projectCount || 0);
+      if (projectDifference !== 0) {
+        return projectDifference;
+      }
+
+      const leftBusy = (left.effective_status || left.status_type) === "busy" ? 1 : 0;
+      const rightBusy = (right.effective_status || right.status_type) === "busy" ? 1 : 0;
+      if (rightBusy !== leftBusy) {
+        return rightBusy - leftBusy;
+      }
+
+      return String(left.employee_name || left.user_details?.username || "").localeCompare(
+        String(right.employee_name || right.user_details?.username || ""),
+        "tr"
+      );
+    })
+    .slice(0, 4);
   const recentActivity = stats?.recentActivity ?? [];
   const reviewQueue = stats?.reviewQueue ?? [];
-  const spotlightMembers = teamActivities.slice(0, 3);
-
-  const openTeamChat = (member) => {
-    if (!member?.id) {
-      navigate("/team");
-      return;
-    }
-    navigate(`/team?chat=${member.id}`);
-  };
 
   return (
     <div className="flex w-full flex-col gap-10 xl:gap-12">
@@ -117,21 +132,18 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
           icon={<FeatherCode size={22} />}
           label={t("dashboard.totalSnippets")}
           value={stats?.totalSnippets || 0}
-          hint={`${stats?.uniqueLanguageCount || 0} ${t("dashboard.languageCoverage").toLowerCase()}, ${t("dashboard.records")}.`}
           accentClass="bg-sky-100 text-sky-700"
         />
         <StatCard
           icon={<FeatherStar size={22} />}
           label={t("dashboard.averageRating")}
           value={stats?.averageRating ? `${stats.averageRating}/5` : "-"}
-          hint={`${stats?.totalComments || 0} ${t("dashboard.activityFeedback").toLowerCase()} ${t("dashboard.recentActivityBody").toLowerCase()}`}
           accentClass="bg-amber-100 text-amber-700"
         />
         <StatCard
           icon={<FeatherUsers size={22} />}
           label={t("dashboard.busyRatio")}
           value={`%${workloadRatio}`}
-          hint={`${stats?.busyMembers || 0} ${t("dashboard.statusBusy").toLowerCase()}, ${stats?.availableMembers || 0} ${t("dashboard.statusAvailable").toLowerCase()}.`}
           accentClass="bg-emerald-100 text-emerald-700"
         />
         <StatCard
@@ -144,119 +156,8 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
                 ? t("dashboard.dailyTempoBalanced")
                 : t("dashboard.dailyTempoRelaxed")
           }
-          hint={t("dashboard.quickAccessBody")}
           accentClass="bg-violet-100 text-violet-700"
         />
-      </section>
-
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] xl:gap-8">
-        <DashboardPanel className="p-7 lg:p-8">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Badge variant="neutral" icon={<FeatherUsers />}>
-                {t("dashboard.spotlight")}
-              </Badge>
-              <h3 className="mt-4 font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
-                {t("dashboard.spotlightTitle")}
-              </h3>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-                {t("dashboard.spotlightBody")}
-              </p>
-            </div>
-            <Button
-              variant="neutral-secondary"
-              className="rounded-2xl border-slate-200 bg-white"
-              icon={<FeatherArrowUpRight />}
-              onClick={() => navigate("/team")}
-            >
-              {t("dashboard.openTeam")}
-            </Button>
-          </div>
-
-          <div className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-3">
-            {spotlightMembers.map((member) => (
-              <div
-                key={member.id}
-                className="rounded-[28px] border border-slate-200/80 bg-slate-50/75 p-5"
-              >
-                <div className="flex items-center gap-4">
-                  <Avatar
-                    size="large"
-                    variant={member.status_type === "busy" ? "warning" : "success"}
-                  >
-                    {member.employee_name?.[0]?.toUpperCase() || "U"}
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="truncate text-lg font-black tracking-tight text-slate-900">
-                      {member.employee_name}
-                    </p>
-                    <p className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {member.position || t("dashboard.noPosition")}
-                    </p>
-                  </div>
-                </div>
-                <p className="mt-4 text-sm leading-7 text-slate-600">
-                  {member.current_work || t("dashboard.noCurrentTask")}
-                </p>
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => onMemberClick?.(member)}
-                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
-                  >
-                    <FeatherArrowUpRight size={16} />
-                    {t("dashboard.reviewProfile")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openTeamChat(member)}
-                    className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  >
-                    <FeatherMessageCircle size={16} />
-                    {t("dashboard.teamChat")}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </DashboardPanel>
-
-        <DashboardPanel className="p-7 lg:p-8">
-          <Badge variant="neutral" icon={<FeatherMessageCircle />}>
-            {t("dashboard.profileFlow")}
-          </Badge>
-          <h3 className="mt-4 font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
-            {t("dashboard.profileFlowTitle")}
-          </h3>
-          <p className="mt-3 text-sm leading-7 text-slate-600">
-            {t("dashboard.profileFlowBody")}
-          </p>
-
-          <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="rounded-[28px] border border-slate-200/80 bg-white/80 p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
-                {t("dashboard.step1")}
-              </p>
-              <p className="mt-3 text-lg font-black tracking-tight text-slate-900">
-                {t("dashboard.step1Title")}
-              </p>
-              <p className="mt-2 text-sm leading-7 text-slate-500">
-                {t("dashboard.step1Body")}
-              </p>
-            </div>
-            <div className="rounded-[28px] border border-slate-200/80 bg-white/80 p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
-                {t("dashboard.step2")}
-              </p>
-              <p className="mt-3 text-lg font-black tracking-tight text-slate-900">
-                {t("dashboard.step2Title")}
-              </p>
-              <p className="mt-2 text-sm leading-7 text-slate-500">
-                {t("dashboard.step2Body")}
-              </p>
-            </div>
-          </div>
-        </DashboardPanel>
       </section>
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.92fr)] xl:gap-8">
@@ -272,9 +173,6 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
                 <h2 className="mt-4 font-['Newsreader'] text-3xl font-medium leading-tight tracking-tight text-slate-950 md:text-4xl">
                   {t("dashboard.operationTitle")}
                 </h2>
-                <p className="mt-4 text-sm leading-7 text-slate-600 md:text-base">
-                  {t("dashboard.operationBody")}
-                </p>
               </div>
 
               <div className="flex flex-wrap gap-3">
@@ -373,10 +271,6 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
                     </Badge>
                   </div>
 
-                  <p className="mt-4 text-sm leading-7 text-slate-600">
-                    {t("dashboard.capacityBody")}
-                  </p>
-
                   <div className="mt-6 h-3 overflow-hidden rounded-full bg-slate-200">
                     <div
                       className="h-full rounded-full bg-[linear-gradient(90deg,#34d399_0%,#fbbf24_52%,#fb7185_100%)]"
@@ -385,15 +279,18 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
                   </div>
 
                   <div className="mt-5 flex flex-wrap gap-2.5">
-                    {overloadedMembers.length > 0 ? (
-                      overloadedMembers.map((member) => (
+                    {capacityMembers.length > 0 ? (
+                      capacityMembers.map((member) => (
                         <button
                           key={member.id}
                           type="button"
                           onClick={() => onMemberClick && onMemberClick(member)}
-                          className="rounded-full border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-300 hover:bg-amber-100"
+                          className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-700 transition hover:border-amber-300 hover:bg-amber-100"
                         >
-                          {member.employee_name}
+                          <span>{member.employee_name || member.user_details?.username}</span>
+                          <span className="rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-black text-amber-700">
+                            {member.projectCount || 0}
+                          </span>
                         </button>
                       ))
                     ) : (
@@ -470,9 +367,6 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
               <h3 className="mt-4 font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
                 {t("dashboard.recentActivityTitle")}
               </h3>
-              <p className="mt-3 text-sm leading-7 text-slate-600">
-                {t("dashboard.recentActivityBody")}
-              </p>
             </div>
             <Button
               variant="neutral-tertiary"
@@ -500,12 +394,12 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
                   </div>
                   <div className="min-w-0 flex-1 rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-sm font-bold text-slate-900">{item.title}</p>
+                      <p className="line-clamp-2 break-words text-sm font-bold text-slate-900">{item.title}</p>
                       <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                         {config.label}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-500">{item.meta}</p>
+                    <p className="mt-2 break-words text-sm leading-6 text-slate-500">{item.meta}</p>
                     <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
                       {formatRelativeDate(item.timestamp, language, t)}
                     </p>
@@ -582,10 +476,6 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
           <h3 className="mt-4 font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
             {t("dashboard.quickAccessTitle")}
           </h3>
-          <p className="mt-3 text-sm leading-7 text-slate-600">
-            {t("dashboard.quickAccessBody")}
-          </p>
-
           <div className="mt-8 flex flex-col gap-4">
             <button
               type="button"
@@ -597,9 +487,6 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
               </p>
               <p className="mt-2 text-xl font-black tracking-tight text-slate-900">
                 {t("dashboard.quickTeamTitle")}
-              </p>
-              <p className="mt-3 text-sm leading-7 text-slate-500">
-                {t("dashboard.quickTeamBody")}
               </p>
             </button>
 
@@ -614,9 +501,6 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
               <p className="mt-2 text-xl font-black tracking-tight text-slate-900">
                 {t("dashboard.quickAnalyticsTitle")}
               </p>
-              <p className="mt-3 text-sm leading-7 text-slate-500">
-                {t("dashboard.quickAnalyticsBody")}
-              </p>
             </button>
 
             <button
@@ -629,9 +513,6 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
               </p>
               <p className="mt-2 text-xl font-black tracking-tight text-slate-900">
                 {t("dashboard.quickLibraryTitle")}
-              </p>
-              <p className="mt-3 text-sm leading-7 text-slate-500">
-                {t("dashboard.quickLibraryBody")}
               </p>
             </button>
           </div>
@@ -661,4 +542,3 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
 }
 
 export default DashboardSummary;
-

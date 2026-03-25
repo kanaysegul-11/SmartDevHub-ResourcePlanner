@@ -22,6 +22,19 @@ import Settings from "./pages/Settings";
 import Register from "./pages/Register";
 import Projects from "./pages/Projects";
 import Tasks from "./pages/Tasks";
+import NotificationsPage from "./pages/NotificationsPage";
+import ContactAdmin from "./pages/ContactAdmin";
+import { useUser } from "./UserContext.jsx";
+
+function AdminOnlyRoute({ children }) {
+  const { userData } = useUser();
+
+  if (!userData?.isAdmin) {
+    return <CatchAllNavigate to="/dashboard" />;
+  }
+
+  return children;
+}
 
 function App() {
   return (
@@ -94,6 +107,20 @@ function App() {
             label: "Settings",
           },
         },
+        {
+          name: "notifications-page",
+          list: "/notifications",
+          meta: {
+            label: "Notifications",
+          },
+        },
+        {
+          name: "administrators",
+          list: "/administrators",
+          meta: {
+            label: "Administrators",
+          },
+        },
       ]}
       options={{
         syncWithLocation: true,
@@ -116,9 +143,19 @@ function App() {
           <Route path="/team" element={<Team />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/tasks" element={<Tasks />} />
-          <Route path="/add-member" element={<CreateMember />} />
+          <Route
+            path="/add-member"
+            element={
+              <AdminOnlyRoute>
+                <CreateMember />
+              </AdminOnlyRoute>
+            }
+          />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/administrators" element={<ContactAdmin />} />
+          <Route path="/contact-admin" element={<ContactAdmin />} />
         </Route>
 
         <Route

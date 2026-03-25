@@ -50,3 +50,21 @@ select {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(51, 65, 85, 0.4);
 }
+
+.dark-surface {
+  color: #f8fafc;
+}
+
+.dark-surface [class~="text-slate-500"],
+.dark-surface [class~="text-slate-400"] {
+  color: #cbd5e1 !important;
+}
+
+.dark-surface [class~="text-slate-300"] {
+  color: #e2e8f0 !important;
+}
+
+.dark-surface button:not([class~="bg-white"]):not([class*="bg-white/"]),
+.dark-surface a:not([class~="bg-white"]):not([class*="bg-white/"]) {
+  color: inherit;
+}

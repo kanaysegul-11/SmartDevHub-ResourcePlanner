@@ -13,9 +13,6 @@ const SecurityReportCard = ({ risks = [] }) => {
             <FeatherShieldCheck size={18} className="text-sky-600" />
             {t("snippets.securityTitle")}
           </h3>
-          <p className="mt-3 text-sm leading-7 text-slate-500">
-            {t("snippets.securityBody")}
-          </p>
         </div>
         <span
           className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${

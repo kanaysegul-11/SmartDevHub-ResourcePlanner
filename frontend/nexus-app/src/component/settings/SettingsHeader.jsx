@@ -12,9 +12,6 @@ function SettingsHeader({ successMsg }) {
         <h1 className="block text-2xl font-black tracking-tight text-slate-800">
           {t("settings.title")}
         </h1>
-        <p className="text-sm font-medium text-slate-500">
-          {t("settings.subtitle")}
-        </p>
       </div>
       {successMsg ? (
         <div className="animate-in fade-in flex items-center gap-2 rounded-full border border-green-100 bg-green-50 px-4 py-2 text-green-600">
@@ -27,4 +24,3 @@ function SettingsHeader({ successMsg }) {
 }
 
 export default SettingsHeader;
-

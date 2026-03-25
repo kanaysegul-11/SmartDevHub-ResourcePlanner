@@ -13,9 +13,6 @@ function LanguagePreferences({ selectedLanguage, onSelectLanguage, onSave, loadi
         <h3 className="text-xl font-black text-slate-800">
           {t("settings.languageTitle")}
         </h3>
-        <p className="text-sm font-medium text-slate-400">
-          {t("settings.languageBody")}
-        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -43,15 +40,6 @@ function LanguagePreferences({ selectedLanguage, onSelectLanguage, onSave, loadi
         })}
       </div>
 
-      <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-4">
-        <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-          {t("settings.languageLabel")}
-        </p>
-        <p className="mt-2 text-sm leading-7 text-slate-600">
-          {t("settings.languageHelper")}
-        </p>
-      </div>
-
       <button
         type="button"
         onClick={onSave}
@@ -65,4 +53,3 @@ function LanguagePreferences({ selectedLanguage, onSelectLanguage, onSave, loadi
 }
 
 export default LanguagePreferences;
-

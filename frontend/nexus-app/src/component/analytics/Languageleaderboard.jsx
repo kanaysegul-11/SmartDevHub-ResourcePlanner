@@ -44,7 +44,6 @@ function LanguageLeaderboard({ snippets = [], comments = [], isLoading = false }
             <FeatherStar className="text-amber-500" size={16} fill="currentColor" />
             {t("analytics.leaderboard")}
           </h3>
-          <p className="mt-3 text-sm leading-7 text-slate-500">{t("analytics.leaderboardBody")}</p>
         </div>
         <span className="rounded border bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-400">{t("analytics.top5")}</span>
       </div>

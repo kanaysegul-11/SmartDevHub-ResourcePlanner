@@ -6,7 +6,19 @@ import { useI18n } from "../../I18nContext.jsx";
 
 function TeamCard({ member, variant, onDelete, onInspect, onMessageClick, canManage = false }) {
   const isBusy = variant === "busy";
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+  const projectCount = Number(member.projectCount || 0);
+
+  const formatDate = (value) => {
+    if (!value) return t("projects.notSet");
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return t("projects.notSet");
+    return new Intl.DateTimeFormat(language || "en", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(date);
+  };
 
   return (
     <div
@@ -47,8 +59,27 @@ function TeamCard({ member, variant, onDelete, onInspect, onMessageClick, canMan
           {t("team.currentTask")}
         </p>
         <p className="mt-3 text-sm leading-7 text-slate-600">
-          {member.current_work || t("team.noFocus")}
+          {member.profileNote || member.current_work || t("team.noFocus")}
         </p>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              {t("team.projectCount")}
+            </p>
+            <p className="mt-2 text-2xl font-black tracking-tight text-slate-900">
+              {projectCount}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              {t("projects.delivery")}
+            </p>
+            <p className="mt-2 text-sm font-semibold text-slate-700">
+              {formatDate(member.currentProjectEndDate)}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="mt-5 flex flex-wrap gap-3">
@@ -74,4 +105,3 @@ function TeamCard({ member, variant, onDelete, onInspect, onMessageClick, canMan
 }
 
 export default TeamCard;
-

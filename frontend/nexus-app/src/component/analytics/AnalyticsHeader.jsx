@@ -20,7 +20,6 @@ function AnalyticsHeader({ searchTerm = "", onSearchChange, resultsCount = 0, to
         <h1 className="mt-4 max-w-3xl font-['Newsreader'] text-4xl font-medium leading-tight tracking-tight text-slate-950">
           {t("analytics.heroTitle")}
         </h1>
-        <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">{t("analytics.heroBody")}</p>
         <div className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
           <TextField
             className="w-full"
@@ -39,7 +38,6 @@ function AnalyticsHeader({ searchTerm = "", onSearchChange, resultsCount = 0, to
       <div className="rounded-[34px] border border-white/65 bg-slate-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{t("analytics.insightPanel")}</p>
         <p className="mt-3 text-2xl font-black tracking-tight text-white">{t("analytics.insightTitle")}</p>
-        <p className="mt-3 text-sm leading-7 text-slate-300">{t("analytics.insightBody")}</p>
         <div className="mt-6 grid gap-3">
           <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("analytics.feedbackEntries")}</p>

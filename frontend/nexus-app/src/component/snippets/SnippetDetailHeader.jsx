@@ -41,9 +41,6 @@ function SnippetDetailHeader({ title, description, language, commentCount = 0, r
         <p className="mt-3 text-2xl font-black tracking-tight text-slate-950">
           {t("snippets.detailSideTitle")}
         </p>
-        <p className="mt-3 text-sm leading-7 text-slate-600">
-          {t("snippets.detailSideBody")}
-        </p>
 
         <div className="mt-6 grid gap-3">
           <div className="rounded-[22px] border border-slate-200/80 bg-white p-4">

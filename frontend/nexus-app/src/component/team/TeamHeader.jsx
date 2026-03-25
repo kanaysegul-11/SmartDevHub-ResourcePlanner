@@ -37,9 +37,6 @@ function TeamHeader({ loading, stats, spotlightMembers = [], onInspect, onMessag
             <h1 className="mt-4 font-['Newsreader'] text-4xl font-medium leading-tight tracking-tight text-slate-950">
               {t("team.heroTitle")}
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">
-              {t("team.heroBody")}
-            </p>
 
             <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="rounded-[24px] border border-slate-200/80 bg-white/80 p-4">
@@ -83,7 +80,6 @@ function TeamHeader({ loading, stats, spotlightMembers = [], onInspect, onMessag
               {t("team.takeAction")}
             </p>
             <p className="mt-3 text-2xl font-black tracking-tight">{t("team.spotlightTitle")}</p>
-            <p className="mt-3 text-sm leading-7 text-slate-300">{t("team.spotlightBody")}</p>
             <div className="mt-6 flex flex-col gap-3">
               <Button
                 variant="neutral-secondary"
@@ -126,7 +122,7 @@ function TeamHeader({ loading, stats, spotlightMembers = [], onInspect, onMessag
               </div>
             </div>
             <p className="mt-4 text-sm leading-7 text-slate-600">
-              {member.current_work || t("team.noFocus")}
+              {member.profileNote || member.current_work || t("team.noFocus")}
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <button
@@ -154,4 +150,3 @@ function TeamHeader({ loading, stats, spotlightMembers = [], onInspect, onMessag
 }
 
 export default TeamHeader;
-

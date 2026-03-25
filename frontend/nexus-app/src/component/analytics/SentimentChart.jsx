@@ -16,7 +16,6 @@ function SentimentChart({ data, isLoading = false }) {
           <div className="rounded-lg bg-pink-100 p-2 text-pink-600"><FeatherUsers size={20} /></div>
           {t("analytics.sentiment")}
         </h3>
-        <p className="mt-3 text-sm leading-7 text-slate-500">{t("analytics.sentimentBody")}</p>
       </div>
       {isLoading ? (
         <div className="flex h-64 w-full items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 text-sm text-slate-500">

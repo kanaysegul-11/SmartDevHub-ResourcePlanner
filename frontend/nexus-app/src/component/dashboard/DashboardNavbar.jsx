@@ -1,9 +1,8 @@
 import React from "react";
-import { FeatherArrowUpRight, FeatherSparkles, FeatherTarget } from "@subframe/core";
+import { FeatherSparkles, FeatherTarget } from "@subframe/core";
 import { useUser } from "../../UserContext.jsx";
 import { useI18n } from "../../I18nContext.jsx";
 import { Badge } from "../../ui/components/Badge";
-import { Button } from "../../ui/components/Button";
 
 function Navbar() {
   const { userData } = useUser();
@@ -28,10 +27,6 @@ function Navbar() {
             {t("dashboard.greeting")}, {userData.username || t("app.user")}.{" "}
             {t("dashboard.heroTitle")}
           </h1>
-
-          <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
-            {t("dashboard.heroBody")}
-          </p>
         </div>
 
         <div className="grid min-w-[240px] grid-cols-1 gap-3 sm:grid-cols-2 xl:w-[320px] xl:grid-cols-1">
@@ -43,14 +38,6 @@ function Navbar() {
               {t("dashboard.designLanguageValue")}
             </p>
           </div>
-
-          <Button
-            variant="neutral-secondary"
-            className="h-14 justify-between rounded-3xl border-slate-200 bg-white/90 px-5"
-          >
-            {t("dashboard.designSystemUpdated")}
-            <FeatherArrowUpRight />
-          </Button>
         </div>
       </div>
     </div>
@@ -58,4 +45,3 @@ function Navbar() {
 }
 
 export default Navbar;
-

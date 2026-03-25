@@ -4,11 +4,13 @@ import React, { useState } from "react";
 import { useLogout } from "@refinedev/core";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  FeatherBell,
   FeatherChevronDown,
   FeatherCode,
   FeatherFolderKanban,
   FeatherLayout,
   FeatherLogOut,
+  FeatherMessageCircle,
   FeatherPlus,
   FeatherSettings,
   FeatherTarget,
@@ -35,6 +37,7 @@ function Sidebar({
   const { mutate: logout } = useLogout();
   const { userData } = useUser();
   const { t } = useI18n();
+  const canManageTeam = Boolean(userData?.isAdmin);
   const [isLibraryHovered, setIsLibraryHovered] = useState(false);
   const [isTeamHovered, setIsTeamHovered] = useState(false);
 
@@ -49,6 +52,10 @@ function Sidebar({
           ? "projects"
           : pathname === "/tasks"
             ? "tasks"
+        : pathname === "/notifications"
+          ? "notifications"
+          : pathname === "/contact-admin" || pathname === "/administrators"
+            ? "administrators"
         : pathname.startsWith("/snippets") || pathname === "/add-snippets"
           ? "snippets"
           : pathname === "/analytics"
@@ -70,7 +77,7 @@ function Sidebar({
 
   return (
     <SidebarWithSections
-      className="z-20 m-4 mr-0 w-[272px] flex-none self-stretch overflow-hidden rounded-[30px] border border-white/10 bg-slate-950 text-white shadow-[0_24px_80px_rgba(15,23,42,0.24)] [&_.border-neutral-border]:border-white/10 [&_.text-subtext-color]:text-slate-500"
+      className="dark-surface z-20 m-4 mr-0 w-[272px] flex-none self-stretch overflow-hidden rounded-[30px] border border-white/10 bg-slate-950 text-white shadow-[0_24px_80px_rgba(15,23,42,0.24)] [&_.border-neutral-border]:border-white/10 [&_.text-subtext-color]:text-slate-300"
       header={
         <div
           className={`flex w-full items-center gap-3 ${
@@ -143,7 +150,7 @@ function Sidebar({
         </SidebarWithSections.NavItem>
 
         {menuPreset === "full" ? (
-          showTeamSubmenu ? (
+          showTeamSubmenu && canManageTeam ? (
             <div
               className="flex w-full flex-col gap-1"
               onMouseEnter={() => setIsTeamHovered(true)}
@@ -266,6 +273,22 @@ function Sidebar({
       </SidebarWithSections.NavSection>
 
       <SidebarWithSections.NavSection label={t("sidebar.account")}>
+        <SidebarWithSections.NavItem
+          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+          selected={resolvedActive === "notifications"}
+          icon={<FeatherBell />}
+          onClick={() => navigate("/notifications")}
+        >
+          {t("sidebar.notifications")}
+        </SidebarWithSections.NavItem>
+        <SidebarWithSections.NavItem
+          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+          selected={resolvedActive === "administrators"}
+          icon={<FeatherMessageCircle />}
+          onClick={() => navigate("/administrators")}
+        >
+          {t("sidebar.administrators")}
+        </SidebarWithSections.NavItem>
         <SidebarWithSections.NavItem
           className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
           selected={resolvedActive === "settings"}

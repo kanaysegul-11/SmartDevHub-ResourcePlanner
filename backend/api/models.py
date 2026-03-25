@@ -74,6 +74,14 @@ class Comment(models.Model):
 
 # Çalışan Durumu Modeli
 class EmploymentStatus(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.SET_NULL,
+        related_name="employment_status",
+        null=True,
+        blank=True,
+        verbose_name="Bağlı Kullanıcı",
+    )
     employee_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="Çalışan İsmi")
     position = models.CharField(max_length=100, blank=True, null=True, verbose_name="Pozisyon")
     current_work = models.TextField(verbose_name="Şu Anki Görev")
@@ -230,3 +238,41 @@ class PageConfig(models.Model):
 
     def __str__(self):
         return self.key
+
+
+class UserNotification(models.Model):
+    TYPE_CHOICES = [
+        ("task", "Task"),
+        ("project", "Project"),
+        ("message", "Message"),
+        ("comment", "Comment"),
+        ("snippet", "Snippet"),
+        ("system", "System"),
+    ]
+
+    recipient = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+    )
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name="sent_notifications",
+        null=True,
+        blank=True,
+    )
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="system")
+    title = models.CharField(max_length=200)
+    body = models.TextField(blank=True)
+    link = models.CharField(max_length=255, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "User Notification"
+        verbose_name_plural = "User Notifications"
+
+    def __str__(self):
+        return f"{self.recipient.username} - {self.title}"

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   useCreate,
   useDelete,
@@ -26,7 +26,15 @@ function Team() {
   const navigate = useNavigate();
   const { userData } = useUser();
   const { t } = useI18n();
-  const teamQuery = useList({ resource: "status" });
+  const sharedQueryOptions = {
+    queryOptions: {
+      staleTime: 15000,
+      refetchOnWindowFocus: false,
+    },
+  };
+  const teamQuery = useList({ resource: "status", ...sharedQueryOptions });
+  const usersQuery = useList({ resource: "users", ...sharedQueryOptions });
+  const projectsQuery = useList({ resource: "projects", ...sharedQueryOptions });
   const { mutate: createMember, isLoading: isCreating } = useCreate();
   const { mutate: updateMember, isLoading: isUpdating } = useUpdate();
   const { mutate: deleteMember } = useDelete();
@@ -37,11 +45,90 @@ function Team() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const chatSectionRef = useRef(null);
 
-  const teamMembers = teamQuery.data?.data ?? [];
-  const activeProjectMembers = teamMembers.filter((member) => member.status_type === "busy");
-  const availableMembers = teamMembers.filter((member) => member.status_type === "available");
+  const teamMembers = useMemo(
+    () => (teamQuery.data?.data ?? []).filter((member) => !member.user_details?.is_admin),
+    [teamQuery.data?.data]
+  );
+  const userOptions = useMemo(() => usersQuery.data?.data ?? [], [usersQuery.data?.data]);
+  const projects = useMemo(() => projectsQuery.data?.data ?? [], [projectsQuery.data?.data]);
+  const chatMemberId = useMemo(
+    () => new URLSearchParams(location.search).get("chat"),
+    [location.search]
+  );
+  const chatUserId = useMemo(
+    () => new URLSearchParams(location.search).get("chatUser"),
+    [location.search]
+  );
+  const normalizeIdentity = (value) =>
+    String(value || "")
+      .trim()
+      .toLocaleLowerCase("tr")
+      .replace(/\s+/g, " ");
 
-  const spotlightMembers = useMemo(() => [...teamMembers].slice(0, 3), [teamMembers]);
+  const routeChatMember = useMemo(() => {
+    if (chatMemberId) {
+      return teamMembers.find((item) => String(item.id) === String(chatMemberId)) || null;
+    }
+
+    if (!chatUserId) return null;
+
+    const targetUser = userOptions.find((item) => String(item.id) === String(chatUserId));
+    if (!targetUser) return null;
+
+    const targetFullName = normalizeIdentity(
+      `${targetUser.first_name || ""} ${targetUser.last_name || ""}`
+    );
+    const targetUsername = normalizeIdentity(targetUser.username);
+
+    return (
+      teamMembers.find(
+        (item) =>
+          String(item.user_details?.id || "") === String(chatUserId) ||
+          normalizeIdentity(item.employee_name) === targetFullName ||
+          normalizeIdentity(item.employee_name) === targetUsername
+      ) || null
+    );
+  }, [chatMemberId, chatUserId, teamMembers, userOptions]);
+
+  const teamMembersWithProjects = useMemo(() => {
+    return teamMembers.map((member) => {
+      const memberProjects = projects.filter((project) =>
+        (project.team_members || []).some((memberId) => String(memberId) === String(member.id))
+      );
+      const taskProject =
+        projects.find(
+          (project) => String(project.name) === String(member.active_task_project_name)
+        ) || null;
+      const activeProject =
+        taskProject ||
+        memberProjects.find((project) => project.status === "active") ||
+        memberProjects[0] ||
+        null;
+
+      return {
+        ...member,
+        activeTaskTitle: member.active_task_title || "",
+        activeTaskDeadline: member.active_task_deadline || "",
+        effectiveStatus: member.effective_status || "available",
+        currentProject: activeProject,
+        currentProjectName: member.active_task_project_name || activeProject?.name || "",
+        currentProjectClient: member.active_task_project_client || activeProject?.client_name || "",
+        currentProjectEndDate: member.active_task_project_end_date || activeProject?.end_date || "",
+        projectCount: memberProjects.length,
+        profileNote: member.current_work || "",
+        projectSummary: member.active_task_description || activeProject?.summary || "",
+      };
+    });
+  }, [projects, teamMembers]);
+
+  const activeProjectMembers = useMemo(
+    () => teamMembersWithProjects.filter((member) => member.effectiveStatus === "busy"),
+    [teamMembersWithProjects]
+  );
+  const availableMembers = useMemo(
+    () => teamMembersWithProjects.filter((member) => member.effectiveStatus === "available"),
+    [teamMembersWithProjects]
+  );
 
   const teamStats = useMemo(
     () => ({
@@ -56,13 +143,18 @@ function Team() {
     invalidate({ resource: "status", invalidates: ["list", "detail"] });
   };
 
+  const normalizeMemberValues = (values) => ({
+    ...values,
+    user: values.user || null,
+  });
+
   const scrollToChat = () => {
     chatSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const handleCreateMember = (values) => {
     createMember(
-      { resource: "status", values },
+      { resource: "status", values: normalizeMemberValues(values) },
       {
         onSuccess: refreshTeam,
         onError: (error) => {
@@ -75,7 +167,7 @@ function Team() {
 
   const handleUpdateMember = (id, values) => {
     updateMember(
-      { resource: "status", id, values },
+      { resource: "status", id, values: normalizeMemberValues(values) },
       {
         onSuccess: refreshTeam,
         onError: (error) => {
@@ -111,6 +203,9 @@ function Team() {
   };
 
   const openProfile = (member) => {
+    if (chatMemberId || chatUserId) {
+      navigate("/team", { replace: true });
+    }
     setProfileMember(member);
     setSelectedMember(member);
     setIsProfileOpen(true);
@@ -118,6 +213,9 @@ function Team() {
 
   const openMessaging = (member, options = {}) => {
     const { scroll = true } = options;
+    if (chatMemberId || chatUserId) {
+      navigate("/team", { replace: true });
+    }
     setSelectedMember(member);
     setProfileMember(member);
     setIsProfileOpen(false);
@@ -130,19 +228,6 @@ function Team() {
   };
 
   const canManageTeam = Boolean(userData?.isAdmin);
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const chatId = params.get("chat");
-    if (!chatId || !teamMembers.length) return;
-
-    const member = teamMembers.find((item) => String(item.id) === String(chatId));
-    if (!member) return;
-
-    openMessaging(member);
-    navigate("/team", { replace: true });
-  }, [location.search, navigate, teamMembers]);
-
   return (
     <div className="flex h-screen w-full items-start overflow-hidden bg-transparent font-sans text-slate-900">
       <Sidebar activeItem="team" showTeamSubmenu={true} logoutVariant="danger" logoClickable={true} />
@@ -162,9 +247,9 @@ function Team() {
           />
 
           <TeamHeader
-            loading={teamQuery.isLoading || teamQuery.isFetching || isCreating}
+            loading={teamQuery.isLoading || usersQuery.isLoading || projectsQuery.isLoading || isCreating}
             stats={teamStats}
-            spotlightMembers={spotlightMembers}
+            spotlightMembers={teamMembersWithProjects.slice(0, 3)}
             onInspect={openProfile}
             onMessageClick={openMessaging}
           />
@@ -176,7 +261,8 @@ function Team() {
             >
               {canManageTeam ? (
                 <TeamDirectoryManager
-                  members={teamMembers}
+                  members={teamMembersWithProjects}
+                  userOptions={userOptions}
                   isSubmitting={isCreating || isUpdating}
                   onCreate={handleCreateMember}
                   onUpdate={handleUpdateMember}
@@ -191,13 +277,10 @@ function Team() {
                   <h3 className="mt-3 font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
                     {t("team.managementHidden")}
                   </h3>
-                  <p className="mt-3 text-sm leading-7 text-slate-600">
-                    {t("team.managementHiddenBody")}
-                  </p>
                 </div>
               )}
 
-              <TeamConversationPanel member={selectedMember} />
+              <TeamConversationPanel member={routeChatMember || selectedMember} />
             </div>
 
             <div className="flex min-w-0 flex-col items-start gap-8">
@@ -242,4 +325,3 @@ function Team() {
 }
 
 export default Team;
-

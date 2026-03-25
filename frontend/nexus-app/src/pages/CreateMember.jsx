@@ -1,12 +1,11 @@
 "use client";
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useForm } from "@refinedev/core";
+import { useForm, useList } from "@refinedev/core";
 import { FeatherBriefcase, FeatherChevronLeft, FeatherUserPlus, FeatherZap } from "@subframe/core";
 import Sidebar from "../component/layout/Sidebar";
 import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
 import { Badge } from "../ui/components/Badge";
-import { Button } from "../ui/components/Button";
 import { TextField } from "../ui/components/TextField";
 import { useI18n } from "../I18nContext.jsx";
 
@@ -14,17 +13,34 @@ function AddMember() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const [formData, setFormData] = useState({
+    user: "",
     employee_name: "",
     position: "",
     current_work: "",
     status_type: "available",
   });
   const { onFinish, formLoading } = useForm({ resource: "status", action: "create" });
+  const usersQuery = useList({ resource: "users" });
+  const userOptions = usersQuery.data?.data ?? [];
+
+  const handleLinkedUserChange = (value) => {
+    const selectedUser = userOptions.find((user) => String(user.id) === String(value));
+    const fullName = selectedUser ? `${selectedUser.first_name || ""} ${selectedUser.last_name || ""}`.trim() : "";
+
+    setFormData((current) => ({
+      ...current,
+      user: value,
+      employee_name: current.employee_name || fullName || selectedUser?.username || "",
+    }));
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     try {
-      await onFinish(formData);
+      await onFinish({
+        ...formData,
+        user: formData.user || null,
+      });
       navigate("/team");
     } catch (error) {
       alert(t("createMember.error"));
@@ -34,6 +50,11 @@ function AddMember() {
 
   const summaryItems = useMemo(
     () => [
+      {
+        label: t("team.linkedAccount"),
+        value:
+          userOptions.find((user) => String(user.id) === String(formData.user))?.username || t("team.noLinkedAccount"),
+      },
       {
         label: t("createMember.fullName"),
         value: formData.employee_name || "—",
@@ -50,7 +71,7 @@ function AddMember() {
             : t("createMember.busyActiveProject"),
       },
     ],
-    [formData, t]
+    [formData, t, userOptions]
   );
 
   return (
@@ -89,13 +110,11 @@ function AddMember() {
                 <h1 className="mt-4 max-w-3xl font-['Newsreader'] text-4xl font-medium leading-tight tracking-tight text-slate-950">
                   {t("createMember.title")}
                 </h1>
-                <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">{t("createMember.subtitle")}</p>
               </div>
 
-              <div className="rounded-[34px] border border-white/65 bg-slate-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
+              <div className="dark-surface rounded-[34px] border border-white/65 bg-slate-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{t("projects.summary")}</p>
                 <p className="mt-3 text-2xl font-black tracking-tight text-white">{t("team.selectedProfile")}</p>
-                <p className="mt-3 text-sm leading-7 text-slate-300">{t("team.profileHint")}</p>
                 <div className="mt-6 space-y-3">
                   {summaryItems.map((item) => (
                     <div key={item.label} className="rounded-[22px] border border-white/10 bg-white/5 p-4">
@@ -110,6 +129,29 @@ function AddMember() {
             <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="rounded-[34px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.88))] p-7 shadow-[0_24px_70px_rgba(148,163,184,0.16)] backdrop-blur">
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div className="md:col-span-2">
+                    <div className="flex flex-col gap-2">
+                      <label className="px-1 text-xs font-black uppercase tracking-widest text-slate-400">
+                        {t("team.linkedAccount")}
+                      </label>
+                      <select
+                        className="w-full rounded-[22px] border border-slate-200 bg-white p-4 font-semibold text-slate-700 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-400/30"
+                        value={formData.user}
+                        onChange={(event) => handleLinkedUserChange(event.target.value)}
+                      >
+                        <option value="">{t("team.noLinkedAccount")}</option>
+                        {userOptions.map((user) => {
+                          const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+                          return (
+                            <option key={user.id} value={user.id}>
+                              {fullName ? `${fullName} (${user.username})` : user.username}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+
                   <TextField label={t("createMember.fullName")} variant="filled">
                     <TextField.Input
                       value={formData.employee_name}
@@ -160,23 +202,22 @@ function AddMember() {
                 </div>
                 <p className="mt-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{t("team.nextStep")}</p>
                 <p className="mt-3 text-2xl font-black tracking-tight text-slate-950">{t("createMember.saveMember")}</p>
-                <p className="mt-3 text-sm leading-7 text-slate-600">{t("team.nextStepBody")}</p>
 
                 <div className="mt-6 flex flex-col gap-3">
-                  <Button
+                  <button
                     type="submit"
-                    className="w-full rounded-[18px] bg-slate-950 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
+                    className="w-full rounded-[18px] bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={formLoading}
                   >
                     {formLoading ? t("createMember.saving") : t("createMember.saveMember")}
-                  </Button>
-                  <Button
+                  </button>
+                  <button
                     type="button"
                     onClick={() => navigate("/team")}
-                    className="w-full rounded-[18px] bg-slate-100 py-3 text-sm font-bold text-slate-700"
+                    className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                   >
                     {t("createMember.cancel")}
-                  </Button>
+                  </button>
                 </div>
               </aside>
             </form>

@@ -3,13 +3,22 @@ import { TextField } from "../../ui/components/TextField";
 import { useI18n } from "../../I18nContext.jsx";
 
 const emptyForm = {
+  user: "",
   employee_name: "",
   position: "",
   current_work: "",
   status_type: "available",
 };
 
-function TeamDirectoryManager({ members, isSubmitting = false, onCreate, onUpdate, onDelete, onSelectMember }) {
+function TeamDirectoryManager({
+  members,
+  userOptions = [],
+  isSubmitting = false,
+  onCreate,
+  onUpdate,
+  onDelete,
+  onSelectMember,
+}) {
   const { t } = useI18n();
   const [selectedId, setSelectedId] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
@@ -37,6 +46,7 @@ function TeamDirectoryManager({ members, isSubmitting = false, onCreate, onUpdat
     }
 
     setFormData({
+      user: selectedMember.user || "",
       employee_name: selectedMember.employee_name || "",
       position: selectedMember.position || "",
       current_work: selectedMember.current_work || "",
@@ -53,6 +63,17 @@ function TeamDirectoryManager({ members, isSubmitting = false, onCreate, onUpdat
     setFormData(emptyForm);
   };
 
+  const handleLinkedUserChange = (value) => {
+    const selectedUser = userOptions.find((user) => String(user.id) === String(value));
+    const fullName = selectedUser ? `${selectedUser.first_name || ""} ${selectedUser.last_name || ""}`.trim() : "";
+
+    setFormData((current) => ({
+      ...current,
+      user: value,
+      employee_name: current.employee_name || fullName || selectedUser?.username || "",
+    }));
+  };
+
   const handleSubmit = (event) => {
     event.preventDefault();
     if (selectedMember) {
@@ -67,7 +88,6 @@ function TeamDirectoryManager({ members, isSubmitting = false, onCreate, onUpdat
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-xl font-black tracking-tight text-slate-900">{t("team.directory")}</h3>
-          <p className="mt-1 text-sm text-slate-500">{t("team.directoryBody")}</p>
         </div>
         <button
           type="button"
@@ -125,9 +145,6 @@ function TeamDirectoryManager({ members, isSubmitting = false, onCreate, onUpdat
             <h4 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">
               {selectedMember ? t("team.editProfile") : t("team.newMember")}
             </h4>
-            <p className="mt-1 text-sm text-slate-500">
-              {selectedMember ? t("team.directoryBody") : t("team.newMemberMode")}
-            </p>
           </div>
           {selectedMember ? (
             <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-bold text-purple-700">
@@ -144,6 +161,27 @@ function TeamDirectoryManager({ members, isSubmitting = false, onCreate, onUpdat
             required
           />
         </TextField>
+
+        <div className="flex flex-col gap-2">
+          <label className="px-1 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+            {t("team.linkedAccount")}
+          </label>
+          <select
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition-colors focus:border-sky-400 focus:bg-white"
+            value={formData.user}
+            onChange={(event) => handleLinkedUserChange(event.target.value)}
+          >
+            <option value="">{t("team.noLinkedAccount")}</option>
+            {userOptions.map((user) => {
+              const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+              return (
+                <option key={user.id} value={user.id}>
+                  {fullName ? `${fullName} (${user.username})` : user.username}
+                </option>
+              );
+            })}
+          </select>
+        </div>
 
         <TextField label={t("team.position")} variant="filled">
           <TextField.Input
@@ -175,9 +213,9 @@ function TeamDirectoryManager({ members, isSubmitting = false, onCreate, onUpdat
             <p className="mt-2 text-sm font-bold text-slate-900">
               {selectedMember?.employee_name || t("team.newMemberMode")}
             </p>
-            <p className="mt-1 text-xs text-slate-500">
-              {selectedMember?.position || t("team.profileHint")}
-            </p>
+            {selectedMember?.position ? (
+              <p className="mt-1 text-xs text-slate-500">{selectedMember.position}</p>
+            ) : null}
           </div>
         </div>
 
@@ -221,4 +259,3 @@ function TeamDirectoryManager({ members, isSubmitting = false, onCreate, onUpdat
 }
 
 export default TeamDirectoryManager;
-

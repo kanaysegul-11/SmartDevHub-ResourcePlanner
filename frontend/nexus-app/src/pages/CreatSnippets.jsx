@@ -114,10 +114,9 @@ function CreateSnippet() {
                 <h1 className="mt-4 max-w-3xl font-['Newsreader'] text-4xl font-medium leading-tight tracking-tight text-slate-950">
                   {t("snippets.createTitle")}
                 </h1>
-                <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">{t("snippets.librarySubtitle")}</p>
               </div>
 
-              <div className="rounded-[34px] border border-white/65 bg-slate-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
+              <div className="dark-surface rounded-[34px] border border-white/65 bg-slate-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{t("snippets.securityTitle")}</p>
                 <p className="mt-3 text-2xl font-black tracking-tight text-white">
                   {currentRisks.length ? t("snippets.securityBlockTitle") : t("snippets.systemSecure")}
@@ -198,7 +197,6 @@ function CreateSnippet() {
                 </div>
                 <p className="mt-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{t("analytics.insightPanel")}</p>
                 <p className="mt-3 text-2xl font-black tracking-tight text-slate-950">{t("snippets.saveToLibrary")}</p>
-                <p className="mt-3 text-sm leading-7 text-slate-600">{t("snippets.securityBody")}</p>
 
                 <div className="mt-6 flex flex-col gap-3">
                   <Button

@@ -14,7 +14,6 @@ function LanguageChart({ data }) {
             <div className="rounded-lg bg-purple-100 p-2 text-purple-600"><FeatherActivity size={20} /></div>
             {t("analytics.languagePopularity")}
           </h3>
-          <p className="mt-3 text-sm leading-7 text-slate-500">{t("analytics.languagePopularityBody")}</p>
         </div>
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold tracking-[0.2em] text-slate-400">
           {data.length}

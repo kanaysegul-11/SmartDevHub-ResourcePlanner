@@ -24,6 +24,7 @@ function TeamConversationPanel({ member }) {
     () => (userData?.username || "").trim().toLowerCase(),
     [userData?.username]
   );
+  const currentUserId = useMemo(() => String(userData?.id || ""), [userData?.id]);
 
   const formatMessageTime = (value) => {
     if (!value) return "";
@@ -53,7 +54,7 @@ function TeamConversationPanel({ member }) {
 
       try {
         const response = await apiClient.get("/team-messages/", {
-          params: { recipient: member.id },
+          params: { conversation_with: member.id },
         });
         if (!isActive) return;
         const payload = Array.isArray(response.data)
@@ -115,7 +116,6 @@ function TeamConversationPanel({ member }) {
               ? `${member.employee_name} ${t("team.talkingWith")}`
               : t("team.conversationCenter")}
           </h3>
-          <p className="mt-2 text-sm leading-7 text-slate-600">{t("team.chatConnected")}</p>
         </div>
         <div className="rounded-[24px] bg-slate-950 px-4 py-3 text-right text-white lg:min-w-[180px]">
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
@@ -133,86 +133,102 @@ function TeamConversationPanel({ member }) {
           <p className="mt-5 text-lg font-black tracking-tight text-slate-900">
             {t("team.selectMemberTitle")}
           </p>
-          <p className="mt-2 max-w-sm text-sm leading-7 text-slate-500">
-            {t("team.selectMemberBody")}
-          </p>
         </div>
       ) : (
         <>
           <div
             ref={listRef}
-            className="mt-6 grid max-h-[420px] grid-cols-1 gap-4 overflow-y-auto pr-2 xl:grid-cols-2"
+            className="mt-6 flex max-h-[460px] flex-col gap-4 overflow-y-auto rounded-[28px] border border-slate-200/80 bg-slate-50/70 p-4 pr-3"
           >
             {isLoading ? (
-              <div className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-6 text-sm text-slate-500">
+              <div className="rounded-[24px] border border-slate-200 bg-white/90 p-6 text-sm text-slate-500">
                 {t("team.loadingMessages")}
               </div>
             ) : messages.length > 0 ? (
               messages.map((message) => {
                 const senderName = message.sender_details?.username || t("app.user");
-                const isCurrentUser = senderName.trim().toLowerCase() === normalizedUsername;
+                const isCurrentUser =
+                  String(message.sender_details?.id || "") === currentUserId ||
+                  senderName.trim().toLowerCase() === normalizedUsername;
 
                 return (
                   <div
                     key={message.id}
-                    className={`flex ${isCurrentUser ? "justify-end xl:col-start-2" : "justify-start"}`}
+                    className={`flex w-full ${isCurrentUser ? "justify-end" : "justify-start"}`}
                   >
-                    <div
-                      className={`w-full max-w-[92%] rounded-[28px] px-4 py-3 shadow-sm ${
-                        isCurrentUser
-                          ? "bg-slate-950 text-white"
-                          : "border border-slate-200 bg-white text-slate-900"
-                      }`}
-                    >
-                      <div className="mb-2 flex items-center gap-3">
-                        <Avatar size="small" variant={isCurrentUser ? "neutral" : "brand"}>
-                          {senderName[0]?.toUpperCase() || "U"}
-                        </Avatar>
-                        <div>
-                          <p className={`text-sm font-bold ${isCurrentUser ? "text-white" : "text-slate-900"}`}>
-                            {senderName}
-                          </p>
-                          <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
-                            {formatMessageTime(message.created_at)}
-                          </p>
+                    <div className={`flex max-w-[min(78%,560px)] items-end gap-3 ${isCurrentUser ? "flex-row-reverse" : "flex-row"}`}>
+                      <Avatar
+                        size="small"
+                        variant={isCurrentUser ? "neutral" : "brand"}
+                        className="mb-1 shrink-0"
+                      >
+                        {senderName[0]?.toUpperCase() || "U"}
+                      </Avatar>
+                      <div
+                        className={`w-full rounded-[24px] px-4 py-3 shadow-sm ${
+                          isCurrentUser
+                            ? "rounded-br-[10px] bg-[linear-gradient(180deg,#0f172a,#020617)] text-white"
+                            : "rounded-bl-[10px] border border-slate-200 bg-white text-slate-900"
+                        }`}
+                      >
+                        <div
+                          className={`mb-2 flex items-center ${
+                            isCurrentUser ? "justify-end text-right" : "justify-start text-left"
+                          }`}
+                        >
+                          <div>
+                            <p className={`text-sm font-bold ${isCurrentUser ? "text-white" : "text-slate-900"}`}>
+                              {senderName}
+                            </p>
+                            <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                              {formatMessageTime(message.created_at)}
+                            </p>
+                          </div>
                         </div>
+                        <p
+                          className={`break-words text-sm leading-7 ${
+                            isCurrentUser ? "text-slate-100" : "text-slate-600"
+                          }`}
+                        >
+                          {message.content}
+                        </p>
                       </div>
-                      <p className={`text-sm leading-7 ${isCurrentUser ? "text-slate-100" : "text-slate-600"}`}>
-                        {message.content}
-                      </p>
                     </div>
                   </div>
                 );
               })
             ) : (
-              <div className="rounded-[28px] border border-dashed border-slate-200 bg-slate-50/70 p-6 text-sm leading-7 text-slate-500">
+              <div className="rounded-[24px] border border-dashed border-slate-200 bg-white/90 p-6 text-sm leading-7 text-slate-500">
                 {t("team.noConversation")}
               </div>
             )}
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-end">
-            <TextArea label={t("team.newMessage")} variant="filled" helpText={t("team.newMessageHelp")}>
-              <TextArea.Input
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder={`${member.employee_name}...`}
-                className="min-h-[120px]"
-              />
-            </TextArea>
+          <form
+            onSubmit={handleSubmit}
+            className="mt-6 rounded-[28px] border border-slate-200/80 bg-slate-50/75 p-4"
+          >
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-end">
+              <TextArea label={t("team.newMessage")} variant="filled">
+                <TextArea.Input
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder={`${member.employee_name}...`}
+                  className="min-h-[120px]"
+                />
+              </TextArea>
 
-            <div className="flex h-full flex-col justify-between gap-4 rounded-[28px] border border-slate-200/80 bg-slate-50/75 p-4">
-              <p className="text-sm leading-7 text-slate-500">
-                {feedback || t("team.liveTeamMessage")}
-              </p>
-              <Button
-                type="submit"
-                loading={isSending}
-                icon={<FeatherSend />}
-                className="h-12 rounded-2xl bg-slate-950 px-5"
-              >
-                {t("team.sendMessage")}
-              </Button>
+              <div className="flex h-full flex-col justify-between gap-4 rounded-[24px] border border-slate-200/80 bg-white/90 p-4">
+                {feedback ? <p className="text-sm leading-7 text-slate-500">{feedback}</p> : <div />}
+                <Button
+                  type="submit"
+                  loading={isSending}
+                  icon={<FeatherSend />}
+                  className="h-12 rounded-2xl bg-slate-950 px-5 text-white"
+                >
+                  {t("team.sendMessage")}
+                </Button>
+              </div>
             </div>
           </form>
         </>
@@ -222,4 +238,3 @@ function TeamConversationPanel({ member }) {
 }
 
 export default TeamConversationPanel;
-

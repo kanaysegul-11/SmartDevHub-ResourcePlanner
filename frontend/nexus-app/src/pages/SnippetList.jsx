@@ -14,7 +14,13 @@ function SnippetList() {
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
   const { t } = useI18n();
-  const snippetsQuery = useList({ resource: "snippets" });
+  const snippetsQuery = useList({
+    resource: "snippets",
+    queryOptions: {
+      staleTime: 15000,
+      refetchOnWindowFocus: false,
+    },
+  });
   const snippets = snippetsQuery.data?.data ?? [];
 
   const filteredSnippets = useMemo(() => {
@@ -46,7 +52,7 @@ function SnippetList() {
           leftSlot={<Badge variant="neutral" icon={<FeatherCode />}>{t("snippets.workspace")}</Badge>}
           rightSlot={<Badge variant={filteredSnippets.length === 0 && searchTerm ? "error" : "success"}>{filteredSnippets.length} {t("snippets.resultsFound")}</Badge>}
         />
-        {snippetsQuery.isLoading || snippetsQuery.isFetching ? (
+        {snippetsQuery.isLoading && !snippetsQuery.data ? (
           <div className="flex h-64 w-full flex-col items-center justify-center gap-4">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600" />
             <p className="font-bold italic text-purple-600">{t("snippets.loading")}</p>
@@ -71,4 +77,3 @@ function SnippetList() {
 }
 
 export default SnippetList;
-

@@ -4,11 +4,11 @@ from .models import EmploymentStatus, UserProfile, TeamMessage, Project, Task
 @admin.register(EmploymentStatus)
 class EmploymentStatusAdmin(admin.ModelAdmin):
     # Admin panelinde görünecek sütunlar 
-    list_display = ('employee_name', 'position', 'status_type', 'last_updated')
+    list_display = ('employee_name', 'user', 'position', 'status_type', 'last_updated')
     # Tıklanıp düzenlenebilecek alanlar
     list_editable = ('status_type', 'position')
     # Arama yapılabilecek alanlar
-    search_fields = ('employee_name',)
+    search_fields = ('employee_name', 'user__username', 'user__email')
     # Sağ taraftaki filtre paneli
     list_filter = ('status_type',)
 

@@ -9,14 +9,10 @@ const getValueByPath = (source, path) =>
 
 export function I18nProvider({ children }) {
   const { userData } = useUser();
-  const [language, setLanguage] = useState(
+  const [preferredLanguage, setPreferredLanguage] = useState(
     localStorage.getItem("language") || defaultLanguage
   );
-
-  useEffect(() => {
-    const nextLanguage = userData?.language || localStorage.getItem("language") || defaultLanguage;
-    setLanguage(nextLanguage);
-  }, [userData?.language]);
+  const language = userData?.language || preferredLanguage || defaultLanguage;
 
   useEffect(() => {
     localStorage.setItem("language", language);
@@ -30,7 +26,7 @@ export function I18nProvider({ children }) {
 
     return {
       language,
-      setLanguage,
+      setLanguage: setPreferredLanguage,
       t: (key, fallback = key) =>
         getValueByPath(activeTranslations, key) ??
         getValueByPath(translations[defaultLanguage], key) ??
@@ -41,6 +37,7 @@ export function I18nProvider({ children }) {
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useI18n() {
   const context = useContext(I18nContext);
   if (!context) {
@@ -48,4 +45,3 @@ export function useI18n() {
   }
   return context;
 }
-

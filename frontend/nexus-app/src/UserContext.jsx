@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { apiClient } from "./refine/axios";
+import { SESSION_UPDATED_EVENT } from "./refine/session";
 
 const UserContext = createContext(null);
 
@@ -15,13 +16,21 @@ export const UserProvider = ({ children }) => {
   });
 
   const syncFromStorage = () => {
-    setUserData((prev) => ({
-      ...prev,
-      username: localStorage.getItem("username") || prev.username || "User",
-      avatar: localStorage.getItem("userAvatar") || prev.avatar || "",
-      isAdmin: localStorage.getItem("is_admin") === "true",
-      language: localStorage.getItem("language") || prev.language || "en",
-    }));
+    setUserData((prev) => {
+      const hasToken = Boolean(localStorage.getItem("token"));
+
+      return {
+        ...prev,
+        username: hasToken
+          ? localStorage.getItem("username") || prev.username || "User"
+          : "User",
+        avatar: hasToken ? localStorage.getItem("userAvatar") || prev.avatar || "" : "",
+        isAdmin: hasToken && localStorage.getItem("is_admin") === "true",
+        language: hasToken
+          ? localStorage.getItem("language") || prev.language || "en"
+          : "en",
+      };
+    });
   };
 
   const updateUserData = (nextData) => {
@@ -58,6 +67,26 @@ export const UserProvider = ({ children }) => {
     refreshUserData();
   }, []);
 
+  useEffect(() => {
+    const handleSessionUpdated = () => {
+      const token = localStorage.getItem("token");
+      if (token) {
+        refreshUserData();
+        return;
+      }
+
+      syncFromStorage();
+    };
+
+    window.addEventListener(SESSION_UPDATED_EVENT, handleSessionUpdated);
+    window.addEventListener("storage", handleSessionUpdated);
+
+    return () => {
+      window.removeEventListener(SESSION_UPDATED_EVENT, handleSessionUpdated);
+      window.removeEventListener("storage", handleSessionUpdated);
+    };
+  }, []);
+
   return (
     <UserContext.Provider
       value={{ userData, setUserData: updateUserData, refreshUserData }}
@@ -76,4 +105,3 @@ export const useUser = () => {
 
   return context;
 };
-

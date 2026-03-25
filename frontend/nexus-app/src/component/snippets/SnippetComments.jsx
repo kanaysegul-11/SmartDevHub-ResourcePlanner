@@ -16,9 +16,6 @@ function SnippetComments({ comments = [], newComment, onCommentChange, onSubmit,
             <FeatherMessageCircle size={18} className="text-sky-600" />
             {t("snippets.comments")} ({comments.length || 0})
           </h3>
-          <p className="mt-3 text-sm leading-7 text-slate-500">
-            {t("snippets.commentsBody")}
-          </p>
         </div>
         <div className="rounded-[20px] border border-slate-200/80 bg-white/90 px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
@@ -54,9 +51,7 @@ function SnippetComments({ comments = [], newComment, onCommentChange, onSubmit,
               </div>
             ))
           ) : (
-            <div className="flex h-44 items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80 px-6 text-center text-sm leading-7 text-slate-500">
-              {t("snippets.noCommentsBody")}
-            </div>
+            <div className="h-44 rounded-[24px] border border-dashed border-slate-200 bg-slate-50/80" />
           )}
         </div>
 
@@ -67,9 +62,6 @@ function SnippetComments({ comments = [], newComment, onCommentChange, onSubmit,
           <h4 className="mt-3 text-2xl font-black tracking-tight text-slate-950">
             {t("snippets.commentComposerTitle")}
           </h4>
-          <p className="mt-3 text-sm leading-7 text-slate-600">
-            {t("snippets.commentComposerBody")}
-          </p>
 
           <textarea
             className="mt-5 min-h-[180px] w-full resize-none rounded-[22px] border border-slate-200 bg-white p-4 text-sm leading-7 text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-2 focus:ring-sky-400/30"

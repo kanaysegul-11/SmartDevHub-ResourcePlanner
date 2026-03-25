@@ -57,7 +57,9 @@ function Projects() {
   ];
 
   const projects = projectsQuery.data?.data ?? [];
-  const teamMembers = teamQuery.data?.data ?? [];
+  const teamMembers = (teamQuery.data?.data ?? []).filter(
+    (member) => !member.user_details?.is_admin
+  );
   const selectedProject = isCreateMode ? null : projects.find((p) => p.id === selectedProjectId) || null;
 
   const formatProjectDate = (value) => {
@@ -195,7 +197,6 @@ function Projects() {
               <div className="rounded-[34px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.86))] p-7 shadow-[0_24px_70px_rgba(148,163,184,0.16)] backdrop-blur lg:p-8">
                 <Badge variant="neutral" icon={<FeatherLayers />}>{t("projects.listTitle")}</Badge>
                 <h1 className="mt-4 font-['Newsreader'] text-4xl font-medium leading-tight tracking-tight text-slate-950">{t("projects.heroTitle")}</h1>
-                <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">{t("projects.heroBody")}</p>
                 <div className="mt-7 grid grid-cols-1 gap-4 md:grid-cols-4">
                   {[
                     [t("projects.totalProjects"), stats.total, <FeatherFolderKanban size={18} />],
@@ -214,15 +215,11 @@ function Projects() {
                 </div>
               </div>
 
-              <div className="rounded-[34px] border border-white/65 bg-slate-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
+              <div className="dark-surface rounded-[34px] border border-white/65 bg-slate-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{t("projects.roleBehavior")}</p>
                 <p className="mt-3 text-2xl font-black tracking-tight">
                   {canManageProjects ? t("projects.accountCanManage") : t("projects.accountCanView")}
                 </p>
-                <div className="mt-5 rounded-[24px] border border-white/10 bg-white/5 px-4 py-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{t("projects.policyTitle")}</p>
-                  <p className="mt-2 text-sm leading-7 text-slate-300">{t("projects.policyBody")}</p>
-                </div>
                 {canManageProjects ? (
                   <button type="button" onClick={startCreateMode} className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-100">
                     {t("projects.newProjectOpen")}
@@ -236,7 +233,6 @@ function Projects() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <h2 className="font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">{t("projects.listTitle")}</h2>
-                    <p className="mt-2 text-sm leading-7 text-slate-500">{t("projects.listBody")}</p>
                   </div>
                   {canManageProjects ? (
                     <button type="button" onClick={startCreateMode} className="rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
@@ -297,16 +293,15 @@ function Projects() {
 
               {canManageProjects ? (
                 <aside className="rounded-[32px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.82))] p-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)] backdrop-blur lg:p-7">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-xl font-black tracking-tight text-slate-900">{isCreateMode ? t("projects.createProject") : selectedProject ? t("projects.editProject") : t("projects.createProject")}</h3>
-                      <p className="mt-1 text-sm text-slate-500">{t("projects.onlyAdmins")}</p>
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-xl font-black tracking-tight text-slate-900">{isCreateMode ? t("projects.createProject") : selectedProject ? t("projects.editProject") : t("projects.createProject")}</h3>
                     </div>
                     {!isCreateMode && selectedProject ? <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">#{selectedProject.id}</span> : null}
                   </div>
 
                   <form key={isCreateMode ? "create-project" : `edit-project-${selectedProjectId ?? "empty"}`} onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
-                    {isCreateMode ? <div className="rounded-[24px] border border-emerald-200 bg-emerald-50/80 px-4 py-4"><p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-700">{t("projects.createMode")}</p><p className="mt-2 text-sm leading-6 text-slate-600">{t("projects.createModeBody")}</p></div> : null}
+                    {isCreateMode ? <div className="rounded-[24px] border border-emerald-200 bg-emerald-50/80 px-4 py-4"><p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-700">{t("projects.createMode")}</p></div> : null}
                     <div className="rounded-[28px] border border-sky-100 bg-[linear-gradient(180deg,rgba(240,249,255,0.88),rgba(255,255,255,0.95))] p-4 shadow-[0_14px_34px_rgba(14,165,233,0.08)]">
                       <p className="text-xs font-black uppercase tracking-[0.2em] text-sky-700">{t("projects.summary")}</p>
                       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -314,18 +309,15 @@ function Projects() {
                         <div className="rounded-[20px] border border-white bg-white/90 px-4 py-3"><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("projects.priority")}</p><p className="mt-2 text-sm font-black text-slate-900">{translatePriority(formData.priority)}</p></div>
                         <div className="rounded-[20px] border border-white bg-white/90 px-4 py-3"><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("projects.progress")}</p><p className="mt-2 text-sm font-black text-slate-900">%{formData.progress}</p></div>
                       </div>
-                      <p className="mt-3 text-sm leading-6 text-slate-600">{t("projects.summaryBody")}</p>
                     </div>
                     <div className="rounded-[24px] border border-slate-200 bg-slate-50/75 px-4 py-4">
                       <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t("projects.basicInfo")}</p>
-                      <p className="mt-2 text-sm text-slate-500">{t("projects.basicInfoBody")}</p>
                     </div>
                     <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-sky-400 focus:bg-white" placeholder={t("projects.projectName")} value={formData.name} onChange={(event) => setFormData((current) => ({ ...current, name: event.target.value }))} required />
                     <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-sky-400 focus:bg-white" placeholder={t("projects.clientDepartment")} value={formData.client_name} onChange={(event) => setFormData((current) => ({ ...current, client_name: event.target.value }))} />
                     <textarea className="min-h-28 w-full rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-sky-400 focus:bg-white" placeholder={t("projects.projectSummary")} value={formData.summary} onChange={(event) => setFormData((current) => ({ ...current, summary: event.target.value }))} required />
                     <div className="rounded-[24px] border border-slate-200 bg-slate-50/75 px-4 py-4">
                       <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t("projects.scheduleStatus")}</p>
-                      <p className="mt-2 text-sm text-slate-500">{t("projects.scheduleStatusBody")}</p>
                     </div>
                     <div className="grid grid-cols-1 gap-3">
                       <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t("projects.projectStatus")}</label>
@@ -352,7 +344,7 @@ function Projects() {
                     <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-sky-400 focus:bg-white" placeholder={t("projects.techStack")} value={formData.tech_stack} onChange={(event) => setFormData((current) => ({ ...current, tech_stack: event.target.value }))} />
                     <div>
                       <label className="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t("projects.progress")}</label>
-                      <input type="range" min="0" max="100" value={formData.progress} onChange={(event) => setFormData((current) => ({ ...current, progress: Number(event.target.value) }))} className="w-full" />
+                      <input type="range" min="0" max="100" value={formData.progress} disabled className="w-full accent-slate-950 opacity-70" />
                       <p className="mt-2 text-sm font-semibold text-slate-600">%{formData.progress}</p>
                     </div>
                     <div className="rounded-[28px] border border-slate-200 bg-slate-50/75 p-4">
@@ -377,7 +369,6 @@ function Projects() {
               ) : (
                 <aside className="rounded-[32px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.82))] p-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)] backdrop-blur lg:p-7">
                   <h3 className="text-xl font-black tracking-tight text-slate-900">{t("projects.readOnlyTitle")}</h3>
-                  <p className="mt-2 text-sm leading-7 text-slate-500">{t("projects.readOnlyBody")}</p>
                   {selectedProject ? (
                     <div className="mt-6 flex flex-col gap-4">
                       <div className="rounded-[24px] border border-slate-200 bg-slate-50/75 p-4">
@@ -393,8 +384,25 @@ function Projects() {
                         <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t("projects.techStack")}</p>
                         <p className="mt-3 text-sm leading-7 text-slate-600">{selectedProject.tech_stack || t("projects.noTechStack")}</p>
                       </div>
+                      <div className="rounded-[24px] border border-slate-200 bg-slate-50/75 p-4">
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t("projects.teamAssignment")}</p>
+                        {selectedProject.team_member_details?.length ? (
+                          <div className="mt-4 flex flex-wrap gap-2.5">
+                            {selectedProject.team_member_details.map((member) => (
+                              <span
+                                key={member.id}
+                                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                              >
+                                {member.employee_name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-3 text-sm leading-7 text-slate-500">{t("projects.noMembersAssigned")}</p>
+                        )}
+                      </div>
                     </div>
-                  ) : <div className="mt-6 rounded-[24px] border border-dashed border-slate-200 bg-slate-50/75 p-6 text-sm text-slate-500">{t("projects.selectProjectHint")}</div>}
+                  ) : <div className="mt-6 rounded-[24px] border border-dashed border-slate-200 bg-slate-50/75 p-6 text-sm text-slate-500" />}
                 </aside>
               )}
             </section>

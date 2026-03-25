@@ -11,9 +11,6 @@ function PasswordForm({ passwordData, setPasswordData, onSubmit, loading }) {
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col gap-8">
       <div>
         <h3 className="text-xl font-black text-slate-800">{t("settings.passwordTitle")}</h3>
-        <p className="text-sm font-medium text-slate-400">
-          {t("settings.passwordBody")}
-        </p>
       </div>
 
       <form onSubmit={onSubmit} className="flex max-w-md flex-col gap-6">
@@ -54,4 +51,3 @@ function PasswordForm({ passwordData, setPasswordData, onSubmit, loading }) {
 }
 
 export default PasswordForm;
-

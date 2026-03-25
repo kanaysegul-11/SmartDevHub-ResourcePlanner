@@ -169,9 +169,6 @@ function SnippetDetail() {
               <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-950">
                 {t("snippets.detailReviewTitle")}
               </h2>
-              <p className="mt-3 text-sm leading-7 text-slate-600">
-                {t("snippets.detailReviewBody")}
-              </p>
 
               <div className="mt-6 space-y-3">
                 <div className="rounded-[22px] border border-slate-200/80 bg-white p-4">

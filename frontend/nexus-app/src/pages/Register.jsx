@@ -3,8 +3,8 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiClient } from "../refine/axios";
-import GoogleAuthButton from "../component/auth/GoogleAuthButton.jsx";
 import { useI18n } from "../I18nContext.jsx";
+import { applySessionPayload } from "../refine/session";
 
 function Register() {
   const navigate = useNavigate();
@@ -31,22 +31,7 @@ function Register() {
 
     try {
       const response = await apiClient.post("/register/", formData);
-      const payload = response.data;
-
-      if (payload?.token) {
-        localStorage.setItem("token", payload.token);
-        apiClient.defaults.headers.common.Authorization = `Token ${payload.token}`;
-      }
-      if (payload?.username) {
-        localStorage.setItem("username", payload.username);
-      }
-      if (payload?.user_id) {
-        localStorage.setItem("user_id", String(payload.user_id));
-      }
-      if (payload?.language) {
-        localStorage.setItem("language", payload.language);
-      }
-      localStorage.setItem("is_admin", payload?.is_admin ? "true" : "false");
+      applySessionPayload(response.data);
 
       navigate("/dashboard", { replace: true });
     } catch (error) {
@@ -65,25 +50,6 @@ function Register() {
               <h2 className="text-3xl font-black tracking-tight text-slate-950">
                 {t("auth.registerHeading")}
               </h2>
-              <p className="mt-2 text-sm leading-7 text-slate-500">
-                {t("auth.registerSubheading")}
-              </p>
-            </div>
-
-            <GoogleAuthButton
-              mode="register"
-              onSuccess={() => navigate("/dashboard", { replace: true })}
-            />
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200" />
-              </div>
-              <div className="relative flex justify-center">
-                <span className="bg-white px-4 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
-                  {t("auth.or")}
-                </span>
-              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -170,16 +136,13 @@ function Register() {
           </div>
         </div>
 
-        <div className="bg-slate-950 p-8 text-white lg:p-10">
+        <div className="dark-surface bg-slate-950 p-8 text-white lg:p-10">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
             {t("auth.registerTag")}
           </p>
           <h1 className="mt-4 font-['Newsreader'] text-5xl font-medium leading-tight tracking-tight">
             {t("auth.registerTitle")}
           </h1>
-          <p className="mt-4 max-w-md text-base leading-8 text-slate-300">
-            {t("auth.registerBody")}
-          </p>
         </div>
       </div>
     </div>
@@ -187,4 +150,3 @@ function Register() {
 }
 
 export default Register;
-

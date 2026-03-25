@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useGo, useLogin } from "@refinedev/core";
-import GoogleAuthButton from "../component/auth/GoogleAuthButton.jsx";
 import { useI18n } from "../I18nContext.jsx";
 
 const Login = () => {
@@ -45,9 +44,6 @@ const Login = () => {
           <h1 className="mt-4 font-['Newsreader'] text-5xl font-medium leading-tight tracking-tight">
             {t("auth.loginTitle")}
           </h1>
-          <p className="mt-4 max-w-md text-base leading-8 text-slate-300">
-            {t("auth.loginBody")}
-          </p>
         </div>
 
         <div className="p-8 lg:p-10">
@@ -56,25 +52,6 @@ const Login = () => {
               <h2 className="text-3xl font-black tracking-tight text-slate-950">
                 {t("auth.loginHeading")}
               </h2>
-              <p className="mt-2 text-sm leading-7 text-slate-500">
-                {t("auth.loginSubheading")}
-              </p>
-            </div>
-
-            <GoogleAuthButton
-              mode="login"
-              onSuccess={() => go({ to: "/dashboard", type: "replace" })}
-            />
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200" />
-              </div>
-              <div className="relative flex justify-center">
-                <span className="bg-white px-4 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
-                  {t("auth.or")}
-                </span>
-              </div>
             </div>
 
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
@@ -125,4 +102,3 @@ const Login = () => {
 };
 
 export default Login;
-

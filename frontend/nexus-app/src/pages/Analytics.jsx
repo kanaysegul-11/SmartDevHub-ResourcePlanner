@@ -17,8 +17,14 @@ function Analytics() {
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
   const { language, t } = useI18n();
-  const snippetsQuery = useList({ resource: "snippets" });
-  const commentsQuery = useList({ resource: "comments" });
+  const sharedQueryOptions = {
+    queryOptions: {
+      staleTime: 15000,
+      refetchOnWindowFocus: false,
+    },
+  };
+  const snippetsQuery = useList({ resource: "snippets", ...sharedQueryOptions });
+  const commentsQuery = useList({ resource: "comments", ...sharedQueryOptions });
 
   const snippets = snippetsQuery.data?.data ?? [];
   const comments = commentsQuery.data?.data ?? [];
@@ -57,7 +63,7 @@ function Analytics() {
     [filteredSnippets, t]
   );
 
-  const isCommentsLoading = commentsQuery.isLoading || commentsQuery.isFetching || false;
+  const isCommentsLoading = commentsQuery.isLoading || (!commentsQuery.data && commentsQuery.isFetching) || false;
   const ratingBuckets = filteredComments.reduce(
     (acc, comment) => {
       const rating = Number(comment?.experience_rating);
@@ -194,7 +200,6 @@ function Analytics() {
                   key: "snippets",
                   label: t("analytics.snippetsTracked"),
                   value: filteredSnippets.length,
-                  body: t("analytics.snippetsTrackedBody"),
                   icon: <FeatherActivity size={18} />,
                   tone: "bg-sky-50 text-sky-700",
                 },
@@ -202,7 +207,6 @@ function Analytics() {
                   key: "feedback",
                   label: t("analytics.feedbackEntries"),
                   value: totalComments,
-                  body: t("analytics.feedbackEntriesBody"),
                   icon: <FeatherStar size={18} />,
                   tone: "bg-amber-50 text-amber-700",
                 },
@@ -210,7 +214,6 @@ function Analytics() {
                   key: "rating",
                   label: t("analytics.averageRating"),
                   value: `${averageRating.toFixed(1)} / 5`,
-                  body: t("analytics.averageRatingBody"),
                   icon: <FeatherTrendingUp size={18} />,
                   tone: "bg-emerald-50 text-emerald-700",
                 },
@@ -218,7 +221,6 @@ function Analytics() {
                   key: "languages",
                   label: t("analytics.languageCoverage"),
                   value: languageData.length,
-                  body: t("analytics.languageCoverageBody"),
                   icon: <FeatherTarget size={18} />,
                   tone: "bg-violet-50 text-violet-700",
                 },
@@ -230,13 +232,12 @@ function Analytics() {
                   <div className={`inline-flex rounded-2xl p-3 ${item.tone}`}>{item.icon}</div>
                   <p className="mt-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{item.label}</p>
                   <p className="mt-3 text-3xl font-black tracking-tight text-slate-950">{item.value}</p>
-                  <p className="mt-3 text-sm leading-7 text-slate-500">{item.body}</p>
                 </div>
               ))}
             </section>
 
             <section className="grid w-full grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-              <div className="rounded-[30px] border border-white/70 bg-slate-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
+              <div className="dark-surface rounded-[30px] border border-white/70 bg-slate-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]">
                 <div className="grid gap-5 md:grid-cols-3">
                   <div className="rounded-[24px] border border-white/10 bg-white/5 p-5">
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{t("analytics.topLanguage")}</p>
@@ -263,7 +264,6 @@ function Analytics() {
               <div className="rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,255,255,0.9))] p-6 shadow-[0_20px_50px_rgba(148,163,184,0.14)]">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{t("analytics.feedbackFlow")}</p>
                 <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-950">{t("analytics.feedbackFlowTitle")}</h2>
-                <p className="mt-3 text-sm leading-7 text-slate-500">{t("analytics.feedbackFlowBody")}</p>
                 <div className="mt-5 space-y-3">
                   {snippetFeedbackStats.slice(0, 3).map((item) => (
                     <div key={item.id} className="rounded-[22px] border border-slate-200/80 bg-white/85 p-4">
@@ -295,13 +295,12 @@ function Analytics() {
               <LanguageLeaderboard
                 snippets={filteredSnippets}
                 comments={filteredComments}
-                isLoading={snippetsQuery.isLoading || isCommentsLoading}
+                isLoading={snippetsQuery.isLoading || (!snippetsQuery.data && snippetsQuery.isFetching) || isCommentsLoading}
               />
 
               <div className="rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,255,255,0.9))] p-6 shadow-[0_20px_50px_rgba(148,163,184,0.14)]">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{t("analytics.reviewQueue")}</p>
                 <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-950">{t("analytics.reviewQueueTitle")}</h2>
-                <p className="mt-3 text-sm leading-7 text-slate-500">{t("analytics.reviewQueueBody")}</p>
 
                 <div className="mt-5 space-y-3">
                   {reviewQueue.length ? (
