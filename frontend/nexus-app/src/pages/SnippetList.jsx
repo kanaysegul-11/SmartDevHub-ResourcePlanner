@@ -10,6 +10,8 @@ import { Badge } from "../ui/components/Badge";
 import { FeatherCode, FeatherSearch } from "@subframe/core";
 import { useI18n } from "../I18nContext.jsx";
 
+const EMPTY_SNIPPETS = [];
+
 function SnippetList() {
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
@@ -21,7 +23,10 @@ function SnippetList() {
       refetchOnWindowFocus: false,
     },
   });
-  const snippets = snippetsQuery.data?.data ?? [];
+  const snippets = useMemo(
+    () => snippetsQuery.data?.data ?? EMPTY_SNIPPETS,
+    [snippetsQuery.data]
+  );
 
   const filteredSnippets = useMemo(() => {
     const uniqueItems = [];

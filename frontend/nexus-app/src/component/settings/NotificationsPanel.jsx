@@ -1,9 +1,11 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
-import { FeatherBell } from "@subframe/core";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { FeatherBell, FeatherTrash2 } from "@subframe/core";
 import { useNavigate } from "react-router-dom";
 import { useI18n } from "../../I18nContext.jsx";
+import ConfirmDialog from "../common/ConfirmDialog.jsx";
 import { apiClient } from "../../refine/axios";
+import { emitNotificationsUpdated } from "../../refine/notifications.js";
 
 function formatDate(value, language) {
   if (!value) return "";
@@ -18,40 +20,57 @@ function formatDate(value, language) {
 }
 
 function NotificationsPanel() {
-  const { language } = useI18n();
+  const { language, t } = useI18n();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deletingIds, setDeletingIds] = useState([]);
+  const [clearingAll, setClearingAll] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [confirmState, setConfirmState] = useState(null);
 
   const unreadCount = useMemo(
     () => notifications.filter((item) => !item.is_read).length,
     [notifications]
   );
 
-  const loadNotifications = async () => {
+  const updateNotificationsState = (nextNotifications) => {
+    setNotifications(nextNotifications);
+    emitNotificationsUpdated(
+      nextNotifications.filter((item) => !item.is_read).length
+    );
+  };
+
+  const loadNotifications = useCallback(async () => {
     setLoading(true);
+    setErrorMessage("");
     try {
       const response = await apiClient.get("/notifications/");
-      setNotifications(response.data || []);
-    } catch (error) {
-      setNotifications([]);
+      updateNotificationsState(response.data || []);
+    } catch {
+      setErrorMessage(t("notifications.loadError"));
+      updateNotificationsState([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
-    loadNotifications();
-  }, []);
+    void loadNotifications();
+  }, [loadNotifications]);
 
   const markAsRead = async (notificationId) => {
     try {
       await apiClient.patch(`/notifications/${notificationId}/`, { is_read: true });
-      setNotifications((current) =>
-        current.map((item) =>
+      setNotifications((current) => {
+        const nextNotifications = current.map((item) =>
           item.id === notificationId ? { ...item, is_read: true } : item
-        )
-      );
+        );
+        emitNotificationsUpdated(
+          nextNotifications.filter((item) => !item.is_read).length
+        );
+        return nextNotifications;
+      });
     } catch (error) {
       console.error("Notification update error:", error);
     }
@@ -59,14 +78,59 @@ function NotificationsPanel() {
 
   const markAllAsRead = async () => {
     const unreadItems = notifications.filter((item) => !item.is_read);
-    await Promise.all(
-      unreadItems.map((item) =>
-        apiClient.patch(`/notifications/${item.id}/`, { is_read: true })
-      )
-    );
-    setNotifications((current) =>
-      current.map((item) => ({ ...item, is_read: true }))
-    );
+
+    try {
+      await Promise.all(
+        unreadItems.map((item) =>
+          apiClient.patch(`/notifications/${item.id}/`, { is_read: true })
+        )
+      );
+      setNotifications((current) => {
+        const nextNotifications = current.map((item) => ({
+          ...item,
+          is_read: true,
+        }));
+        emitNotificationsUpdated(0);
+        return nextNotifications;
+      });
+    } catch (error) {
+      console.error("Notification bulk update error:", error);
+    }
+  };
+
+  const deleteNotification = async (notificationId) => {
+    setDeletingIds((current) => [...current, notificationId]);
+
+    try {
+      await apiClient.delete(`/notifications/${notificationId}/`);
+      setNotifications((current) => {
+        const nextNotifications = current.filter((item) => item.id !== notificationId);
+        emitNotificationsUpdated(
+          nextNotifications.filter((item) => !item.is_read).length
+        );
+        return nextNotifications;
+      });
+    } catch (error) {
+      console.error("Notification delete error:", error);
+    } finally {
+      setDeletingIds((current) => current.filter((id) => id !== notificationId));
+      setConfirmState(null);
+    }
+  };
+
+  const deleteAllNotifications = async () => {
+    if (!notifications.length) return;
+
+    setClearingAll(true);
+    try {
+      await apiClient.delete("/notifications/clear-all/");
+      updateNotificationsState([]);
+    } catch (error) {
+      console.error("Notification clear-all error:", error);
+    } finally {
+      setClearingAll(false);
+      setConfirmState(null);
+    }
   };
 
   const handleOpenNotification = async (item) => {
@@ -94,11 +158,13 @@ function NotificationsPanel() {
     <div className="animate-in fade-in flex h-full flex-col">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-6">
         <div>
-          <h3 className="text-xl font-black text-slate-800">Bildirimler</h3>
+          <h3 className="text-xl font-black text-slate-800">
+            {t("notifications.title")}
+          </h3>
         </div>
         <div className="flex items-center gap-3">
           <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
-            {unreadCount} okunmamış
+            {unreadCount} {t("notifications.unreadCount")}
           </span>
           <button
             type="button"
@@ -106,14 +172,45 @@ function NotificationsPanel() {
             className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             disabled={!unreadCount}
           >
-            Tümünü okundu yap
+            {t("notifications.markAllAsRead")}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setConfirmState({
+                mode: "delete-all",
+                title: t("notifications.deleteAllTitle"),
+                description: t("notifications.deleteAllConfirm"),
+                confirmLabel: t("notifications.deleteAll"),
+              })
+            }
+            className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+            disabled={!notifications.length || clearingAll}
+          >
+            <FeatherTrash2 size={16} />
+            {t("notifications.deleteAll")}
           </button>
         </div>
       </div>
 
+      {errorMessage && !loading ? (
+        <div className="mt-6 rounded-[24px] border border-red-200 bg-red-50/80 px-5 py-4 text-sm text-red-700">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p>{errorMessage}</p>
+            <button
+              type="button"
+              onClick={() => void loadNotifications()}
+              className="rounded-full border border-red-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-red-700 transition hover:bg-red-100"
+            >
+              {t("app.retry")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="flex flex-1 items-center justify-center py-20 text-sm text-slate-500">
-          Bildirimler yükleniyor...
+          {t("notifications.loading")}
         </div>
       ) : notifications.length ? (
         <div className="mt-6 flex flex-col gap-4">
@@ -144,34 +241,47 @@ function NotificationsPanel() {
                     </div>
                   </div>
                 </div>
-                {!item.is_read ? (
-                  <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-col items-end gap-2">
+                  {!item.is_read ? (
                     <button
                       type="button"
                       onClick={() => markAsRead(item.id)}
                       className="rounded-full border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50"
+                      disabled={deletingIds.includes(item.id)}
                     >
-                      Okundu
+                      {t("notifications.markAsRead")}
                     </button>
-                    {item.link || item.type === "message" ? (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenNotification(item)}
-                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                      >
-                        Konuşmayı aç
-                      </button>
-                    ) : null}
-                  </div>
-                ) : item.link || item.type === "message" ? (
+                  ) : null}
+                  {item.link || item.type === "message" ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenNotification(item)}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                      disabled={deletingIds.includes(item.id)}
+                    >
+                      {!item.is_read && item.type === "message"
+                        ? t("notifications.openConversation")
+                        : t("notifications.open")}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    onClick={() => handleOpenNotification(item)}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                    onClick={() =>
+                      setConfirmState({
+                        mode: "delete-one",
+                        notificationId: item.id,
+                        title: t("notifications.deleteTitle"),
+                        description: t("notifications.deleteConfirm"),
+                        confirmLabel: t("notifications.delete"),
+                      })
+                    }
+                    className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-50"
+                    disabled={deletingIds.includes(item.id)}
                   >
-                    Aç
+                    <FeatherTrash2 size={14} />
+                    {t("notifications.delete")}
                   </button>
-                ) : null}
+                </div>
               </div>
             </div>
           ))}
@@ -181,9 +291,30 @@ function NotificationsPanel() {
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-300">
             <FeatherBell size={32} />
           </div>
-          <h3 className="text-lg font-bold text-slate-800">Bildirim yok</h3>
+          <h3 className="text-lg font-bold text-slate-800">
+            {t("notifications.empty")}
+          </h3>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmState)}
+        title={confirmState?.title}
+        description={confirmState?.description}
+        confirmLabel={confirmState?.confirmLabel || t("notifications.delete")}
+        onClose={() => setConfirmState(null)}
+        onConfirm={() => {
+          if (confirmState?.mode === "delete-all") {
+            void deleteAllNotifications();
+            return;
+          }
+
+          if (confirmState?.notificationId) {
+            void deleteNotification(confirmState.notificationId);
+          }
+        }}
+        isProcessing={clearingAll || Boolean(confirmState?.notificationId && deletingIds.includes(confirmState.notificationId))}
+      />
     </div>
   );
 }

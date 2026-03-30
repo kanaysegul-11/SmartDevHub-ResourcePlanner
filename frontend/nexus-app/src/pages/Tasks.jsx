@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDelete, useInvalidate, useList } from "@refinedev/core";
 import { FeatherClock3, FeatherTarget, FeatherTrendingUp, FeatherUsers } from "@subframe/core";
+import ConfirmDialog from "../component/common/ConfirmDialog.jsx";
 import Sidebar from "../component/layout/Sidebar";
 import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
 import { Badge } from "../ui/components/Badge";
@@ -11,6 +12,15 @@ import { TextField } from "../ui/components/TextField";
 import { apiClient } from "../refine/axios";
 import { useUser } from "../UserContext.jsx";
 import { useI18n } from "../I18nContext.jsx";
+
+const EMPTY_LIST = [];
+
+const normalizeIdentity = (value, locale) =>
+  String(value || "")
+    .toLocaleLowerCase(locale || "en")
+    .replace(/\s+/g, " ")
+    .trim();
+
 const emptyForm = {
   title: "",
   description: "",
@@ -22,6 +32,24 @@ const emptyForm = {
   estimated_hours: 0,
   actual_hours: 0,
 };
+
+const buildTaskForm = (task, taskGroup = []) => ({
+  title: task?.title || "",
+  description: task?.description || "",
+  project: task?.project ? String(task.project) : "",
+  assignees: Array.from(
+    new Set(
+      (taskGroup.length ? taskGroup : task ? [task] : [])
+        .map((item) => String(item.assignee || ""))
+        .filter(Boolean)
+    )
+  ),
+  status: task?.status || "todo",
+  priority: task?.priority || "medium",
+  deadline: task?.deadline || "",
+  estimated_hours: Number(task?.estimated_hours || 0),
+  actual_hours: Number(task?.actual_hours || 0),
+});
 
 function Tasks() {
   const { userData } = useUser();
@@ -39,16 +67,26 @@ function Tasks() {
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [isCreateMode, setIsCreateMode] = useState(false);
   const [formData, setFormData] = useState(emptyForm);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
-  const tasks = tasksQuery.data?.data ?? [];
-  const projects = projectsQuery.data?.data ?? [];
-  const teamMembers = (statusQuery.data?.data ?? []).filter(
-    (member) => !member.user_details?.is_admin
+  const tasks = useMemo(() => tasksQuery.data?.data ?? EMPTY_LIST, [tasksQuery.data]);
+  const projects = useMemo(() => projectsQuery.data?.data ?? EMPTY_LIST, [projectsQuery.data]);
+  const teamMembers = useMemo(
+    () =>
+      (statusQuery.data?.data ?? EMPTY_LIST).filter(
+        (member) => !member.user_details?.is_admin
+      ),
+    [statusQuery.data]
   );
-  const users = usersQuery.data?.data ?? [];
-  const selectedTask = tasks.find((task) => task.id === selectedTaskId) || null;
-  const selectedProject =
-    projects.find((project) => String(project.id) === String(formData.project)) || null;
+  const users = useMemo(() => usersQuery.data?.data ?? EMPTY_LIST, [usersQuery.data]);
+  const selectedTask = useMemo(
+    () => tasks.find((task) => task.id === selectedTaskId) || null,
+    [selectedTaskId, tasks]
+  );
+  const selectedProject = useMemo(
+    () => projects.find((project) => String(project.id) === String(formData.project)) || null,
+    [formData.project, projects]
+  );
   const buildTaskGroupKey = (task) =>
     JSON.stringify({
       title: task?.title || "",
@@ -86,40 +124,30 @@ function Tasks() {
   ];
 
   useEffect(() => {
-    if (!tasks.length) {
-      setSelectedTaskId(null);
-      setIsCreateMode(false);
-      setFormData(emptyForm);
-      return;
-    }
+    const timeoutId = window.setTimeout(() => {
+      if (!tasks.length) {
+        setSelectedTaskId(null);
+        setIsCreateMode(false);
+        setFormData(emptyForm);
+        return;
+      }
 
-    if (isCreateMode) {
-      setFormData(emptyForm);
-      return;
-    }
+      if (isCreateMode) {
+        setFormData(emptyForm);
+        return;
+      }
 
-    if (!selectedTask) {
-      setSelectedTaskId(tasks[0].id);
-      return;
-    }
+      if (!selectedTask) {
+        setSelectedTaskId(tasks[0].id);
+        return;
+      }
 
-    setFormData({
-      title: selectedTask.title || "",
-      description: selectedTask.description || "",
-      project: selectedTask.project ? String(selectedTask.project) : "",
-      assignees: Array.from(
-        new Set(
-          (selectedTaskGroup.length ? selectedTaskGroup : [selectedTask])
-            .map((task) => String(task.assignee || ""))
-            .filter(Boolean)
-        )
-      ),
-      status: selectedTask.status || "todo",
-      priority: selectedTask.priority || "medium",
-      deadline: selectedTask.deadline || "",
-      estimated_hours: Number(selectedTask.estimated_hours || 0),
-      actual_hours: Number(selectedTask.actual_hours || 0),
-    });
+      setFormData(buildTaskForm(selectedTask, selectedTaskGroup));
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [isCreateMode, selectedTask, selectedTaskGroup, tasks]);
 
   const stats = useMemo(() => {
@@ -139,61 +167,67 @@ function Tasks() {
     };
   }, [tasks]);
 
-  const normalizeIdentity = (value) =>
-    String(value || "")
-      .toLocaleLowerCase(language || "en")
-      .replace(/\s+/g, " ")
-      .trim();
+  const userLookup = useMemo(() => {
+    const nextLookup = new Map();
 
-  const resolveMemberUser = (member) => {
-    if (member?.user_details?.id) {
-      return member.user_details;
-    }
+    users.forEach((user) => {
+      const usernameKey = normalizeIdentity(user.username, language);
+      const fullNameKey = normalizeIdentity(
+        `${user.first_name || ""} ${user.last_name || ""}`,
+        language
+      );
 
-    const employeeName = normalizeIdentity(member?.employee_name);
+      if (usernameKey) {
+        nextLookup.set(usernameKey, user);
+      }
 
-    return (
-      users.find((user) => normalizeIdentity(user.username) === employeeName) ||
-      users.find(
-        (user) =>
-          normalizeIdentity(`${user.first_name || ""} ${user.last_name || ""}`) === employeeName
-      ) ||
-      null
-    );
-  };
+      if (fullNameKey && !nextLookup.has(fullNameKey)) {
+        nextLookup.set(fullNameKey, user);
+      }
+    });
+
+    return nextLookup;
+  }, [language, users]);
+
+  const resolveMemberUser = useMemo(
+    () => (member) => {
+      if (member?.user_details?.id) {
+        return member.user_details;
+      }
+
+      return userLookup.get(normalizeIdentity(member?.employee_name, language)) || null;
+    },
+    [language, userLookup]
+  );
 
   const teamMembersWithProjects = useMemo(() => {
     return teamMembers.map((member) => {
-      const memberProjects = projects.filter((project) =>
-        (project.team_members || []).some((memberId) => String(memberId) === String(member.id))
-      );
-      const taskProject =
-        projects.find(
-          (project) => String(project.name) === String(member.active_task_project_name)
-        ) || null;
-      const activeProject =
-        taskProject ||
-        memberProjects.find((project) => project.status === "active") ||
-        memberProjects[0] ||
-        null;
       const resolvedUser = resolveMemberUser(member);
+      const taskProject = member.active_task_project_name
+        ? projects.find(
+            (project) => String(project.name) === String(member.active_task_project_name)
+          ) || null
+        : null;
+      const effectiveStatus = member.effective_status || "available";
 
       return {
         ...member,
         user_details: resolvedUser || member.user_details || null,
         activeTaskTitle: member.active_task_title || "",
         activeTaskDeadline: member.active_task_deadline || "",
-        effectiveStatus: member.effective_status || "available",
-        currentProject: activeProject,
-        currentProjectName: member.active_task_project_name || activeProject?.name || "",
-        currentProjectClient: member.active_task_project_client || activeProject?.client_name || "",
-        currentProjectEndDate: member.active_task_project_end_date || activeProject?.end_date || "",
-        projectCount: memberProjects.length,
+        effectiveStatus,
+        effective_status: effectiveStatus,
+        status_type: effectiveStatus,
+        currentProject: taskProject,
+        currentProjectName: member.active_task_project_name || "",
+        currentProjectClient: member.active_task_project_client || "",
+        currentProjectEndDate: member.active_task_project_end_date || "",
+        projectCount: Number(member.active_project_count || 0),
         profileNote: member.current_work || "",
-        projectSummary: member.active_task_description || activeProject?.summary || "",
+        projectSummary: member.active_task_description || "",
       };
     });
-  }, [projects, teamMembers, users]);
+  }, [projects, resolveMemberUser, teamMembers]);
 
   const availableMembers = useMemo(
     () => teamMembersWithProjects.filter((member) => member.effectiveStatus === "available"),
@@ -210,6 +244,10 @@ function Tasks() {
     teamMembersWithProjects.forEach((member) => {
       const resolvedUser = resolveMemberUser(member);
       const mapKey = resolvedUser?.id ? `user-${resolvedUser.id}` : `member-${member.id}`;
+      if (!resolvedUser?.id) {
+        return;
+      }
+
       mappedMembers.set(mapKey, {
         ...member,
         user_details: resolvedUser,
@@ -237,7 +275,7 @@ function Tasks() {
       const rightName = right.employee_name || right.user_details?.username || "";
       return leftName.localeCompare(rightName, language || "en");
     });
-  }, [language, selectedTask, teamMembersWithProjects]);
+  }, [language, resolveMemberUser, selectedTask, teamMembersWithProjects]);
 
   const selectedAssigneeMembers = useMemo(
     () =>
@@ -278,6 +316,7 @@ function Tasks() {
 
   const handleCreate = () => {
     if (!canManageTasks) return;
+    setIsDeleteConfirmOpen(false);
     setIsCreateMode(true);
     setSelectedTaskId(null);
     setFormData(emptyForm);
@@ -421,13 +460,13 @@ function Tasks() {
 
   const handleDelete = () => {
     if (!canManageTasks || !selectedTask) return;
-    if (!window.confirm(t("tasks.confirmDelete"))) return;
     deleteTask(
       { resource: "tasks", id: selectedTask.id },
       {
         onSuccess: () => {
           setIsCreateMode(false);
           setSelectedTaskId(null);
+          setIsDeleteConfirmOpen(false);
           refreshTasks();
         },
         onError: () => alert(t("tasks.deleteError")),
@@ -585,7 +624,7 @@ function Tasks() {
                   <form onSubmit={handleSubmit} className="mt-6 grid grid-cols-1 gap-5 2xl:grid-cols-2">
                     <div className="rounded-[26px] border border-slate-200/80 bg-white/85 p-5 shadow-[0_12px_28px_rgba(148,163,184,0.08)] 2xl:col-span-2">
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                        Temel Bilgi
+                        {t("tasks.basicInfo")}
                       </p>
                       <div className="mt-4 space-y-4">
                         <TextField label={t("tasks.title")} variant="filled">
@@ -615,7 +654,7 @@ function Tasks() {
                       <>
                         <div className="rounded-[26px] border border-slate-200/80 bg-white/85 p-5 shadow-[0_12px_28px_rgba(148,163,184,0.08)]">
                           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                            Atama
+                            {t("tasks.assignment")}
                           </p>
                           <div className="mt-4 space-y-4">
                           <div className="space-y-2">
@@ -661,7 +700,7 @@ function Tasks() {
                             <div className="rounded-[20px] border border-slate-200 bg-white p-3">
                               <div className="flex flex-wrap gap-2">
                                 {assignableMembers.map((member) => {
-                                  const memberId = String(member.user_details?.id);
+                                  const memberId = String(member.user_details.id);
                                   const active = (formData.assignees || []).includes(memberId);
 
                                   return (
@@ -784,7 +823,7 @@ function Tasks() {
 
                     <div className="rounded-[26px] border border-slate-200/80 bg-white/85 p-5 shadow-[0_12px_28px_rgba(148,163,184,0.08)]">
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                        İş Akışı
+                        {t("tasks.workflow")}
                       </p>
                       {!canManageTasks ? (
                         <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-[20px] border border-emerald-200 bg-emerald-50/70 px-4 py-4">
@@ -801,7 +840,7 @@ function Tasks() {
                           />
                           <span className="min-w-0">
                             <span className="block text-sm font-bold text-slate-900">
-                              Görevi tamamladım
+                              {t("tasks.markCompleted")}
                             </span>
                           </span>
                         </label>
@@ -847,7 +886,7 @@ function Tasks() {
 
                     <div className="rounded-[26px] border border-slate-200/80 bg-white/85 p-5 shadow-[0_12px_28px_rgba(148,163,184,0.08)]">
                       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                        Zamanlama
+                        {t("tasks.schedule")}
                       </p>
                       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
                       <TextField label={t("tasks.deadline")} variant="filled">
@@ -891,7 +930,7 @@ function Tasks() {
                       {canManageTasks && selectedTask ? (
                         <Button
                           type="button"
-                          onClick={handleDelete}
+                          onClick={() => setIsDeleteConfirmOpen(true)}
                           className="w-full rounded-[18px] bg-slate-950 py-3 text-sm font-bold text-white hover:bg-slate-800"
                         >
                           {t("tasks.deleteTask")}
@@ -966,7 +1005,7 @@ function Tasks() {
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="break-words text-sm font-black text-slate-950">
-                                  {member.employee_name || resolveMemberUser(member)?.username}
+                                  {member.employee_name || member.user_details?.username}
                                 </p>
                                 <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                                   {member.position || t("team.noPosition")}
@@ -997,7 +1036,7 @@ function Tasks() {
                                 </p>
                               </div>
                             </div>
-                            {!resolveMemberUser(member) ? (
+                            {!member.user_details ? (
                               <p className="mt-2 text-xs font-semibold text-amber-600">
                                 {t("team.noLinkedAccount")}
                               </p>
@@ -1017,6 +1056,14 @@ function Tasks() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(selectedTask && isDeleteConfirmOpen)}
+        title={t("tasks.deleteTask")}
+        description={selectedTask ? `${selectedTask.title}: ${t("tasks.confirmDelete")}` : ""}
+        onClose={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

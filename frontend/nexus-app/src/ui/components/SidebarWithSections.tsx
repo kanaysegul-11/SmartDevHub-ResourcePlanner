@@ -51,7 +51,7 @@ const NavItem = React.forwardRef<HTMLDivElement, NavItemProps>(function NavItem(
       {children ? (
         <span
           className={SubframeUtils.twClassNames(
-            "line-clamp-1 grow shrink-0 basis-0 text-body-bold font-body-bold text-neutral-600",
+            "line-clamp-1 grow shrink-0 basis-0 text-body font-body font-normal text-neutral-600 antialiased [text-rendering:optimizeLegibility]",
             { "text-brand-700": selected }
           )}
         >
@@ -85,7 +85,7 @@ const NavSection = React.forwardRef<HTMLDivElement, NavSectionProps>(
       >
         <div className="flex w-full flex-col items-start gap-4 px-3 py-1">
           {label ? (
-            <span className="w-full text-caption-bold font-caption-bold text-subtext-color">
+            <span className="w-full text-caption font-caption font-medium text-subtext-color antialiased [text-rendering:optimizeLegibility]">
               {label}
             </span>
           ) : null}
@@ -124,7 +124,7 @@ const SidebarWithSectionsRoot = React.forwardRef<
   return (
     <nav
       className={SubframeUtils.twClassNames(
-        "flex h-full w-60 flex-col items-start border-r border-solid border-neutral-border bg-default-background",
+        "flex h-full w-60 flex-col items-start border-r border-solid border-neutral-border bg-default-background font-body antialiased [text-rendering:optimizeLegibility]",
         className
       )}
       ref={ref}

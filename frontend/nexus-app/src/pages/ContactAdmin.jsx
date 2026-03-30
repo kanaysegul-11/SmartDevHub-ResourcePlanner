@@ -42,7 +42,7 @@ function ContactAdmin() {
             ? current
             : nextAdmins[0] || null;
         });
-      } catch (error) {
+      } catch {
         if (!ignore) {
           setAdmins([]);
           setSelectedAdmin(null);
@@ -70,7 +70,7 @@ function ContactAdmin() {
             className="mx-6 mt-6 rounded-[28px] border border-white/65 bg-white/55 px-6 py-4 shadow-[0_20px_50px_rgba(148,163,184,0.12)] backdrop-blur md:mx-8 xl:mx-10"
             leftSlot={
               <Badge variant="neutral" icon={<FeatherMessageCircle />}>
-                {t("sidebar.administrators", t("contactAdmin.workspace"))}
+                {t("contactAdmin.workspace")}
               </Badge>
             }
             rightSlot={<Badge variant="success">{t("contactAdmin.directLine")}</Badge>}
@@ -79,20 +79,26 @@ function ContactAdmin() {
           <div className="flex w-full flex-col gap-8 px-6 pb-10 md:px-8 xl:px-10">
             <section className="rounded-[32px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.82))] p-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)] backdrop-blur lg:p-7">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
-                {t("sidebar.administrators", t("contactAdmin.title"))}
+                {t("contactAdmin.title")}
               </p>
               <h1 className="mt-3 font-['Newsreader'] text-4xl font-medium tracking-tight text-slate-950">
-                {t("sidebar.administrators", t("contactAdmin.heading"))}
+                {t("contactAdmin.heading")}
               </h1>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+                {t("contactAdmin.body")}
+              </p>
             </section>
 
             <div className="grid w-full grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
               <aside className="rounded-[32px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.82))] p-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)] backdrop-blur lg:p-7">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
-                  {t("sidebar.administrators", t("contactAdmin.adminList"))}
+                  {t("contactAdmin.adminList")}
                 </p>
                 <p className="mt-3 text-xl font-black tracking-tight text-slate-950">
                   {t("contactAdmin.chooseAdmin")}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {t("contactAdmin.chooseAdminBody")}
                 </p>
 
                 {loading ? (

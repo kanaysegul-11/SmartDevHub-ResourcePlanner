@@ -8,6 +8,9 @@ import Sidebar from "../component/layout/Sidebar";
 import ProfileCard from "../component/team/ProfileCard";
 import { useI18n } from "../I18nContext.jsx";
 import { apiClient } from "../refine/axios";
+import { SESSION_MARKER_KEY } from "../refine/session";
+
+const APP_BOOT_ID = __APP_BOOT_ID__;
 
 function Dashboard() {
   const { t } = useI18n();
@@ -45,6 +48,12 @@ function Dashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [recentActivity, setRecentActivity] = useState([]);
   const [unreadNotifications, setUnreadNotifications] = useState([]);
+  const [showUnreadNotificationBanner, setShowUnreadNotificationBanner] = useState(false);
+  const sessionMarker =
+    localStorage.getItem(SESSION_MARKER_KEY) ||
+    localStorage.getItem("user_id") ||
+    "anonymous";
+  const unreadNotificationBannerStorageKey = `nexus:dashboard-notification-banner:${APP_BOOT_ID}:${sessionMarker}`;
 
   useEffect(() => {
     let ignore = false;
@@ -55,7 +64,7 @@ function Dashboard() {
         if (!ignore) {
           setRecentActivity(response.data || []);
         }
-      } catch (error) {
+      } catch {
         if (!ignore) {
           setRecentActivity([]);
         }
@@ -84,11 +93,18 @@ function Dashboard() {
           params: { is_read: false },
         });
         if (!ignore) {
-          setUnreadNotifications(response.data || []);
+          const nextUnreadNotifications = response.data || [];
+          const isBannerDismissed =
+            sessionStorage.getItem(unreadNotificationBannerStorageKey) === "hidden";
+          setUnreadNotifications(nextUnreadNotifications);
+          setShowUnreadNotificationBanner(
+            nextUnreadNotifications.length > 0 && !isBannerDismissed
+          );
         }
-      } catch (error) {
+      } catch {
         if (!ignore) {
           setUnreadNotifications([]);
+          setShowUnreadNotificationBanner(false);
         }
       }
     };
@@ -98,14 +114,37 @@ function Dashboard() {
     return () => {
       ignore = true;
     };
-  }, [tasksQuery.data?.data?.length, teamQuery.data?.data?.length, projectsQuery.data?.data?.length]);
+  }, [
+    projectsQuery.data?.data?.length,
+    teamQuery.data?.data?.length,
+    tasksQuery.data?.data?.length,
+    unreadNotificationBannerStorageKey,
+  ]);
+
+  useEffect(() => {
+    if (!showUnreadNotificationBanner || !unreadNotifications.length) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      sessionStorage.setItem(unreadNotificationBannerStorageKey, "hidden");
+      setShowUnreadNotificationBanner(false);
+    }, 15000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    showUnreadNotificationBanner,
+    unreadNotificationBannerStorageKey,
+    unreadNotifications.length,
+  ]);
 
   const stats = useMemo(() => {
     const snippetsResult = snippetsQuery.data;
     const snippets = snippetsResult?.data ?? [];
     const comments = commentsQuery.data?.data ?? [];
     const teamMembers = teamQuery.data?.data ?? [];
-    const tasks = tasksQuery.data?.data ?? [];
     const projects = projectsQuery.data?.data ?? [];
     const users = usersQuery.data?.data ?? [];
 
@@ -133,40 +172,27 @@ function Dashboard() {
     const enrichedTeamMembers = teamMembers
       .map((member) => {
         const resolvedUser = resolveMemberUser(member);
-        if (!resolvedUser?.id) return null;
-
-        const activeTask = tasks.find(
-          (task) =>
-            String(task.assignee) === String(resolvedUser.id) &&
-            task.status !== "done"
-        );
-
-        const linkedProjects = projects.filter((project) =>
-          (project.team_members || []).some((memberId) => String(memberId) === String(member.id))
-        );
-
-        const activeProject =
-          linkedProjects.find((project) => project.status === "active") ||
-          linkedProjects[0] ||
-          null;
-
-        const effectiveStatus = member.effective_status || (activeTask ? "busy" : "available");
+        const taskProject = member.active_task_project_name
+          ? projects.find(
+              (project) => String(project.name) === String(member.active_task_project_name)
+            ) || null
+          : null;
+        const effectiveStatus = member.effective_status || member.status_type || "available";
 
         return {
           ...member,
-          user_details: resolvedUser,
+          user_details: resolvedUser || member.user_details || null,
           status_type: effectiveStatus,
           effective_status: effectiveStatus,
           current_work: member.active_task_description || member.current_work || "",
-          currentProject: activeProject,
-          currentProjectName: member.active_task_project_name || activeProject?.name || "",
-          currentProjectClient: member.active_task_project_client || activeProject?.client_name || "",
-          currentProjectEndDate: member.active_task_project_end_date || activeProject?.end_date || "",
-          activeTask,
-          projectCount: linkedProjects.length,
+          currentProject: taskProject,
+          currentProjectName: member.active_task_project_name || "",
+          currentProjectClient: member.active_task_project_client || "",
+          currentProjectEndDate: member.active_task_project_end_date || "",
+          projectCount: Number(member.active_project_count || 0),
         };
       })
-      .filter(Boolean);
+      .filter((member) => Boolean(member.employee_name || member.user_details?.username));
 
     const busyMembers = enrichedTeamMembers.filter((member) => member.effective_status === "busy");
     const availableMembers = enrichedTeamMembers.filter((member) => member.effective_status === "available");
@@ -221,7 +247,7 @@ function Dashboard() {
       recentActivity,
       enrichedTeamMembers,
     };
-  }, [commentsQuery.data, projectsQuery.data, recentActivity, snippetsQuery.data, t, tasksQuery.data, teamQuery.data, usersQuery.data]);
+  }, [commentsQuery.data, projectsQuery.data, recentActivity, snippetsQuery.data, tasksQuery.data, teamQuery.data, usersQuery.data]);
 
   const teamActivities = useMemo(() => stats?.enrichedTeamMembers ?? [], [stats]);
 
@@ -266,13 +292,13 @@ function Dashboard() {
             <Navbar />
           </header>
 
-          {unreadNotifications.length ? (
+          {unreadNotifications.length && showUnreadNotificationBanner ? (
             <div className="rounded-[28px] border border-amber-200 bg-amber-50/80 px-6 py-4 text-amber-900 shadow-[0_16px_40px_rgba(251,191,36,0.12)]">
               <p className="text-sm font-black">
-                Bildirimleriniz var, bakmanizi oneririm.
+                {t("dashboard.unreadNotificationsTitle")}
               </p>
               <p className="mt-1 text-sm leading-6 text-amber-800">
-                {unreadNotifications.length} okunmamis bildirim bulundu. Ayarlar icindeki Bildirimler panelinden detaylari gorebilirsiniz.
+                {t("dashboard.unreadNotificationsBody")}
               </p>
             </div>
           ) : null}

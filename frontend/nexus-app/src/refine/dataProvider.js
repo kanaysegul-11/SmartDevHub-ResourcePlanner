@@ -85,11 +85,6 @@ export const dataProvider = {
   getList: async ({ resource, pagination, filters, sorters }) => {
     const params = buildQueryParams({ pagination, filters, sorters });
     const response = await apiClient.get(`/${resource}/`, { params });
-    console.log(`[Refine:getList] ${resource}`, response.data);
-    console.log(
-      `[Refine:getList:json] ${resource}`,
-      JSON.stringify(response.data)
-    );
 
     let payload = response.data;
     if (typeof payload === "string") {
@@ -102,18 +97,13 @@ export const dataProvider = {
 
     if (Array.isArray(payload)) {
       const data = normalizeArray(payload);
-      const result = { data, total: data.length };
-      console.log(`[Refine:getList:normalized] ${resource}`, result);
-      return result;
+      return { data, total: data.length };
     }
 
-    const normalized = normalizeListResponse({ data: payload });
-    console.log(`[Refine:getList:normalized] ${resource}`, normalized);
-    return normalized;
+    return normalizeListResponse({ data: payload });
   },
   getOne: async ({ resource, id }) => {
     const response = await apiClient.get(`/${resource}/${id}/`);
-    console.log(`[Refine:getOne] ${resource}/${id}`, response.data);
     return { data: response.data };
   },
   create: async ({ resource, variables }) => {

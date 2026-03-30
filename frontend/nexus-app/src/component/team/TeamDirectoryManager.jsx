@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { TextField } from "../../ui/components/TextField";
 import { useI18n } from "../../I18nContext.jsx";
 
@@ -9,6 +9,13 @@ const emptyForm = {
   current_work: "",
   status_type: "available",
 };
+
+const areFormsEqual = (left, right) =>
+  left.user === right.user &&
+  left.employee_name === right.employee_name &&
+  left.position === right.position &&
+  left.current_work === right.current_work &&
+  left.status_type === right.status_type;
 
 function TeamDirectoryManager({
   members,
@@ -24,7 +31,13 @@ function TeamDirectoryManager({
   const [formData, setFormData] = useState(emptyForm);
 
   const sortedMembers = useMemo(
-    () => [...members].sort((left, right) => (left.employee_name || "").localeCompare(right.employee_name || "", "tr")),
+    () =>
+      [...members].sort((left, right) =>
+        (left.employee_name || "").localeCompare(
+          right.employee_name || "",
+          "tr"
+        )
+      ),
     [members]
   );
 
@@ -33,25 +46,41 @@ function TeamDirectoryManager({
     [sortedMembers, selectedId]
   );
 
-  useEffect(() => {
+  const syncSelectionState = useEffectEvent(() => {
     if (!sortedMembers.length) {
       setSelectedId(null);
-      setFormData(emptyForm);
+      setFormData((current) =>
+        areFormsEqual(current, emptyForm) ? current : emptyForm
+      );
       return;
     }
 
     if (!selectedMember) {
-      setSelectedId(sortedMembers[0].id);
+      setSelectedId((current) => current ?? sortedMembers[0].id);
       return;
     }
 
-    setFormData({
+    const nextForm = {
       user: selectedMember.user || "",
       employee_name: selectedMember.employee_name || "",
       position: selectedMember.position || "",
       current_work: selectedMember.current_work || "",
       status_type: selectedMember.status_type || "available",
-    });
+    };
+
+    setFormData((current) =>
+      areFormsEqual(current, nextForm) ? current : nextForm
+    );
+  });
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      syncSelectionState();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [selectedMember, sortedMembers]);
 
   useEffect(() => {
@@ -65,13 +94,28 @@ function TeamDirectoryManager({
 
   const handleLinkedUserChange = (value) => {
     const selectedUser = userOptions.find((user) => String(user.id) === String(value));
-    const fullName = selectedUser ? `${selectedUser.first_name || ""} ${selectedUser.last_name || ""}`.trim() : "";
+    const fullName = selectedUser
+      ? `${selectedUser.first_name || ""} ${selectedUser.last_name || ""}`.trim()
+      : "";
 
     setFormData((current) => ({
       ...current,
       user: value,
       employee_name: current.employee_name || fullName || selectedUser?.username || "",
     }));
+  };
+
+  const handleSelectMember = (member) => {
+    if (!member) return;
+
+    setSelectedId(member.id);
+    setFormData({
+      user: member.user || "",
+      employee_name: member.employee_name || "",
+      position: member.position || "",
+      current_work: member.current_work || "",
+      status_type: member.status_type || "available",
+    });
   };
 
   const handleSubmit = (event) => {
@@ -110,7 +154,7 @@ function TeamDirectoryManager({
               <button
                 key={member.id}
                 type="button"
-                onClick={() => setSelectedId(member.id)}
+                onClick={() => handleSelectMember(member)}
                 className={`flex items-center justify-between rounded-2xl border px-3 py-3 text-left transition-colors ${
                   active
                     ? "border-sky-200 bg-white shadow-sm"

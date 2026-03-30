@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLogout } from "@refinedev/core";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -21,8 +21,24 @@ import {
 
 import { useUser } from "../../UserContext.jsx";
 import { useI18n } from "../../I18nContext.jsx";
+import { apiClient } from "../../refine/axios";
+import { NOTIFICATIONS_UPDATED_EVENT } from "../../refine/notifications.js";
 import { Avatar } from "../../ui/components/Avatar";
 import { SidebarWithSections } from "../../ui/components/SidebarWithSections";
+import {
+  readSidebarOrder,
+  reorderSidebarItems,
+  writeSidebarOrder,
+} from "../../utils/sidebarPreferences.js";
+
+const GENERAL_SECTION_KEY = "general";
+const ACCOUNT_SECTION_KEY = "account";
+
+const getDragPlacement = (event) => {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const midpoint = rect.top + rect.height / 2;
+  return event.clientY < midpoint ? "before" : "after";
+};
 
 function Sidebar({
   activeItem,
@@ -40,6 +56,15 @@ function Sidebar({
   const canManageTeam = Boolean(userData?.isAdmin);
   const [isLibraryHovered, setIsLibraryHovered] = useState(false);
   const [isTeamHovered, setIsTeamHovered] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [generalOrder, setGeneralOrder] = useState([]);
+  const [accountOrder, setAccountOrder] = useState([]);
+  const [dragState, setDragState] = useState({ sectionKey: null, itemId: null });
+  const [dropState, setDropState] = useState({
+    sectionKey: null,
+    targetId: null,
+    placement: "after",
+  });
 
   const pathname = location.pathname;
   const resolvedActive =
@@ -52,17 +77,17 @@ function Sidebar({
           ? "projects"
           : pathname === "/tasks"
             ? "tasks"
-        : pathname === "/notifications"
-          ? "notifications"
-          : pathname === "/contact-admin" || pathname === "/administrators"
-            ? "administrators"
-        : pathname.startsWith("/snippets") || pathname === "/add-snippets"
-          ? "snippets"
-          : pathname === "/analytics"
-            ? "analytics"
-            : pathname === "/settings"
-              ? "settings"
-              : "");
+            : pathname === "/notifications"
+              ? "notifications"
+              : pathname === "/contact-admin" || pathname === "/administrators"
+                ? "administrators"
+                : pathname.startsWith("/snippets") || pathname === "/add-snippets"
+                  ? "snippets"
+                  : pathname === "/analytics"
+                    ? "analytics"
+                    : pathname === "/settings"
+                      ? "settings"
+                      : "");
 
   const logoutContainerClass =
     logoutVariant === "danger"
@@ -74,15 +99,432 @@ function Sidebar({
       : "text-slate-400";
   const submenuLinkClass =
     "flex items-center gap-2 rounded-2xl px-3 py-2.5 text-left text-sm font-semibold text-slate-300 transition-all hover:bg-white/10 hover:text-white";
+  const sidebarUserKey = useMemo(
+    () =>
+      String(
+        localStorage.getItem("user_id") ||
+        userData?.username ||
+        localStorage.getItem("username") ||
+        "guest"
+      ),
+    [userData?.username]
+  );
+  const generalItemIds = useMemo(() => {
+    const nextItems = ["dashboard"];
+
+    if (menuPreset === "full") {
+      nextItems.push("team", "projects", "tasks", "snippets", "analytics");
+    }
+
+    return nextItems;
+  }, [menuPreset]);
+  const accountItemIds = useMemo(
+    () => ["notifications", "administrators", "settings"],
+    []
+  );
+
+  useEffect(() => {
+    setGeneralOrder(
+      readSidebarOrder(GENERAL_SECTION_KEY, sidebarUserKey, generalItemIds)
+    );
+  }, [generalItemIds, sidebarUserKey]);
+
+  useEffect(() => {
+    setAccountOrder(
+      readSidebarOrder(ACCOUNT_SECTION_KEY, sidebarUserKey, accountItemIds)
+    );
+  }, [accountItemIds, sidebarUserKey]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadUnreadNotificationCount = async () => {
+      try {
+        const response = await apiClient.get("/notifications/", {
+          params: { is_read: false },
+        });
+        if (!ignore) {
+          setUnreadNotificationCount((response.data || []).length);
+        }
+      } catch {
+        if (!ignore) {
+          setUnreadNotificationCount(0);
+        }
+      }
+    };
+
+    const handleNotificationsUpdated = (event) => {
+      const nextCount = event?.detail?.unreadCount;
+
+      if (typeof nextCount === "number") {
+        setUnreadNotificationCount(nextCount);
+        return;
+      }
+
+      void loadUnreadNotificationCount();
+    };
+
+    const handleWindowFocus = () => {
+      void loadUnreadNotificationCount();
+    };
+
+    void loadUnreadNotificationCount();
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, handleNotificationsUpdated);
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      ignore = true;
+      window.removeEventListener(
+        NOTIFICATIONS_UPDATED_EVENT,
+        handleNotificationsUpdated
+      );
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [pathname]);
+
+  const updateSectionOrder = (sectionKey, nextOrder) => {
+    if (sectionKey === GENERAL_SECTION_KEY) {
+      setGeneralOrder(nextOrder);
+    } else {
+      setAccountOrder(nextOrder);
+    }
+
+    writeSidebarOrder(sectionKey, sidebarUserKey, nextOrder);
+  };
+
+  const handleDragStart = (sectionKey, itemId) => (event) => {
+    setDragState({ sectionKey, itemId });
+    setDropState({ sectionKey, targetId: itemId, placement: "after" });
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", `${sectionKey}:${itemId}`);
+  };
+
+  const handleDragOver = (sectionKey, targetId) => (event) => {
+    event.preventDefault();
+
+    if (dragState.sectionKey !== sectionKey || !dragState.itemId) {
+      return;
+    }
+
+    const placement = getDragPlacement(event);
+    setDropState((prev) => {
+      if (
+        prev.sectionKey === sectionKey &&
+        prev.targetId === targetId &&
+        prev.placement === placement
+      ) {
+        return prev;
+      }
+
+      return { sectionKey, targetId, placement };
+    });
+
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (sectionKey, targetId) => (event) => {
+    event.preventDefault();
+
+    if (dragState.sectionKey !== sectionKey || !dragState.itemId) {
+      return;
+    }
+
+    const placement = getDragPlacement(event);
+    const currentOrder =
+      sectionKey === GENERAL_SECTION_KEY ? generalOrder : accountOrder;
+    const nextOrder = reorderSidebarItems(
+      currentOrder,
+      dragState.itemId,
+      targetId,
+      placement
+    );
+
+    updateSectionOrder(sectionKey, nextOrder);
+    setDragState({ sectionKey: null, itemId: null });
+    setDropState({ sectionKey: null, targetId: null, placement: "after" });
+  };
+
+  const handleDragEnd = () => {
+    setDragState({ sectionKey: null, itemId: null });
+    setDropState({ sectionKey: null, targetId: null, placement: "after" });
+  };
+
+  const renderDraggableItem = (sectionKey, itemId, content) => {
+    const isDragging =
+      dragState.sectionKey === sectionKey && dragState.itemId === itemId;
+    const showDropBefore =
+      dropState.sectionKey === sectionKey &&
+      dropState.targetId === itemId &&
+      dropState.placement === "before" &&
+      dragState.itemId !== itemId;
+    const showDropAfter =
+      dropState.sectionKey === sectionKey &&
+      dropState.targetId === itemId &&
+      dropState.placement === "after" &&
+      dragState.itemId !== itemId;
+
+    return (
+      <div
+        key={itemId}
+        draggable
+        onDragStart={handleDragStart(sectionKey, itemId)}
+        onDragOver={handleDragOver(sectionKey, itemId)}
+        onDrop={handleDrop(sectionKey, itemId)}
+        onDragEnd={handleDragEnd}
+        className={`relative w-full cursor-grab active:cursor-grabbing ${isDragging ? "opacity-65" : ""
+          }`}
+      >
+        {showDropBefore ? (
+          <div className="pointer-events-none absolute inset-x-0 -top-1 h-0.5 rounded-full bg-sky-400 shadow-[0_0_0_4px_rgba(56,189,248,0.14)]" />
+        ) : null}
+        {content}
+        {showDropAfter ? (
+          <div className="pointer-events-none absolute inset-x-0 -bottom-1 h-0.5 rounded-full bg-sky-400 shadow-[0_0_0_4px_rgba(56,189,248,0.14)]" />
+        ) : null}
+      </div>
+    );
+  };
+
+  const orderedGeneralItems = useMemo(
+    () =>
+      generalOrder.length
+        ? generalOrder
+        : readSidebarOrder(GENERAL_SECTION_KEY, sidebarUserKey, generalItemIds),
+    [generalItemIds, generalOrder, sidebarUserKey]
+  );
+
+  const orderedAccountItems = useMemo(
+    () =>
+      accountOrder.length
+        ? accountOrder
+        : readSidebarOrder(ACCOUNT_SECTION_KEY, sidebarUserKey, accountItemIds),
+    [accountItemIds, accountOrder, sidebarUserKey]
+  );
+
+  const renderGeneralItem = (itemId) => {
+    if (itemId === "dashboard") {
+      return renderDraggableItem(
+        GENERAL_SECTION_KEY,
+        itemId,
+        <SidebarWithSections.NavItem
+          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+          selected={resolvedActive === "dashboard"}
+          icon={<FeatherLayout />}
+          onClick={() => navigate("/dashboard")}
+        >
+          {t("sidebar.dashboard")}
+        </SidebarWithSections.NavItem>
+      );
+    }
+
+    if (menuPreset !== "full") {
+      return null;
+    }
+
+    if (itemId === "team") {
+      return renderDraggableItem(
+        GENERAL_SECTION_KEY,
+        itemId,
+        showTeamSubmenu && canManageTeam ? (
+          <div
+            className="flex w-full flex-col gap-1"
+            onMouseEnter={() => setIsTeamHovered(true)}
+            onMouseLeave={() => setIsTeamHovered(false)}
+          >
+            <SidebarWithSections.NavItem
+              className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400 "
+              selected={isTeamHovered || resolvedActive === "team"}
+              icon={<FeatherUsers />}
+              onClick={() => navigate("/team")}
+              rightSlot={
+                <FeatherChevronDown
+                  size={14}
+                  className={`transition-transform duration-300 ${isTeamHovered ? "rotate-180" : ""
+                    }`}
+                />
+              }
+            >
+              {t("sidebar.team")}
+            </SidebarWithSections.NavItem>
+            <div
+              className={`flex flex-col gap-1 overflow-hidden pl-9 transition-all duration-300 ${isTeamHovered
+                  ? "mb-2 max-h-20 opacity-100"
+                  : "pointer-events-none max-h-0 opacity-0"
+                }`}
+            >
+              <button
+                onClick={() => navigate("/add-member")}
+                className={submenuLinkClass}
+              >
+                <FeatherPlus size={14} /> {t("sidebar.createMember")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <SidebarWithSections.NavItem
+            className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+            selected={resolvedActive === "team"}
+            icon={<FeatherUsers />}
+            onClick={() => navigate("/team")}
+          >
+            {t("sidebar.team")}
+          </SidebarWithSections.NavItem>
+        )
+      );
+    }
+
+    if (itemId === "projects") {
+      return renderDraggableItem(
+        GENERAL_SECTION_KEY,
+        itemId,
+        <SidebarWithSections.NavItem
+          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+          selected={resolvedActive === "projects"}
+          icon={<FeatherFolderKanban />}
+          onClick={() => navigate("/projects")}
+        >
+          {t("sidebar.projects")}
+        </SidebarWithSections.NavItem>
+      );
+    }
+
+    if (itemId === "tasks") {
+      return renderDraggableItem(
+        GENERAL_SECTION_KEY,
+        itemId,
+        <SidebarWithSections.NavItem
+          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+          selected={resolvedActive === "tasks"}
+          icon={<FeatherTarget />}
+          onClick={() => navigate("/tasks")}
+        >
+          {t("sidebar.tasks")}
+        </SidebarWithSections.NavItem>
+      );
+    }
+
+    if (itemId === "snippets") {
+      return renderDraggableItem(
+        GENERAL_SECTION_KEY,
+        itemId,
+        <div
+          className="flex w-full flex-col gap-1"
+          onMouseEnter={() => setIsLibraryHovered(true)}
+          onMouseLeave={() => setIsLibraryHovered(false)}
+        >
+          <SidebarWithSections.NavItem
+            className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+            selected={isLibraryHovered || resolvedActive === "snippets"}
+            icon={<FeatherCode />}
+            onClick={() => navigate("/snippets")}
+            rightSlot={
+              <FeatherChevronDown
+                size={14}
+                className={`transition-transform duration-300 ${isLibraryHovered ? "rotate-180" : ""
+                  }`}
+              />
+            }
+          >
+            {t("sidebar.codeLibrary")}
+          </SidebarWithSections.NavItem>
+          <div
+            className={`flex flex-col gap-1 overflow-hidden pl-9 transition-all duration-300 ${isLibraryHovered
+                ? "mb-2 max-h-20 opacity-100"
+                : "pointer-events-none max-h-0 opacity-0"
+              }`}
+          >
+            <button
+              onClick={() => navigate("/add-snippets")}
+              className={submenuLinkClass}
+            >
+              <FeatherPlus size={14} /> {t("sidebar.createSnippet")}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (itemId === "analytics") {
+      return renderDraggableItem(
+        GENERAL_SECTION_KEY,
+        itemId,
+        <SidebarWithSections.NavItem
+          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+          selected={resolvedActive === "analytics"}
+          icon={<FeatherTrendingUp />}
+          onClick={() => navigate("/analytics")}
+        >
+          {t("sidebar.analytics")}
+        </SidebarWithSections.NavItem>
+      );
+    }
+
+    return null;
+  };
+
+  const renderAccountItem = (itemId) => {
+    if (itemId === "notifications") {
+      return renderDraggableItem(
+        ACCOUNT_SECTION_KEY,
+        itemId,
+        <SidebarWithSections.NavItem
+          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+          selected={resolvedActive === "notifications"}
+          icon={<FeatherBell />}
+          onClick={() => navigate("/notifications")}
+          rightSlot={
+            unreadNotificationCount ? (
+              <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-sky-400 px-2 py-0.5 text-[11px] font-black text-slate-950 shadow-[0_8px_18px_rgba(56,189,248,0.35)]">
+                {unreadNotificationCount}
+              </span>
+            ) : null
+          }
+        >
+          {t("sidebar.notifications")}
+        </SidebarWithSections.NavItem>
+      );
+    }
+
+    if (itemId === "administrators") {
+      return renderDraggableItem(
+        ACCOUNT_SECTION_KEY,
+        itemId,
+        <SidebarWithSections.NavItem
+          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+          selected={resolvedActive === "administrators"}
+          icon={<FeatherMessageCircle />}
+          onClick={() => navigate("/administrators")}
+        >
+          {t("sidebar.administrators")}
+        </SidebarWithSections.NavItem>
+      );
+    }
+
+    if (itemId === "settings") {
+      return renderDraggableItem(
+        ACCOUNT_SECTION_KEY,
+        itemId,
+        <SidebarWithSections.NavItem
+          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+          selected={resolvedActive === "settings"}
+          icon={<FeatherSettings />}
+          onClick={() => navigate("/settings")}
+        >
+          {t("sidebar.settings")}
+        </SidebarWithSections.NavItem>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <SidebarWithSections
       className="dark-surface z-20 m-4 mr-0 w-[272px] flex-none self-stretch overflow-hidden rounded-[30px] border border-white/10 bg-slate-950 text-white shadow-[0_24px_80px_rgba(15,23,42,0.24)] [&_.border-neutral-border]:border-white/10 [&_.text-subtext-color]:text-slate-300"
       header={
         <div
-          className={`flex w-full items-center gap-3 ${
-            logoClickable ? "cursor-pointer" : ""
-          }`}
+          className={`flex w-full items-center gap-3 ${logoClickable ? "cursor-pointer" : ""
+            }`}
           onClick={logoClickable ? () => navigate("/dashboard") : undefined}
         >
           <div className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 via-cyan-300 to-amber-200 shadow-[0_12px_24px_rgba(56,189,248,0.28)]">
@@ -118,19 +560,17 @@ function Sidebar({
             </span>
             {showUserEmail ? (
               <span
-                className={`text-[10px] font-bold uppercase text-slate-400 ${
-                  logoutVariant === "danger" ? "group-hover:text-red-500" : ""
-                }`}
+                className={`text-[10px] font-bold uppercase text-slate-400 ${logoutVariant === "danger" ? "group-hover:text-red-500" : ""
+                  }`}
               >
                 {userData.email || ""}
               </span>
             ) : null}
             <span
-              className={`text-xs text-slate-400 ${
-                logoutVariant === "danger"
+              className={`text-xs text-slate-400 ${logoutVariant === "danger"
                   ? "text-[10px] font-bold uppercase group-hover:text-red-500"
                   : ""
-              }`}
+                }`}
             >
               {t("sidebar.logout")}
             </span>
@@ -140,163 +580,11 @@ function Sidebar({
       }
     >
       <SidebarWithSections.NavSection label={t("sidebar.general")}>
-        <SidebarWithSections.NavItem
-          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
-          selected={resolvedActive === "dashboard"}
-          icon={<FeatherLayout />}
-          onClick={() => navigate("/dashboard")}
-        >
-          {t("sidebar.dashboard")}
-        </SidebarWithSections.NavItem>
-
-        {menuPreset === "full" ? (
-          showTeamSubmenu && canManageTeam ? (
-            <div
-              className="flex w-full flex-col gap-1"
-              onMouseEnter={() => setIsTeamHovered(true)}
-              onMouseLeave={() => setIsTeamHovered(false)}
-            >
-              <SidebarWithSections.NavItem
-                className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400 "
-                selected={isTeamHovered || resolvedActive === "team"}
-                icon={<FeatherUsers />}
-                rightSlot={
-                  <FeatherChevronDown
-                    size={14}
-                    className={`transition-transform duration-300 ${
-                      isTeamHovered ? "rotate-180" : ""
-                    }`}
-                  />
-                }
-                onClick={() => navigate("/team")}
-              >
-                {t("sidebar.team")}
-              </SidebarWithSections.NavItem>
-              <div
-                className={`flex flex-col gap-1 overflow-hidden pl-9 transition-all duration-300 ${
-                  isTeamHovered
-                    ? "mb-2 max-h-20 opacity-100"
-                    : "pointer-events-none max-h-0 opacity-0"
-                }`}
-              >
-                <button
-                  onClick={() => navigate("/add-member")}
-                  className={submenuLinkClass}
-                >
-                  <FeatherPlus size={14} /> {t("sidebar.createMember")}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <SidebarWithSections.NavItem
-              className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
-              selected={resolvedActive === "team"}
-              icon={<FeatherUsers />}
-              onClick={() => navigate("/team")}
-            >
-              {t("sidebar.team")}
-            </SidebarWithSections.NavItem>
-          )
-        ) : null}
-
-        {menuPreset === "full" ? (
-          <SidebarWithSections.NavItem
-            className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
-            selected={resolvedActive === "projects"}
-            icon={<FeatherFolderKanban />}
-            onClick={() => navigate("/projects")}
-          >
-            {t("sidebar.projects")}
-          </SidebarWithSections.NavItem>
-        ) : null}
-
-        {menuPreset === "full" ? (
-          <SidebarWithSections.NavItem
-            className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
-            selected={resolvedActive === "tasks"}
-            icon={<FeatherTarget />}
-            onClick={() => navigate("/tasks")}
-          >
-            {t("sidebar.tasks")}
-          </SidebarWithSections.NavItem>
-        ) : null}
-
-        {menuPreset === "full" ? (
-          <div
-            className="flex w-full flex-col gap-1"
-            onMouseEnter={() => setIsLibraryHovered(true)}
-            onMouseLeave={() => setIsLibraryHovered(false)}
-          >
-            <SidebarWithSections.NavItem
-              className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
-              selected={isLibraryHovered || resolvedActive === "snippets"}
-              icon={<FeatherCode />}
-              rightSlot={
-                <FeatherChevronDown
-                  size={14}
-                  className={`transition-transform duration-300 ${
-                    isLibraryHovered ? "rotate-180" : ""
-                  }`}
-                />
-              }
-              onClick={() => navigate("/snippets")}
-            >
-              {t("sidebar.codeLibrary")}
-            </SidebarWithSections.NavItem>
-            <div
-              className={`flex flex-col gap-1 overflow-hidden pl-9 transition-all duration-300 ${
-                isLibraryHovered
-                  ? "mb-2 max-h-20 opacity-100"
-                  : "pointer-events-none max-h-0 opacity-0"
-              }`}
-            >
-              <button
-                onClick={() => navigate("/add-snippets")}
-                className={submenuLinkClass}
-              >
-                <FeatherPlus size={14} /> {t("sidebar.createSnippet")}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {menuPreset === "full" ? (
-          <SidebarWithSections.NavItem
-            className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
-            selected={resolvedActive === "analytics"}
-            icon={<FeatherTrendingUp />}
-            onClick={() => navigate("/analytics")}
-          >
-            {t("sidebar.analytics")}
-          </SidebarWithSections.NavItem>
-        ) : null}
+        {orderedGeneralItems.map(renderGeneralItem)}
       </SidebarWithSections.NavSection>
 
       <SidebarWithSections.NavSection label={t("sidebar.account")}>
-        <SidebarWithSections.NavItem
-          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
-          selected={resolvedActive === "notifications"}
-          icon={<FeatherBell />}
-          onClick={() => navigate("/notifications")}
-        >
-          {t("sidebar.notifications")}
-        </SidebarWithSections.NavItem>
-        <SidebarWithSections.NavItem
-          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
-          selected={resolvedActive === "administrators"}
-          icon={<FeatherMessageCircle />}
-          onClick={() => navigate("/administrators")}
-        >
-          {t("sidebar.administrators")}
-        </SidebarWithSections.NavItem>
-        <SidebarWithSections.NavItem
-          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
-          selected={resolvedActive === "settings"}
-          icon={<FeatherSettings />}
-          onClick={() => navigate("/settings")}
-        >
-          {t("sidebar.settings")}
-        </SidebarWithSections.NavItem>
+        {orderedAccountItems.map(renderAccountItem)}
       </SidebarWithSections.NavSection>
     </SidebarWithSections>
   );

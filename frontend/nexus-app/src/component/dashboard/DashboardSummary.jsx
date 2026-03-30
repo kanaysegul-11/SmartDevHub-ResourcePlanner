@@ -28,6 +28,8 @@ function DashboardPanel({ children, className = "" }) {
 }
 
 function StatCard({ icon, label, value, accentClass }) {
+  const { t } = useI18n();
+
   return (
     <DashboardPanel className="p-6 lg:p-7">
       <div className="flex items-start justify-between gap-4">
@@ -35,7 +37,7 @@ function StatCard({ icon, label, value, accentClass }) {
           {icon}
         </div>
         <span className="rounded-full border border-slate-200/80 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-          Live
+          {t("dashboard.liveBadge")}
         </span>
       </div>
       <p className="mt-7 text-sm font-semibold text-slate-500">{label}</p>
@@ -483,7 +485,7 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
               className="rounded-[28px] border border-slate-200/80 bg-slate-50/75 p-5 text-left transition hover:border-slate-300 hover:bg-white"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-                Team
+                {t("sidebar.team")}
               </p>
               <p className="mt-2 text-xl font-black tracking-tight text-slate-900">
                 {t("dashboard.quickTeamTitle")}
@@ -496,7 +498,7 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
               className="rounded-[28px] border border-slate-200/80 bg-slate-50/75 p-5 text-left transition hover:border-slate-300 hover:bg-white"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-                Analytics
+                {t("sidebar.analytics")}
               </p>
               <p className="mt-2 text-xl font-black tracking-tight text-slate-900">
                 {t("dashboard.quickAnalyticsTitle")}
@@ -509,7 +511,7 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
               className="rounded-[28px] border border-slate-200/80 bg-slate-50/75 p-5 text-left transition hover:border-slate-300 hover:bg-white"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-                Library
+                {t("sidebar.codeLibrary")}
               </p>
               <p className="mt-2 text-xl font-black tracking-tight text-slate-900">
                 {t("dashboard.quickLibraryTitle")}

@@ -10,11 +10,13 @@ import {
   FeatherUsers,
 } from "@subframe/core";
 import Sidebar from "../component/layout/Sidebar";
+import ConfirmDialog from "../component/common/ConfirmDialog.jsx";
 import { useUser } from "../UserContext.jsx";
 import { useI18n } from "../I18nContext.jsx";
 import { Badge } from "../ui/components/Badge";
 import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
 
+const EMPTY_PROJECTS = [];
 const emptyForm = {
   name: "",
   client_name: "",
@@ -27,6 +29,19 @@ const emptyForm = {
   tech_stack: "",
   team_members: [],
 };
+
+const buildProjectForm = (project) => ({
+  name: project?.name || "",
+  client_name: project?.client_name || "",
+  summary: project?.summary || "",
+  status: project?.status || "planning",
+  priority: project?.priority || "medium",
+  progress: Number(project?.progress || 0),
+  start_date: project?.start_date || "",
+  end_date: project?.end_date || "",
+  tech_stack: project?.tech_stack || "",
+  team_members: project?.team_members || [],
+});
 
 function Projects() {
   const { userData } = useUser();
@@ -42,6 +57,7 @@ function Projects() {
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [isCreateMode, setIsCreateMode] = useState(false);
   const [formData, setFormData] = useState(emptyForm);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   const statusOptions = [
     { value: "planning", label: t("projects.planning") },
@@ -56,11 +72,21 @@ function Projects() {
     { value: "critical", label: t("projects.critical") },
   ];
 
-  const projects = projectsQuery.data?.data ?? [];
-  const teamMembers = (teamQuery.data?.data ?? []).filter(
-    (member) => !member.user_details?.is_admin
+  const projects = useMemo(
+    () => projectsQuery.data?.data ?? EMPTY_PROJECTS,
+    [projectsQuery.data]
   );
-  const selectedProject = isCreateMode ? null : projects.find((p) => p.id === selectedProjectId) || null;
+  const teamMembers = useMemo(
+    () =>
+      (teamQuery.data?.data ?? EMPTY_PROJECTS).filter(
+        (member) => !member.user_details?.is_admin
+      ),
+    [teamQuery.data]
+  );
+  const selectedProject = useMemo(
+    () => (isCreateMode ? null : projects.find((project) => project.id === selectedProjectId) || null),
+    [isCreateMode, projects, selectedProjectId]
+  );
 
   const formatProjectDate = (value) => {
     if (!value) return t("projects.notSet");
@@ -77,29 +103,29 @@ function Projects() {
   const translatePriority = (value) => priorityOptions.find((item) => item.value === value)?.label || value;
 
   useEffect(() => {
-    if (!projects.length) {
-      setSelectedProjectId(null);
-      setIsCreateMode(false);
-      setFormData(emptyForm);
-      return;
-    }
-    if (isCreateMode) return;
-    if (!selectedProject) {
-      setSelectedProjectId(projects[0].id);
-      return;
-    }
-    setFormData({
-      name: selectedProject.name || "",
-      client_name: selectedProject.client_name || "",
-      summary: selectedProject.summary || "",
-      status: selectedProject.status || "planning",
-      priority: selectedProject.priority || "medium",
-      progress: Number(selectedProject.progress || 0),
-      start_date: selectedProject.start_date || "",
-      end_date: selectedProject.end_date || "",
-      tech_stack: selectedProject.tech_stack || "",
-      team_members: selectedProject.team_members || [],
-    });
+    const timeoutId = window.setTimeout(() => {
+      if (!projects.length) {
+        setSelectedProjectId(null);
+        setIsCreateMode(false);
+        setFormData(emptyForm);
+        return;
+      }
+
+      if (isCreateMode) {
+        return;
+      }
+
+      if (!selectedProject) {
+        setSelectedProjectId(projects[0].id);
+        return;
+      }
+
+      setFormData(buildProjectForm(selectedProject));
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [isCreateMode, projects, selectedProject]);
 
   const stats = useMemo(() => {
@@ -146,6 +172,7 @@ function Projects() {
 
   const startCreateMode = () => {
     if (!canManageProjects) return;
+    setIsDeleteConfirmOpen(false);
     setIsCreateMode(true);
     setSelectedProjectId(null);
     setFormData(emptyForm);
@@ -153,13 +180,13 @@ function Projects() {
 
   const handleDelete = () => {
     if (!canManageProjects || !selectedProject) return;
-    if (!window.confirm(t("projects.confirmDelete"))) return;
     deleteProject(
       { resource: "projects", id: selectedProject.id },
       {
         onSuccess: () => {
           setIsCreateMode(false);
           setSelectedProjectId(null);
+          setIsDeleteConfirmOpen(false);
           refreshProjects();
         },
         onError: () => alert(t("projects.deleteError")),
@@ -360,7 +387,7 @@ function Projects() {
                       <button type="submit" disabled={isCreating || isUpdating} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60">
                         {isCreating || isUpdating ? t("settings.processing") : !isCreateMode && selectedProject ? t("projects.saveProject") : t("projects.createProjectAction")}
                       </button>
-                      <button type="button" onClick={isCreateMode ? () => setIsCreateMode(false) : handleDelete} disabled={!isCreateMode && !selectedProject} className="rounded-2xl border border-red-200 px-4 py-3 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-40">
+                      <button type="button" onClick={isCreateMode ? () => setIsCreateMode(false) : () => setIsDeleteConfirmOpen(true)} disabled={!isCreateMode && !selectedProject} className="rounded-2xl border border-red-200 px-4 py-3 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-40">
                         {isCreateMode ? t("projects.cancelCreate") : t("projects.deleteProject")}
                       </button>
                     </div>
@@ -409,6 +436,14 @@ function Projects() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(selectedProject && isDeleteConfirmOpen)}
+        title={t("projects.deleteProject")}
+        description={selectedProject ? `${selectedProject.name}: ${t("projects.confirmDelete")}` : ""}
+        onClose={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

@@ -128,11 +128,11 @@ function CreateSnippet() {
                 <div className="mt-6 space-y-3">
                   <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("snippets.titlePlaceholder")}</p>
-                    <p className="mt-2 text-lg font-black text-white">{formData.title || "—"}</p>
+                    <p className="mt-2 text-lg font-black text-white">{formData.title || "-"}</p>
                   </div>
                   <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("snippets.descriptionPlaceholder")}</p>
-                    <p className="mt-2 text-sm leading-7 text-slate-300">{formData.description || "—"}</p>
+                    <p className="mt-2 text-sm leading-7 text-slate-300">{formData.description || "-"}</p>
                   </div>
                 </div>
               </div>

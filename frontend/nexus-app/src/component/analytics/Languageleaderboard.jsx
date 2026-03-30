@@ -19,7 +19,9 @@ function LanguageLeaderboard({ snippets = [], comments = [], isLoading = false }
 
       stats[language].total += Number(comment.experience_rating || 0);
       stats[language].ratingCount += 1;
-      if (snippet?.id) stats[language].snippetIds.add(snippet.id);
+      if (snippet?.id) {
+        stats[language].snippetIds.add(snippet.id);
+      }
     });
 
     return Object.entries(stats)
@@ -28,7 +30,7 @@ function LanguageLeaderboard({ snippets = [], comments = [], isLoading = false }
         avg: Number((values.total / values.ratingCount).toFixed(1)),
         count: values.snippetIds.size || values.ratingCount,
       }))
-      .sort((a, b) => b.avg - a.avg || b.count - a.count)
+      .sort((left, right) => right.avg - left.avg || right.count - left.count)
       .slice(0, 5);
   }, [comments, snippets, t]);
 
@@ -45,7 +47,9 @@ function LanguageLeaderboard({ snippets = [], comments = [], isLoading = false }
             {t("analytics.leaderboard")}
           </h3>
         </div>
-        <span className="rounded border bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-400">{t("analytics.top5")}</span>
+        <span className="rounded border bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-400">
+          {t("analytics.top5")}
+        </span>
       </div>
 
       {!leaderboard.length ? (
@@ -68,11 +72,15 @@ function LanguageLeaderboard({ snippets = [], comments = [], isLoading = false }
               <div className="grow">
                 <div className="mb-1.5 flex items-center justify-between">
                   <span className="text-sm font-bold text-slate-700">{item.name}</span>
-                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-900">★ {item.avg}</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-900">
+                    * {item.avg}
+                  </span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                   <div
-                    className={`h-full transition-all duration-1000 ease-out ${index === 0 ? "bg-purple-600" : "bg-purple-400 opacity-60"}`}
+                    className={`h-full transition-all duration-1000 ease-out ${
+                      index === 0 ? "bg-purple-600" : "bg-purple-400 opacity-60"
+                    }`}
                     style={{ width: `${(item.avg / 5) * 100}%` }}
                   />
                 </div>

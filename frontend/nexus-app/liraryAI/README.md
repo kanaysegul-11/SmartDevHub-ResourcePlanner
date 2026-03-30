@@ -22,6 +22,18 @@ Start the server
 yarn dev
 ```
 
+Protect the editor before using `/edit` routes:
+
+```bash
+export PUCK_EDITOR_TOKEN=your-secret-token
+```
+
+Then open editor routes with the matching query string, for example:
+
+```text
+http://localhost:5173/edit?editorToken=your-secret-token
+```
+
 Navigate to the homepage at http://localhost:5173/. To edit the homepage, access the Puck editor at http://localhost:5173/edit.
 
 You can do this for any **base** route on the application, **even if the page doesn't exist**. For example, visit http://localhost:5173/hello-world and you'll receive a 404. You can author and publish a page by visiting http://localhost:5173/hello-world/edit. After publishing, go back to the original URL to see your page.

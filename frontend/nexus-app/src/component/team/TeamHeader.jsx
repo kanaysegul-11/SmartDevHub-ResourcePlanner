@@ -13,8 +13,22 @@ import { Badge } from "../../ui/components/Badge";
 import { Button } from "../../ui/components/Button";
 import { useI18n } from "../../I18nContext.jsx";
 
-function TeamHeader({ loading, stats, spotlightMembers = [], onInspect, onMessageClick }) {
+function TeamHeader({
+  loading,
+  stats,
+  spotlightMembers = [],
+  actionMember = null,
+  onInspect,
+  onMessageClick,
+  onMemberDragStart,
+  onMemberDragOver,
+  onMemberDrop,
+  onMemberDragEnd,
+  draggedMemberId,
+  dropTargetMemberId,
+}) {
   const { t } = useI18n();
+  const activeActionMember = actionMember || spotlightMembers[0] || null;
 
   if (loading) {
     return (
@@ -80,12 +94,20 @@ function TeamHeader({ loading, stats, spotlightMembers = [], onInspect, onMessag
               {t("team.takeAction")}
             </p>
             <p className="mt-3 text-2xl font-black tracking-tight">{t("team.spotlightTitle")}</p>
+            <div className="mt-5 rounded-[22px] border border-white/10 bg-white/5 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                {t("team.selectedPerson")}
+              </p>
+              <p className="mt-2 text-base font-black text-white">
+                {activeActionMember?.employee_name || t("team.waiting")}
+              </p>
+            </div>
             <div className="mt-6 flex flex-col gap-3">
               <Button
                 variant="neutral-secondary"
                 className="h-12 justify-between rounded-2xl border-white/10 bg-white/10 px-4 text-white hover:bg-white/15"
                 icon={<FeatherArrowUpRight />}
-                onClick={() => spotlightMembers[0] && onInspect?.(spotlightMembers[0])}
+                onClick={() => activeActionMember && onInspect?.(activeActionMember)}
               >
                 {t("team.reviewProfile")}
               </Button>
@@ -93,22 +115,52 @@ function TeamHeader({ loading, stats, spotlightMembers = [], onInspect, onMessag
                 variant="neutral-secondary"
                 className="h-12 justify-between rounded-2xl border-white/10 bg-white/10 px-4 text-white hover:bg-white/15"
                 icon={<FeatherMessageCircle />}
-                onClick={() => spotlightMembers[0] && onMessageClick?.(spotlightMembers[0])}
+                onClick={() => activeActionMember && onMessageClick?.(activeActionMember)}
               >
-                {t("team.openMessaging")}
+                {t("team.moveToChat")}
               </Button>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+      <section className="rounded-[32px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,255,255,0.8))] p-5 shadow-[0_20px_50px_rgba(148,163,184,0.12)] backdrop-blur">
+        <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h2 className="font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
+              {t("team.allMembers")}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              {t("team.allMembersBody")}
+            </p>
+          </div>
+          <div className="rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            {t("team.dragHelp")}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 2xl:grid-cols-3">
         {spotlightMembers.map((member) => (
           <div
             key={member.id}
-            className="rounded-[30px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,255,255,0.82))] p-5 shadow-[0_20px_50px_rgba(148,163,184,0.12)] backdrop-blur"
+            draggable
+            onDragStart={onMemberDragStart ? onMemberDragStart(member.id) : undefined}
+            onDragOver={onMemberDragOver ? onMemberDragOver(member.id) : undefined}
+            onDrop={onMemberDrop ? onMemberDrop(member.id) : undefined}
+            onDragEnd={onMemberDragEnd}
+            className={`rounded-[30px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,255,255,0.82))] p-5 shadow-[0_20px_50px_rgba(148,163,184,0.12)] backdrop-blur transition duration-200 hover:-translate-y-1 cursor-grab active:cursor-grabbing ${
+              String(draggedMemberId || "") === String(member.id) ? "scale-[0.985] opacity-55" : ""
+            } ${
+              String(dropTargetMemberId || "") === String(member.id)
+                ? "ring-2 ring-sky-300 ring-offset-2 ring-offset-white"
+                : ""
+            }`}
           >
-            <div className="flex items-center gap-4">
+            <div className="inline-flex rounded-full border border-slate-200/80 bg-white/85 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              {t("team.dragToReorder")}
+            </div>
+
+            <div className="mt-4 flex items-center gap-4">
               <Avatar size="large" variant={member.status_type === "busy" ? "warning" : "success"}>
                 {member.employee_name?.[0]?.toUpperCase() || "U"}
               </Avatar>
@@ -139,11 +191,12 @@ function TeamHeader({ loading, stats, spotlightMembers = [], onInspect, onMessag
                 className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
               >
                 <FeatherMessageCircle size={16} />
-                {t("team.message")}
+                {t("team.moveToChat")}
               </button>
             </div>
           </div>
         ))}
+        </div>
       </section>
     </div>
   );

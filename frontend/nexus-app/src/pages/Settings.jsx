@@ -99,7 +99,7 @@ function Settings() {
 
       await refreshUserData();
       flashSuccess(t("settings.profileUpdated"));
-    } catch (error) {
+    } catch {
       alert(t("settings.profileError"));
     } finally {
       setLoading(false);
@@ -218,4 +218,3 @@ function Settings() {
 }
 
 export default Settings;
-

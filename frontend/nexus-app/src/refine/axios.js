@@ -14,7 +14,6 @@ if (bootstrapToken) {
 
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
-  console.log("İstek gidiyor, token:", token);
   if (!config.headers) {
     config.headers = {};
   }

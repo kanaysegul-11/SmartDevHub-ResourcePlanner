@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { useList } from "@refinedev/core";
 import { FeatherActivity, FeatherStar, FeatherTarget, FeatherTrendingUp } from "@subframe/core";
 import { useNavigate } from "react-router-dom";
@@ -8,13 +8,14 @@ import Sidebar from "../component/layout/Sidebar";
 import AnalyticsHeader from "../component/analytics/AnalyticsHeader";
 import LanguageChart from "../component/analytics/LanguageChart";
 import SentimentChart from "../component/analytics/SentimentChart";
-import LanguageLeaderboard from "../component/analytics/Languageleaderboard";
+import LanguageLeaderboard from "../component/analytics/LanguageLeaderboard";
 import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
 import { Badge } from "../ui/components/Badge";
 import { useI18n } from "../I18nContext.jsx";
 
+const EMPTY_LIST = [];
+
 function Analytics() {
-  const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
   const { language, t } = useI18n();
   const sharedQueryOptions = {
@@ -26,18 +27,15 @@ function Analytics() {
   const snippetsQuery = useList({ resource: "snippets", ...sharedQueryOptions });
   const commentsQuery = useList({ resource: "comments", ...sharedQueryOptions });
 
-  const snippets = snippetsQuery.data?.data ?? [];
-  const comments = commentsQuery.data?.data ?? [];
-  const searchQuery = searchTerm.trim().toLowerCase();
-
-  const filteredSnippets = useMemo(() => {
-    if (!searchQuery) return snippets;
-    return snippets.filter((snippet) =>
-      [snippet.title, snippet.language, snippet.description].some((field) =>
-        (field || "").toLowerCase().includes(searchQuery)
-      )
-    );
-  }, [searchQuery, snippets]);
+  const snippets = useMemo(
+    () => snippetsQuery.data?.data ?? EMPTY_LIST,
+    [snippetsQuery.data]
+  );
+  const comments = useMemo(
+    () => commentsQuery.data?.data ?? EMPTY_LIST,
+    [commentsQuery.data]
+  );
+  const filteredSnippets = snippets;
 
   const filteredSnippetMap = useMemo(
     () => new Map(filteredSnippets.map((snippet) => [snippet.id, snippet])),
@@ -187,9 +185,6 @@ function Analytics() {
 
           <div className="flex w-full flex-col items-start gap-6 px-6 md:px-8 xl:px-10">
             <AnalyticsHeader
-              searchTerm={searchTerm}
-              onSearchChange={(event) => setSearchTerm(event.target.value)}
-              resultsCount={filteredSnippets.length}
               totalComments={totalComments}
               averageRating={averageRating}
             />

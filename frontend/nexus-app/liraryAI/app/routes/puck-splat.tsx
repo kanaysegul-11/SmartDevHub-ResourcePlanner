@@ -8,9 +8,31 @@ import { resolvePuckPath } from "~/lib/resolve-puck-path.server";
 import { getPage, savePage } from "~/lib/pages.server";
 import editorStyles from "@puckeditor/core/puck.css?url";
 
-export async function loader({ params }: Route.LoaderArgs) {
+function assertEditorAccess(request: Request) {
+  const expectedToken = process.env.PUCK_EDITOR_TOKEN?.trim();
+  if (!expectedToken) {
+    throw new Response("Editor access is disabled until PUCK_EDITOR_TOKEN is configured.", {
+      status: 403,
+    });
+  }
+
+  const url = new URL(request.url);
+  const providedToken =
+    url.searchParams.get("editorToken") ||
+    request.headers.get("x-puck-editor-token") ||
+    "";
+
+  if (providedToken !== expectedToken) {
+    throw new Response("Unauthorized editor access.", { status: 401 });
+  }
+}
+
+export async function loader({ params, request }: Route.LoaderArgs) {
   const pathname = params["*"] ?? "/";
   const { isEditorRoute, path } = resolvePuckPath(pathname);
+  if (isEditorRoute) {
+    assertEditorAccess(request);
+  }
   let page = await getPage(path);
 
   // Throw a 404 if we're not rendering the editor and data for the page does not exist
@@ -50,6 +72,7 @@ export function meta({ data: loaderData }: Route.MetaArgs) {
 export async function action({ params, request }: Route.ActionArgs) {
   const pathname = params["*"] ?? "/";
   const { path } = resolvePuckPath(pathname);
+  assertEditorAccess(request);
   const body = (await request.json()) as { data: Data };
 
   await savePage(path, body.data);

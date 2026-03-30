@@ -17,7 +17,7 @@ function NotificationsPage() {
 
       <div className="flex grow flex-col items-start self-stretch overflow-y-auto bg-default-background">
         <TopbarWithRightNav
-          className="border-b border-solid border-neutral-border bg-white px-8 py-3"
+          className="border-b border-solid border-neutral-border bg-white px-4 py-3 sm:px-6 md:px-8"
           leftSlot={
             <Badge variant="neutral" icon={<FeatherBell />}>
               {t("notifications.workspace")}
@@ -26,8 +26,8 @@ function NotificationsPage() {
           rightSlot={<Badge variant="success">{t("settings.secure")}</Badge>}
         />
 
-        <div className="w-full px-8 py-10">
-          <div className="mx-auto max-w-6xl rounded-[2.5rem] border border-slate-200 bg-white p-12 shadow-sm">
+        <div className="w-full px-4 py-6 sm:px-6 md:px-8 md:py-10">
+          <div className="mx-auto max-w-6xl rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:rounded-[2.5rem] sm:p-8 lg:p-12">
             <NotificationsPanel />
           </div>
         </div>

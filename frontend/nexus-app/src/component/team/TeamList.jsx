@@ -13,6 +13,12 @@ function TeamList({
   onMessageClick,
   canManage,
   emptyMessage,
+  onMemberDragStart,
+  onMemberDragOver,
+  onMemberDrop,
+  onMemberDragEnd,
+  draggedMemberId,
+  dropTargetMemberId,
 }) {
   const { t } = useI18n();
   const isBusy = variant === "busy";
@@ -36,6 +42,9 @@ function TeamList({
           <p className="mt-1 text-sm text-slate-500">
             {count} {t("team.memberCount")}
           </p>
+          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            {t("team.dragHelp")}
+          </p>
         </div>
       </div>
 
@@ -49,6 +58,13 @@ function TeamList({
             onInspect={onInspect}
             onMessageClick={onMessageClick}
             canManage={canManage}
+            onDragStart={onMemberDragStart ? onMemberDragStart(member.id) : undefined}
+            onDragOver={onMemberDragOver ? onMemberDragOver(member.id) : undefined}
+            onDrop={onMemberDrop ? onMemberDrop(member.id) : undefined}
+            onDragEnd={onMemberDragEnd}
+            isDragging={String(draggedMemberId || "") === String(member.id)}
+            isDropTarget={String(dropTargetMemberId || "") === String(member.id)}
+            messageLabel={t("team.moveToChat")}
           />
         ))}
         {members.length === 0 ? (
@@ -62,4 +78,3 @@ function TeamList({
 }
 
 export default TeamList;
-

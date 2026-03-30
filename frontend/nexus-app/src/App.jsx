@@ -14,7 +14,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import SnippetList from "./pages/SnippetList";
 import SnippetDetail from "./pages/SnippetsDetails";
-import CreateSnippet from "./pages/CreatSnippets";
+import CreateSnippet from "./pages/CreateSnippets";
 import Team from "./pages/Team";
 import CreateMember from "./pages/CreateMember";
 import Analytics from "./pages/Analytics";

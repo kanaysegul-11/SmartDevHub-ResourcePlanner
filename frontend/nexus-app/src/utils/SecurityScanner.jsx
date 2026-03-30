@@ -55,3 +55,93 @@ export const scanCodeSecurity = (code = "") => {
 
   return detectedRisks;
 };
+
+const collectHighlightRanges = (line = "", risks = []) => {
+  const ranges = [];
+
+  risks.forEach((risk) => {
+    if (!risk?.patternString) return;
+
+    const regex = new RegExp(risk.patternString, "gi");
+    let match;
+
+    while ((match = regex.exec(line)) !== null) {
+      if (!match[0]) {
+        regex.lastIndex += 1;
+        continue;
+      }
+
+      ranges.push({
+        start: match.index,
+        end: match.index + match[0].length,
+      });
+    }
+  });
+
+  return ranges
+    .sort((left, right) => left.start - right.start || left.end - right.end)
+    .reduce((merged, current) => {
+      const previous = merged[merged.length - 1];
+
+      if (!previous || current.start > previous.end) {
+        merged.push(current);
+        return merged;
+      }
+
+      previous.end = Math.max(previous.end, current.end);
+      return merged;
+    }, []);
+};
+
+export const renderHighlightedCodeLines = (
+  code = "",
+  risks = [],
+  highlightClassName = ""
+) => {
+  if (!code) return "";
+  if (!risks.length) return code;
+
+  return code.split("\n").map((line, lineIndex) => {
+    const ranges = collectHighlightRanges(line, risks);
+
+    if (!ranges.length) {
+      return <div key={`line-${lineIndex}`}>{line || " "}</div>;
+    }
+
+    const parts = [];
+    let cursor = 0;
+
+    ranges.forEach((range, rangeIndex) => {
+      if (range.start > cursor) {
+        parts.push(
+          <span key={`text-${lineIndex}-${rangeIndex}`}>
+            {line.slice(cursor, range.start)}
+          </span>
+        );
+      }
+
+      parts.push(
+        <span
+          key={`highlight-${lineIndex}-${rangeIndex}`}
+          className={highlightClassName}
+        >
+          {line.slice(range.start, range.end)}
+        </span>
+      );
+
+      cursor = range.end;
+    });
+
+    if (cursor < line.length) {
+      parts.push(
+        <span key={`tail-${lineIndex}`}>{line.slice(cursor)}</span>
+      );
+    }
+
+    if (!parts.length) {
+      parts.push(<span key={`empty-${lineIndex}`}> </span>);
+    }
+
+    return <div key={`line-${lineIndex}`}>{parts}</div>;
+  });
+};

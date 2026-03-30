@@ -1,6 +1,7 @@
 import { apiClient } from "./axios";
 
 export const SESSION_UPDATED_EVENT = "nexus:session-updated";
+export const SESSION_MARKER_KEY = "nexus:session-marker";
 
 export function notifySessionUpdated() {
   if (typeof window !== "undefined") {
@@ -31,6 +32,7 @@ export function applySessionPayload(payload = {}) {
   }
 
   localStorage.setItem("is_admin", payload?.is_admin ? "true" : "false");
+  localStorage.setItem(SESSION_MARKER_KEY, String(Date.now()));
   notifySessionUpdated();
 
   return true;
@@ -42,6 +44,7 @@ export function clearSessionPayload() {
   localStorage.removeItem("user_id");
   localStorage.removeItem("is_admin");
   localStorage.removeItem("language");
+  localStorage.removeItem(SESSION_MARKER_KEY);
   delete apiClient.defaults.headers.common.Authorization;
   notifySessionUpdated();
 }

@@ -10,7 +10,14 @@ import { Badge } from "../../ui/components/Badge";
 import { Button } from "../../ui/components/Button";
 import { TextArea } from "../../ui/components/TextArea";
 
-function TeamConversationPanel({ member }) {
+function TeamConversationPanel({
+  member,
+  dropPreviewMember = null,
+  isDropActive = false,
+  onPanelDragOver,
+  onPanelDragLeave,
+  onPanelDrop,
+}) {
   const { userData } = useUser();
   const { language, t } = useI18n();
   const [messages, setMessages] = useState([]);
@@ -105,15 +112,22 @@ function TeamConversationPanel({ member }) {
   };
 
   return (
-    <aside className="rounded-[32px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.82))] p-6 shadow-[0_24px_70px_rgba(148,163,184,0.14)] backdrop-blur lg:p-7">
+    <aside
+      onDragOver={onPanelDragOver}
+      onDragLeave={onPanelDragLeave}
+      onDrop={onPanelDrop}
+      className={`rounded-[32px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.82))] p-6 shadow-[0_24px_70px_rgba(148,163,184,0.14)] backdrop-blur transition lg:p-7 ${
+        isDropActive ? "ring-2 ring-sky-300 ring-offset-2 ring-offset-slate-100" : ""
+      }`}
+    >
       <div className="flex flex-col gap-4 border-b border-slate-200/70 pb-6 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <Badge variant="neutral" icon={<FeatherMessageCircle />}>
-            Team Chat
+            {t("team.chatBadge")}
           </Badge>
           <h3 className="mt-4 font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
             {member?.employee_name
-              ? `${member.employee_name} ${t("team.talkingWith")}`
+              ? `${t("team.conversationLabel")}: ${member.employee_name}`
               : t("team.conversationCenter")}
           </h3>
         </div>
@@ -123,6 +137,25 @@ function TeamConversationPanel({ member }) {
           </p>
           <p className="mt-1 text-sm font-bold">{member?.employee_name || t("team.waiting")}</p>
         </div>
+      </div>
+
+      <div
+        className={`mt-6 rounded-[28px] border border-dashed px-5 py-4 text-sm transition ${
+          isDropActive
+            ? "border-sky-300 bg-sky-50/80 text-sky-700"
+            : "border-slate-200 bg-slate-50/70 text-slate-500"
+        }`}
+      >
+        <p className="font-semibold">
+          {isDropActive
+            ? t("team.dropMemberToChatActive")
+            : t("team.dropMemberToChat")}
+        </p>
+        <p className="mt-2 leading-6">
+          {dropPreviewMember?.employee_name
+            ? `${dropPreviewMember.employee_name} ${t("team.dropMemberToChatBody")}`
+            : t("team.dropMemberToChatHint")}
+        </p>
       </div>
 
       {!member ? (

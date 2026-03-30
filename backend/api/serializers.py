@@ -21,6 +21,7 @@ class StatusSerializer(serializers.ModelSerializer):
     active_task_project_name = serializers.SerializerMethodField()
     active_task_project_client = serializers.SerializerMethodField()
     active_task_project_end_date = serializers.SerializerMethodField()
+    active_project_count = serializers.SerializerMethodField()
 
     class Meta:
         model = EmploymentStatus
@@ -39,6 +40,7 @@ class StatusSerializer(serializers.ModelSerializer):
             'active_task_project_name',
             'active_task_project_client',
             'active_task_project_end_date',
+            'active_project_count',
             'last_updated',
         ]
 
@@ -72,27 +74,27 @@ class StatusSerializer(serializers.ModelSerializer):
 
         return self._user_lookup.get(self._normalize_identity(obj.employee_name))
 
-    def _get_active_task(self, obj):
-        if not hasattr(self, "_active_task_cache"):
-            self._active_task_cache = {}
-
-        if obj.id in self._active_task_cache:
-            return self._active_task_cache[obj.id]
+    def _get_open_tasks(self, obj):
+        if not hasattr(self, "_open_task_cache"):
+            self._open_task_cache = {}
 
         resolved_user = self._resolve_user(obj)
         if not resolved_user:
-            self._active_task_cache[obj.id] = None
-            return None
+            return []
 
-        task = (
-            Task.objects.select_related('project')
-            .filter(assignee_id=resolved_user.id)
-            .exclude(status='done')
-            .order_by('deadline', '-updated_at')
-            .first()
-        )
-        self._active_task_cache[obj.id] = task
-        return task
+        if resolved_user.id not in self._open_task_cache:
+            self._open_task_cache[resolved_user.id] = list(
+                Task.objects.select_related('project')
+                .filter(assignee_id=resolved_user.id)
+                .exclude(status='done')
+                .order_by('deadline', '-updated_at')
+            )
+
+        return self._open_task_cache[resolved_user.id]
+
+    def _get_active_task(self, obj):
+        open_tasks = self._get_open_tasks(obj)
+        return open_tasks[0] if open_tasks else None
 
     def get_effective_status(self, obj):
         return 'busy' if self._get_active_task(obj) else 'available'
@@ -120,6 +122,9 @@ class StatusSerializer(serializers.ModelSerializer):
     def get_active_task_project_end_date(self, obj):
         task = self._get_active_task(obj)
         return task.project.end_date if task and task.project else None
+
+    def get_active_project_count(self, obj):
+        return len({task.project_id for task in self._get_open_tasks(obj) if task.project_id})
 
 class CommentSerializer(serializers.ModelSerializer):
     author_details = UserSerializer(source='author', read_only=True)
@@ -201,6 +206,33 @@ class ProjectSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
+
+    def _get_combined_team_members(self, obj):
+        members_by_id = {
+            member.id: member
+            for member in obj.team_members.select_related("user").all()
+        }
+
+        task_assignee_ids = obj.tasks.exclude(assignee_id__isnull=True).values_list(
+            "assignee_id",
+            flat=True,
+        ).distinct()
+
+        for member in EmploymentStatus.objects.select_related("user").filter(user_id__in=task_assignee_ids):
+            members_by_id[member.id] = member
+
+        return list(members_by_id.values())
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        combined_members = self._get_combined_team_members(instance)
+        data["team_members"] = [member.id for member in combined_members]
+        data["team_member_details"] = StatusSerializer(
+            combined_members,
+            many=True,
+            context=self.context,
+        ).data
+        return data
 
 
 class TaskSerializer(serializers.ModelSerializer):

@@ -1,4 +1,4 @@
-module.exports = {
+const config = {
   // ...
 
   theme: {
@@ -189,3 +189,5 @@ module.exports = {
     },
   },
 };
+
+export default config;

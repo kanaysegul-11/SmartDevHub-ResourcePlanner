@@ -1,12 +1,15 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useOne, useCreate, useInvalidate } from "@refinedev/core";
 import { FeatherClock3, FeatherShield, FeatherUser } from "@subframe/core";
 import Sidebar from "../component/layout/Sidebar";
 import SnippetDetailHeader from "../component/snippets/SnippetDetailHeader";
 import SnippetComments from "../component/snippets/SnippetComments";
-import { scanCodeSecurity } from "../utils/SecurityScanner";
+import {
+  renderHighlightedCodeLines,
+  scanCodeSecurity,
+} from "../utils/SecurityScanner";
 import SecurityReportCard from "../component/security/SecurityReportCard";
 import { useI18n } from "../I18nContext.jsx";
 
@@ -21,22 +24,11 @@ function SnippetDetail() {
   const risks = snippet?.code ? scanCodeSecurity(snippet.code) : [];
 
   const renderHighlightedCode = (codeText) => {
-    if (!codeText || !risks.length) return codeText || "";
-
-    return codeText.split("\n").map((line, index) => {
-      let highlightedLine = line;
-      risks.forEach((risk) => {
-        if (risk.patternString) {
-          const regex = new RegExp(`(${risk.patternString})`, "gi");
-          highlightedLine = highlightedLine.replace(
-            regex,
-            `<span style="color: #fca5a5; font-weight: 800; text-decoration: underline; background-color: rgba(127, 29, 29, 0.35); padding: 0 4px; border-radius: 4px;">$1</span>`
-          );
-        }
-      });
-
-      return <div key={index} dangerouslySetInnerHTML={{ __html: highlightedLine || " " }} />;
-    });
+    return renderHighlightedCodeLines(
+      codeText,
+      risks,
+      "rounded-[4px] bg-red-950/35 px-1 font-extrabold text-red-300 underline"
+    );
   };
 
   const { mutate: createComment, isLoading: isSubmitting } = useCreate();
@@ -66,30 +58,28 @@ function SnippetDetail() {
     }).format(date);
   };
 
-  const metaCards = useMemo(() => {
-    if (!snippet) return [];
-
-    return [
-      {
-        key: "author",
-        label: t("snippets.detailAuthor"),
-        value: snippet.author_details?.username || t("snippets.currentUserFallback"),
-        icon: <FeatherUser size={18} />,
-      },
-      {
-        key: "date",
-        label: t("snippets.detailCreated"),
-        value: formatDate(snippet.created_at),
-        icon: <FeatherClock3 size={18} />,
-      },
-      {
-        key: "risk",
-        label: t("snippets.detailRiskLabel"),
-        value: risks.length ? String(risks.length) : t("snippets.systemSecure"),
-        icon: <FeatherShield size={18} />,
-      },
-    ];
-  }, [formatDate, risks.length, snippet, t]);
+  const metaCards = !snippet
+    ? []
+    : [
+        {
+          key: "author",
+          label: t("snippets.detailAuthor"),
+          value: snippet.author_details?.username || t("snippets.currentUserFallback"),
+          icon: <FeatherUser size={18} />,
+        },
+        {
+          key: "date",
+          label: t("snippets.detailCreated"),
+          value: formatDate(snippet.created_at),
+          icon: <FeatherClock3 size={18} />,
+        },
+        {
+          key: "risk",
+          label: t("snippets.detailRiskLabel"),
+          value: risks.length ? String(risks.length) : t("snippets.systemSecure"),
+          icon: <FeatherShield size={18} />,
+        },
+      ];
 
   if (snippetQuery?.isLoading) {
     return (

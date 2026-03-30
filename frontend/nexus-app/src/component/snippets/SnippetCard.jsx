@@ -2,7 +2,10 @@
 import React from "react";
 import { Avatar } from "../../ui/components/Avatar";
 import { FeatherChevronRight, FeatherMessageSquare, FeatherAlertTriangle, FeatherTrash2 } from "@subframe/core";
-import { scanCodeSecurity } from "../../utils/SecurityScanner";
+import {
+  renderHighlightedCodeLines,
+  scanCodeSecurity,
+} from "../../utils/SecurityScanner";
 import { useDelete } from "@refinedev/core";
 import { Popconfirm } from "antd";
 import { useI18n } from "../../I18nContext.jsx";
@@ -26,17 +29,11 @@ function SnippetCard({ snippet, onClick }) {
   };
 
   const highlightRisks = (code) => {
-    if (!code || !risks.length) return code;
-    return code.split("\n").map((line, i) => {
-      let highlightedLine = line;
-      risks.forEach((risk) => {
-        if (risk.patternString) {
-          const regex = new RegExp(`(${risk.patternString})`, "gi");
-          highlightedLine = highlightedLine.replace(regex, `<span style="color: #ff4d4f; font-weight: 900; background-color: rgba(255, 77, 79, 0.2); padding: 0 2px; border-radius: 2px;">$1</span>`);
-        }
-      });
-      return <div key={i} dangerouslySetInnerHTML={{ __html: highlightedLine }} />;
-    });
+    return renderHighlightedCodeLines(
+      code,
+      risks,
+      "rounded-[2px] bg-red-500/20 px-[2px] font-black text-red-300"
+    );
   };
 
   return (
@@ -81,4 +78,3 @@ function SnippetCard({ snippet, onClick }) {
 }
 
 export default SnippetCard;
-

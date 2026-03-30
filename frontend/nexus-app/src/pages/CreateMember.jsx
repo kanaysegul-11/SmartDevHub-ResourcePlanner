@@ -9,6 +9,8 @@ import { Badge } from "../ui/components/Badge";
 import { TextField } from "../ui/components/TextField";
 import { useI18n } from "../I18nContext.jsx";
 
+const EMPTY_USERS = [];
+
 function AddMember() {
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -21,7 +23,10 @@ function AddMember() {
   });
   const { onFinish, formLoading } = useForm({ resource: "status", action: "create" });
   const usersQuery = useList({ resource: "users" });
-  const userOptions = usersQuery.data?.data ?? [];
+  const userOptions = useMemo(
+    () => usersQuery.data?.data ?? EMPTY_USERS,
+    [usersQuery.data]
+  );
 
   const handleLinkedUserChange = (value) => {
     const selectedUser = userOptions.find((user) => String(user.id) === String(value));

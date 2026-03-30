@@ -4,7 +4,7 @@ from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission, SAFE_METHODS
@@ -105,6 +105,55 @@ def create_notification(*, recipient, actor=None, notification_type="system", ti
         body=body,
         link=link,
     )
+
+
+def get_user_display_name(user):
+    if not user:
+        return "Kullanici"
+
+    full_name = f"{user.first_name} {user.last_name}".strip()
+    return full_name or user.username
+
+
+def ensure_member_project_membership(*, user, project):
+    if not user or not project:
+        return
+
+    member_status = resolve_status_for_user(user)
+    if not member_status:
+        return
+
+    project.team_members.add(member_status)
+
+
+def notify_task_completed(*, task, actor):
+    if not task or not actor:
+        return
+
+    recipients = {}
+
+    def add_recipient(user):
+        if not user or user.id == actor.id:
+            return
+        recipients[user.id] = user
+
+    add_recipient(task.created_by)
+
+    for admin_user in User.objects.filter(Q(is_staff=True) | Q(is_superuser=True)):
+        add_recipient(admin_user)
+
+    actor_name = get_user_display_name(actor)
+    project_name = task.project.name if task.project else "Bagimsiz gorev"
+
+    for recipient in recipients.values():
+        create_notification(
+            recipient=recipient,
+            actor=actor,
+            notification_type="task",
+            title="Gorev tamamlandi",
+            body=f"{actor_name}, {project_name} icindeki {task.title} gorevini tamamladi.",
+            link="/tasks",
+        )
 
 
 def recalculate_project_progress(project_id):
@@ -298,6 +347,8 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         task = serializer.save(created_by=self.request.user)
+        if task.assignee_id and task.project_id:
+            ensure_member_project_membership(user=task.assignee, project=task.project)
         recalculate_project_progress(task.project_id)
         if task.assignee_id and task.assignee_id != self.request.user.id:
             create_notification(
@@ -311,6 +362,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         current_task = self.get_object()
+        previous_status = current_task.status
         previous_assignee_id = current_task.assignee_id
         previous_project_id = current_task.project_id
         if not (request.user.is_staff or request.user.is_superuser):
@@ -329,11 +381,17 @@ class TaskViewSet(viewsets.ModelViewSet):
             updated_task = serializer.instance
             for project_id in {previous_project_id, updated_task.project_id}:
                 recalculate_project_progress(project_id)
+            if updated_task.project_id and updated_task.assignee_id:
+                ensure_member_project_membership(user=updated_task.assignee, project=updated_task.project)
+            if previous_status != "done" and updated_task.status == "done":
+                notify_task_completed(task=updated_task, actor=request.user)
             return Response(serializer.data)
         response = super().update(request, *args, **kwargs)
         updated_task = self.get_object()
         for project_id in {previous_project_id, updated_task.project_id}:
             recalculate_project_progress(project_id)
+        if updated_task.project_id and updated_task.assignee_id:
+            ensure_member_project_membership(user=updated_task.assignee, project=updated_task.project)
         if updated_task.assignee_id and updated_task.assignee_id != previous_assignee_id:
             create_notification(
                 recipient=updated_task.assignee,
@@ -354,7 +412,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 class UserNotificationViewSet(viewsets.ModelViewSet):
     serializer_class = UserNotificationSerializer
     permission_classes = [IsAuthenticated]
-    http_method_names = ["get", "patch", "head", "options"]
+    http_method_names = ["get", "patch", "delete", "head", "options"]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["is_read", "type"]
     ordering_fields = ["created_at"]
@@ -363,6 +421,13 @@ class UserNotificationViewSet(viewsets.ModelViewSet):
         return UserNotification.objects.select_related("recipient", "actor").filter(
             recipient=self.request.user
         )
+
+    @action(detail=False, methods=["delete"], url_path="clear-all")
+    def clear_all(self, request):
+        notifications = self.get_queryset()
+        deleted_count = notifications.count()
+        notifications.delete()
+        return Response({"deleted_count": deleted_count}, status=status.HTTP_200_OK)
 
 
 class AdminContactListView(APIView):
@@ -688,10 +753,11 @@ def change_password(request):
     user.set_password(new_password)
     user.save()
     return Response({"message": "Şifre başarıyla güncellendi."})
-def _serialize_user(user, request):
+def _serialize_user(user, request, profile=None):
+    profile = profile or getattr(user, 'profile', None)
     avatar = ''
-    if hasattr(user, 'profile') and user.profile.profile_photo:
-        avatar = request.build_absolute_uri(user.profile.profile_photo.url)
+    if profile and profile.profile_photo:
+        avatar = request.build_absolute_uri(profile.profile_photo.url)
 
     return {
         'id': user.id,
@@ -701,7 +767,7 @@ def _serialize_user(user, request):
         'lastName': user.last_name,
         'avatar': avatar,
         'isAdmin': user.is_staff or user.is_superuser,
-        'language': getattr(getattr(user, 'profile', None), 'language', 'en'),
+        'language': getattr(profile, 'language', 'en'),
     }
 
 
@@ -732,4 +798,4 @@ def update_profile(request):
         user.save()
         profile.save()
 
-    return Response(_serialize_user(user, request), status=status.HTTP_200_OK)
+    return Response(_serialize_user(user, request, profile=profile), status=status.HTTP_200_OK)
