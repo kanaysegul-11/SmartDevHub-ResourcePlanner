@@ -16,6 +16,7 @@ from django.conf import settings
 from django.db import OperationalError
 from urllib import request as urllib_request
 from urllib.parse import urlencode
+from .text_utils import normalize_legacy_turkish_text
 import json
 
 SUPPORTED_LANGUAGES = {"en", "tr", "de", "fr", "es", "ar"}
@@ -101,15 +102,15 @@ def create_notification(*, recipient, actor=None, notification_type="system", ti
         recipient=recipient,
         actor=actor,
         type=notification_type,
-        title=title[:200],
-        body=body,
+        title=normalize_legacy_turkish_text(title)[:200],
+        body=normalize_legacy_turkish_text(body),
         link=link,
     )
 
 
 def get_user_display_name(user):
     if not user:
-        return "Kullanici"
+        return "Kullanıcı"
 
     full_name = f"{user.first_name} {user.last_name}".strip()
     return full_name or user.username
@@ -143,15 +144,15 @@ def notify_task_completed(*, task, actor):
         add_recipient(admin_user)
 
     actor_name = get_user_display_name(actor)
-    project_name = task.project.name if task.project else "Bagimsiz gorev"
+    project_name = task.project.name if task.project else "Bağımsız görev"
 
     for recipient in recipients.values():
         create_notification(
             recipient=recipient,
             actor=actor,
             notification_type="task",
-            title="Gorev tamamlandi",
-            body=f"{actor_name}, {project_name} icindeki {task.title} gorevini tamamladi.",
+            title="Görev Tamamlandı",
+            body=f"{actor_name}, {project_name} içindeki {task.title} görevini tamamladı.",
             link="/tasks",
         )
 
@@ -269,14 +270,14 @@ class TeamMessageViewSet(viewsets.ModelViewSet):
                 recipient=recipient_user,
                 actor=self.request.user,
                 notification_type="message",
-                title="Yeni ekip mesaji",
-                body=f"{self.request.user.username} size bir mesaj gonderdi.",
+                title="Yeni ekip mesajı",
+                body=f"{self.request.user.username} size bir mesaj gönderdi.",
                 link=notification_link,
             )
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
-    queryset = Project.objects.prefetch_related('team_members').select_related('owner').all()
+    queryset = Project.objects.prefetch_related('team_members', 'tasks').select_related('owner').all()
     serializer_class = ProjectSerializer
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -308,8 +309,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
                     recipient=member.user,
                     actor=self.request.user,
                     notification_type="project",
-                    title="Proje bilgisi guncellendi",
-                    body=f"{project.name} projesiyle ilgili yeni bir guncelleme var.",
+                    title="Proje bilgisi güncellendi",
+                    body=f"{project.name} projesiyle ilgili yeni bir güncelleme var.",
                     link="/projects",
                 )
 
@@ -355,8 +356,8 @@ class TaskViewSet(viewsets.ModelViewSet):
                 recipient=task.assignee,
                 actor=self.request.user,
                 notification_type="task",
-                title="Size yeni gorev atandi",
-                body=f"{task.title} gorevi size atandi.",
+                title="Size yeni görev atandı",
+                body=f"{task.title} görevi size atandı.",
                 link="/tasks",
             )
 
@@ -397,8 +398,8 @@ class TaskViewSet(viewsets.ModelViewSet):
                 recipient=updated_task.assignee,
                 actor=request.user,
                 notification_type="task",
-                title="Size gorev atandi",
-                body=f"{updated_task.title} gorevi size atandi.",
+                title="Size Görev Atandı",
+                body=f"{updated_task.title} görevi size atandı.",
                 link="/tasks",
             )
         return response
@@ -446,7 +447,7 @@ class AdminContactListView(APIView):
                 defaults={
                     "employee_name": full_name or admin_user.username,
                     "position": "Administrator",
-                    "current_work": "Yonetici destek taleplerini takip ediyor.",
+                    "current_work": "Yönetici destek taleplerini takip ediyor.",
                     "status_type": "available",
                 },
             )
@@ -459,7 +460,7 @@ class AdminContactListView(APIView):
                 status.position = "Administrator"
                 updated_fields.append("position")
             if not status.current_work:
-                status.current_work = "Yonetici destek taleplerini takip ediyor."
+                status.current_work = "Yönetici destek taleplerini takip ediyor."
                 updated_fields.append("current_work")
             if updated_fields:
                 status.save(update_fields=updated_fields)
@@ -509,9 +510,9 @@ class DashboardActivityView(APIView):
             assignee_name = (
                 getattr(getattr(task.assignee, "employment_status", None), "employee_name", None)
                 or getattr(task.assignee, "username", None)
-                or "Atanmadi"
+                or "Atanmadı"
             )
-            project_name = task.project.name if task.project else "Proje baglanmadi"
+            project_name = task.project.name if task.project else "Proje bağlanmadı"
             activity.append(
                 {
                     "id": f"task-{task.id}",
@@ -528,19 +529,19 @@ class DashboardActivityView(APIView):
                     "id": f"project-{project.id}",
                     "type": "project",
                     "title": project.name,
-                    "meta": f"{project.client_name or 'Ic proje'} - {project.team_members.count()} ekip uyesi",
+                    "meta": f"{project.client_name or 'İç proje'} - {project.team_members.count()} ekip üyesi",
                     "timestamp": project.updated_at or project.created_at,
                 }
             )
 
         for message in messages.order_by("-created_at")[:10]:
-            recipient_name = message.recipient.employee_name or "Ekip uyesi"
+            recipient_name = message.recipient.employee_name or "Ekip üyesi"
             activity.append(
                 {
                     "id": f"message-{message.id}",
                     "type": "message",
                     "title": recipient_name,
-                    "meta": "Takim mesaji gonderildi",
+                    "meta": "Takım mesajı gönderildi",
                     "timestamp": message.created_at,
                 }
             )
@@ -568,8 +569,8 @@ class DashboardActivityView(APIView):
             )
 
         for status_item in statuses.order_by("-last_updated")[:10]:
-            member_name = status_item.employee_name or getattr(status_item.user, "username", "Ekip uyesi")
-            status_label = "Mesgul" if status_item.status_type == "busy" else "Musait"
+            member_name = status_item.employee_name or getattr(status_item.user, "username", "Ekip üyesi")
+            status_label = "Meşgul" if status_item.status_type == "busy" else "Müsait"
             activity.append(
                 {
                     "id": f"status-{status_item.id}",
@@ -621,19 +622,19 @@ def register_user(request):
 
     if not username or not password or not email:
         return Response(
-            {"error": "Kullanici adi, email ve sifre zorunludur."},
+            {"error": "Kullanıcı adı, email ve şifre zorunludur."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     if User.objects.filter(username=username).exists():
         return Response(
-            {"error": "Bu kullanici adi zaten kullaniliyor."},
+            {"error": "Bu kullanıcı adı zaten kullanılıyor."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     if User.objects.filter(email__iexact=email).exists():
         return Response(
-            {"error": "Bu email ile kayitli bir hesap zaten var."},
+            {"error": "Bu email ile kayıtlı bir hesap zaten var."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -647,7 +648,7 @@ def register_user(request):
         )
     except OperationalError:
         return Response(
-            {"error": "Veritabani su anda mesgul. Lütfen birkaç saniye sonra tekrar deneyin."},
+            {"error": "Veritabanı şu anda meşgul. Lütfen birkaç saniye sonra tekrar deneyin."},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
     token, _ = Token.objects.get_or_create(user=user)
@@ -671,7 +672,7 @@ def google_auth(request):
 
     if not id_token:
         return Response(
-            {"error": "Google token bulunamadi."},
+            {"error": "Google token bulunamadı."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -682,7 +683,7 @@ def google_auth(request):
             payload = json.loads(response.read().decode('utf-8'))
     except Exception:
         return Response(
-            {"error": "Google kimlik dogrulamasi basarisiz oldu."},
+            {"error": "Google kimlik doğrulaması başarısız oldu."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -692,13 +693,13 @@ def google_auth(request):
 
     if settings.GOOGLE_CLIENT_ID and audience != settings.GOOGLE_CLIENT_ID:
         return Response(
-            {"error": "Google client kimligi eslesmedi."},
+            {"error": "Google client kimliği eşleşmedi."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     if not email or not email_verified:
         return Response(
-            {"error": "Google hesabi dogrulanmis email dondurmedi."},
+            {"error": "Google hesabı doğrulanmış email döndürmedi."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 

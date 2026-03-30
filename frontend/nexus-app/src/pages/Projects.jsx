@@ -34,7 +34,7 @@ const buildProjectForm = (project) => ({
   name: project?.name || "",
   client_name: project?.client_name || "",
   summary: project?.summary || "",
-  status: project?.status || "planning",
+  status: project?.effective_status || project?.status || "planning",
   priority: project?.priority || "medium",
   progress: Number(project?.progress || 0),
   start_date: project?.start_date || "",
@@ -76,6 +76,15 @@ function Projects() {
     () => projectsQuery.data?.data ?? EMPTY_PROJECTS,
     [projectsQuery.data]
   );
+  const projectRecords = useMemo(
+    () =>
+      projects.map((project) => ({
+        ...project,
+        effective_status: project?.effective_status || project?.status || "planning",
+        is_completed_archive: Boolean(project?.is_completed_archive),
+      })),
+    [projects]
+  );
   const teamMembers = useMemo(
     () =>
       (teamQuery.data?.data ?? EMPTY_PROJECTS).filter(
@@ -83,9 +92,20 @@ function Projects() {
       ),
     [teamQuery.data]
   );
+  const activeProjects = useMemo(
+    () => projectRecords.filter((project) => !project.is_completed_archive),
+    [projectRecords]
+  );
+  const completedProjects = useMemo(
+    () => projectRecords.filter((project) => project.is_completed_archive),
+    [projectRecords]
+  );
   const selectedProject = useMemo(
-    () => (isCreateMode ? null : projects.find((project) => project.id === selectedProjectId) || null),
-    [isCreateMode, projects, selectedProjectId]
+    () =>
+      isCreateMode
+        ? null
+        : projectRecords.find((project) => project.id === selectedProjectId) || null,
+    [isCreateMode, projectRecords, selectedProjectId]
   );
 
   const formatProjectDate = (value) => {
@@ -104,7 +124,7 @@ function Projects() {
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      if (!projects.length) {
+      if (!projectRecords.length) {
         setSelectedProjectId(null);
         setIsCreateMode(false);
         setFormData(emptyForm);
@@ -116,7 +136,7 @@ function Projects() {
       }
 
       if (!selectedProject) {
-        setSelectedProjectId(projects[0].id);
+        setSelectedProjectId(projectRecords[0].id);
         return;
       }
 
@@ -126,16 +146,16 @@ function Projects() {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [isCreateMode, projects, selectedProject]);
+  }, [isCreateMode, projectRecords, selectedProject]);
 
   const stats = useMemo(() => {
-    const active = projects.filter((item) => item.status === "active").length;
-    const blocked = projects.filter((item) => item.status === "blocked").length;
-    const avgProgress = projects.length
-      ? Math.round(projects.reduce((sum, item) => sum + Number(item.progress || 0), 0) / projects.length)
+    const active = projectRecords.filter((item) => item.effective_status === "active").length;
+    const blocked = projectRecords.filter((item) => item.effective_status === "blocked").length;
+    const avgProgress = projectRecords.length
+      ? Math.round(projectRecords.reduce((sum, item) => sum + Number(item.progress || 0), 0) / projectRecords.length)
       : 0;
-    return { total: projects.length, active, blocked, avgProgress };
-  }, [projects]);
+    return { total: projectRecords.length, active, blocked, avgProgress };
+  }, [projectRecords]);
 
   const refreshProjects = () => invalidate({ resource: "projects", invalidates: ["list", "detail"] });
 
@@ -207,6 +227,67 @@ function Projects() {
     });
   };
 
+  const renderProjectCard = (project) => {
+    const isSelected = !isCreateMode && project.id === selectedProjectId;
+    const statusLabel = translateStatus(project.effective_status || project.status);
+    const baseClass = project.is_completed_archive
+      ? "border-emerald-200/80 bg-emerald-50/60 hover:border-emerald-300 hover:bg-white"
+      : "border-slate-200/80 bg-slate-50/75 hover:border-slate-300 hover:bg-white";
+    const selectedClass = project.is_completed_archive
+      ? "border-emerald-300 bg-white shadow-[0_16px_36px_rgba(16,185,129,0.14)]"
+      : "border-sky-200 bg-white shadow-[0_16px_36px_rgba(148,163,184,0.14)]";
+    const progressBarClass = project.is_completed_archive ? "bg-emerald-500" : "bg-slate-950";
+
+    return (
+      <button
+        key={project.id}
+        type="button"
+        onClick={() => {
+          setIsCreateMode(false);
+          setSelectedProjectId(project.id);
+        }}
+        className={`rounded-[28px] border p-5 text-left transition ${isSelected ? selectedClass : baseClass}`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-lg font-black tracking-tight text-slate-900">{project.name}</p>
+            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              {project.client_name || t("projects.internalProject")}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 text-right">
+            <Badge variant={project.is_completed_archive ? "success" : "neutral"}>{statusLabel}</Badge>
+            <Badge variant={project.priority === "critical" ? "error" : project.priority === "high" ? "warning" : "neutral"}>
+              {translatePriority(project.priority)}
+            </Badge>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              {canManageProjects ? t("projects.editable") : t("projects.readOnly")}
+            </span>
+          </div>
+        </div>
+        <p className="mt-4 line-clamp-3 text-sm leading-7 text-slate-600">{project.summary}</p>
+        <div className="mt-5">
+          <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+            <span>{t("projects.progress")}</span><span>%{project.progress || 0}</span>
+          </div>
+          <div className="h-2.5 rounded-full bg-slate-200">
+            <div className={`h-full rounded-full ${progressBarClass}`} style={{ width: `${Math.max(Number(project.progress || 0), 6)}%` }} />
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <div className="rounded-[20px] border border-slate-200 bg-white/80 px-3 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("projects.start")}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-700">{formatProjectDate(project.start_date)}</p>
+          </div>
+          <div className="rounded-[20px] border border-slate-200 bg-white/80 px-3 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("projects.delivery")}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-700">{formatProjectDate(project.end_date)}</p>
+          </div>
+        </div>
+      </button>
+    );
+  };
+
   return (
     <div className="flex h-screen w-full items-start overflow-hidden bg-transparent font-sans text-slate-900">
       <Sidebar activeItem="projects" showTeamSubmenu={true} logoClickable={true} />
@@ -267,54 +348,46 @@ function Projects() {
                     </button>
                   ) : null}
                 </div>
-                <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-2">
-                  {projects.map((project) => (
-                    <button
-                      key={project.id}
-                      type="button"
-                      onClick={() => {
-                        setIsCreateMode(false);
-                        setSelectedProjectId(project.id);
-                      }}
-                      className={`rounded-[28px] border p-5 text-left transition ${!isCreateMode && project.id === selectedProjectId ? "border-sky-200 bg-white shadow-[0_16px_36px_rgba(148,163,184,0.14)]" : "border-slate-200/80 bg-slate-50/75 hover:border-slate-300 hover:bg-white"}`}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-lg font-black tracking-tight text-slate-900">{project.name}</p>
-                          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{project.client_name || t("projects.internalProject")}</p>
-                        </div>
-                        <div className="flex flex-col gap-2 text-right">
-                          <Badge variant="neutral">{translateStatus(project.status)}</Badge>
-                          <Badge variant={project.priority === "critical" ? "error" : project.priority === "high" ? "warning" : "neutral"}>
-                            {translatePriority(project.priority)}
-                          </Badge>
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                            {canManageProjects ? t("projects.editable") : t("projects.readOnly")}
-                          </span>
-                        </div>
+                <div className="mt-7 grid grid-cols-1 gap-6 2xl:grid-cols-2">
+                  <div className="rounded-[28px] border border-slate-200/80 bg-slate-50/40 p-5">
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                      <div className="flex flex-col gap-1">
+                        <h3 className="text-xl font-black tracking-tight text-slate-950">{t("projects.activeProjectsTitle")}</h3>
+                        <p className="text-sm leading-7 text-slate-500">{t("projects.activeProjectsBody")}</p>
                       </div>
-                      <p className="mt-4 line-clamp-3 text-sm leading-7 text-slate-600">{project.summary}</p>
-                      <div className="mt-5">
-                        <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                          <span>{t("projects.progress")}</span><span>%{project.progress || 0}</span>
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black text-slate-700">
+                        {activeProjects.length}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-5">
+                      {activeProjects.map(renderProjectCard)}
+                      {!activeProjects.length ? (
+                        <div className="rounded-[28px] border border-dashed border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-400">
+                          {projectRecords.length ? t("projects.noActiveProjects") : t("projects.noProjects")}
                         </div>
-                        <div className="h-2.5 rounded-full bg-slate-200">
-                          <div className="h-full rounded-full bg-slate-950" style={{ width: `${Math.max(Number(project.progress || 0), 6)}%` }} />
-                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[28px] border border-emerald-100 bg-emerald-50/30 p-5">
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                      <div className="flex flex-col gap-1">
+                        <h3 className="text-xl font-black tracking-tight text-slate-950">{t("projects.completedProjectsTitle")}</h3>
+                        <p className="text-sm leading-7 text-slate-500">{t("projects.completedProjectsBody")}</p>
                       </div>
-                      <div className="mt-5 grid grid-cols-2 gap-3">
-                        <div className="rounded-[20px] border border-slate-200 bg-white/80 px-3 py-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("projects.start")}</p>
-                          <p className="mt-2 text-sm font-semibold text-slate-700">{formatProjectDate(project.start_date)}</p>
+                      <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-black text-emerald-700">
+                        {completedProjects.length}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-5">
+                      {completedProjects.map(renderProjectCard)}
+                      {!completedProjects.length ? (
+                        <div className="rounded-[28px] border border-dashed border-emerald-200 bg-white/80 px-5 py-10 text-center text-sm text-slate-400">
+                          {t("projects.noCompletedProjects")}
                         </div>
-                        <div className="rounded-[20px] border border-slate-200 bg-white/80 px-3 py-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("projects.delivery")}</p>
-                          <p className="mt-2 text-sm font-semibold text-slate-700">{formatProjectDate(project.end_date)}</p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                  {!projects.length ? <div className="rounded-[28px] border border-dashed border-slate-200 bg-slate-50/75 px-5 py-10 text-center text-sm text-slate-400">{t("projects.noProjects")}</div> : null}
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -403,7 +476,7 @@ function Projects() {
                         <div className="mt-4 grid grid-cols-2 gap-3">
                           <div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{t("projects.start")}</p><p className="mt-2 text-sm font-semibold text-slate-700">{formatProjectDate(selectedProject.start_date)}</p></div>
                           <div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{t("projects.delivery")}</p><p className="mt-2 text-sm font-semibold text-slate-700">{formatProjectDate(selectedProject.end_date)}</p></div>
-                          <div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{t("projects.status")}</p><p className="mt-2 text-sm font-semibold text-slate-700">{translateStatus(selectedProject.status)}</p></div>
+                          <div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{t("projects.status")}</p><p className="mt-2 text-sm font-semibold text-slate-700">{translateStatus(selectedProject.effective_status || selectedProject.status)}</p></div>
                           <div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{t("projects.progress")}</p><p className="mt-2 text-sm font-semibold text-slate-700">%{selectedProject.progress || 0}</p></div>
                         </div>
                       </div>

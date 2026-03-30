@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import Snippet, Comment, EmploymentStatus, PageConfig, TeamMessage, Project, Task, UserNotification
+from .text_utils import normalize_legacy_turkish_text
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 class UserSerializer(serializers.ModelSerializer):
     is_admin = serializers.SerializerMethodField()
@@ -185,6 +187,10 @@ class TeamMessageSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     owner_details = UserSerializer(source='owner', read_only=True)
     team_member_details = StatusSerializer(source='team_members', many=True, read_only=True)
+    effective_status = serializers.SerializerMethodField()
+    is_completed_archive = serializers.SerializerMethodField()
+    total_task_count = serializers.SerializerMethodField()
+    completed_task_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
@@ -196,6 +202,10 @@ class ProjectSerializer(serializers.ModelSerializer):
             'status',
             'priority',
             'progress',
+            'effective_status',
+            'is_completed_archive',
+            'total_task_count',
+            'completed_task_count',
             'start_date',
             'end_date',
             'tech_stack',
@@ -206,6 +216,52 @@ class ProjectSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
+
+    def _get_project_tasks(self, obj):
+        if not hasattr(self, "_project_task_cache"):
+            self._project_task_cache = {}
+
+        if obj.id not in self._project_task_cache:
+            prefetched_tasks = getattr(obj, "_prefetched_objects_cache", {}).get("tasks")
+            self._project_task_cache[obj.id] = list(prefetched_tasks if prefetched_tasks is not None else obj.tasks.all())
+
+        return self._project_task_cache[obj.id]
+
+    def _get_completion_snapshot(self, obj):
+        if not hasattr(self, "_project_completion_cache"):
+            self._project_completion_cache = {}
+
+        if obj.id not in self._project_completion_cache:
+            tasks = self._get_project_tasks(obj)
+            total_task_count = len(tasks)
+            completed_task_count = sum(1 for task in tasks if task.status == "done")
+            all_tasks_completed = total_task_count > 0 and completed_task_count == total_task_count
+            due_reached = bool(obj.end_date and obj.end_date <= timezone.localdate())
+            is_completed_archive = bool(
+                obj.status == "completed"
+                or (due_reached and (all_tasks_completed or int(obj.progress or 0) >= 100))
+            )
+
+            self._project_completion_cache[obj.id] = {
+                "total_task_count": total_task_count,
+                "completed_task_count": completed_task_count,
+                "is_completed_archive": is_completed_archive,
+                "effective_status": "completed" if is_completed_archive else obj.status,
+            }
+
+        return self._project_completion_cache[obj.id]
+
+    def get_effective_status(self, obj):
+        return self._get_completion_snapshot(obj)["effective_status"]
+
+    def get_is_completed_archive(self, obj):
+        return self._get_completion_snapshot(obj)["is_completed_archive"]
+
+    def get_total_task_count(self, obj):
+        return self._get_completion_snapshot(obj)["total_task_count"]
+
+    def get_completed_task_count(self, obj):
+        return self._get_completion_snapshot(obj)["completed_task_count"]
 
     def _get_combined_team_members(self, obj):
         members_by_id = {
@@ -268,6 +324,8 @@ class TaskSerializer(serializers.ModelSerializer):
 class UserNotificationSerializer(serializers.ModelSerializer):
     recipient_details = UserSerializer(source="recipient", read_only=True)
     actor_details = UserSerializer(source="actor", read_only=True)
+    title = serializers.SerializerMethodField()
+    body = serializers.SerializerMethodField()
 
     class Meta:
         model = UserNotification
@@ -285,3 +343,9 @@ class UserNotificationSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["actor", "created_at"]
+
+    def get_title(self, obj):
+        return normalize_legacy_turkish_text(obj.title)
+
+    def get_body(self, obj):
+        return normalize_legacy_turkish_text(obj.body)

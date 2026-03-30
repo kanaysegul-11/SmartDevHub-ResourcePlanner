@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.contrib.auth.models import User
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -76,7 +79,7 @@ class ApiBehaviorTests(APITestCase):
             user=self.user,
             employee_name="Member User",
             position="Developer",
-            current_work="Tum gorevlerini tamamladi.",
+            current_work="Tüm görevlerini tamamladı.",
             status_type="busy",
         )
         first_project = Project.objects.create(
@@ -215,6 +218,53 @@ class ApiBehaviorTests(APITestCase):
         self.assertEqual(len(response.data[0]["team_member_details"]), 1)
         self.assertEqual(response.data[0]["team_member_details"][0]["id"], employment_status.id)
 
+    def test_projects_endpoint_marks_due_fully_completed_project_as_completed_archive(self):
+        today = timezone.localdate()
+        project = Project.objects.create(
+            name="Delivery Archive",
+            summary="Should move to completed archive.",
+            status="active",
+            end_date=today,
+        )
+        Task.objects.create(
+            title="Final QA",
+            project=project,
+            assignee=self.user,
+            status="done",
+        )
+
+        response = self.client.get("/api/projects/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data[0]["status"], "active")
+        self.assertEqual(response.data[0]["effective_status"], "completed")
+        self.assertTrue(response.data[0]["is_completed_archive"])
+        self.assertEqual(response.data[0]["total_task_count"], 1)
+        self.assertEqual(response.data[0]["completed_task_count"], 1)
+
+    def test_projects_endpoint_keeps_future_due_completed_work_out_of_archive_until_delivery_date(self):
+        future_date = timezone.localdate() + timedelta(days=1)
+        project = Project.objects.create(
+            name="Awaiting Delivery Date",
+            summary="Done work should stay active until delivery day.",
+            status="active",
+            end_date=future_date,
+        )
+        Task.objects.create(
+            title="Implementation done",
+            project=project,
+            assignee=self.user,
+            status="done",
+        )
+
+        response = self.client.get("/api/projects/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data[0]["effective_status"], "active")
+        self.assertFalse(response.data[0]["is_completed_archive"])
+        self.assertEqual(response.data[0]["total_task_count"], 1)
+        self.assertEqual(response.data[0]["completed_task_count"], 1)
+
     def test_non_admin_marking_task_done_keeps_project_history_and_notifies_admin(self):
         admin_user = User.objects.create_user(
             username="admin",
@@ -263,7 +313,7 @@ class ApiBehaviorTests(APITestCase):
             recipient=admin_user,
             actor=self.user,
             type="task",
-            title="Gorev tamamlandi",
+            title="Görev tamamlandı",
         ).first()
 
         self.assertIsNotNone(notification)
@@ -367,3 +417,20 @@ class ApiBehaviorTests(APITestCase):
         self.assertEqual(response.data["deleted_count"], 2)
         self.assertEqual(UserNotification.objects.filter(recipient=self.user).count(), 0)
         self.assertEqual(UserNotification.objects.filter(recipient=other_user).count(), 1)
+
+    def test_notifications_endpoint_normalizes_legacy_turkish_ascii_text(self):
+        UserNotification.objects.create(
+            recipient=self.user,
+            title="Gorev tamamlandi",
+            body="Demo projesi icindeki Test gorevini tamamladi.",
+            type="task",
+        )
+
+        response = self.client.get("/api/notifications/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data[0]["title"], "Görev tamamlandı")
+        self.assertEqual(
+            response.data[0]["body"],
+            "Demo projesi içindeki Test görevini tamamladı.",
+        )
