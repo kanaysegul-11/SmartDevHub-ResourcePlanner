@@ -17,6 +17,7 @@ function TeamCard({
   onDragEnd,
   isDragging = false,
   isDropTarget = false,
+  isMessageDisabled = false,
   messageLabel,
 }) {
   const isBusy = variant === "busy";
@@ -121,7 +122,13 @@ function TeamCard({
         <button
           type="button"
           onClick={() => onMessageClick?.(member)}
-          className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          disabled={isMessageDisabled}
+          title={isMessageDisabled ? t("team.cannotMessageSelf") : ""}
+          className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+            isMessageDisabled
+              ? "cursor-not-allowed bg-slate-200 text-slate-500"
+              : "bg-slate-950 text-white hover:bg-slate-800"
+          }`}
         >
           <FeatherMessageCircle size={16} />
           {messageLabel || t("team.message")}

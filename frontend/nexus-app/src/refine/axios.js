@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getSessionValue } from "./sessionStorage";
 
 const apiBaseUrl =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
@@ -7,13 +8,13 @@ export const apiClient = axios.create({
   baseURL: apiBaseUrl,
 });
 
-const bootstrapToken = localStorage.getItem("token");
+const bootstrapToken = getSessionValue("token");
 if (bootstrapToken) {
   apiClient.defaults.headers.common.Authorization = `Token ${bootstrapToken}`;
 }
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+  const token = getSessionValue("token");
   if (!config.headers) {
     config.headers = {};
   }

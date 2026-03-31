@@ -11,7 +11,7 @@ def normalize_legacy_turkish_text(value):
         ("bir mesaj gonderdi.", "bir mesaj gönderdi."),
         ("Proje bilgisi guncellendi", "Proje bilgisi güncellendi"),
         ("guncelleme var.", "güncelleme var."),
-        ("Size yeni gorev atandi", "Size yeni Görev Atandı"),
+        ("Size yeni gorev atandi", "Size Yeni Görev Atandı"),
         ("Size gorev atandi", "Size Görev Atandı"),
         ("Yonetici destek taleplerini takip ediyor.", "Yönetici destek taleplerini takip ediyor."),
         ("Takim mesaji gonderildi", "Takım mesajı gönderildi"),

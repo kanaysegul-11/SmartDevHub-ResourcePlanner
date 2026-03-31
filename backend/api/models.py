@@ -52,7 +52,7 @@ class Snippet(models.Model):
     language = models.CharField(max_length=20, choices=LANGUAGE_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='snippets', null=True, blank=True)
+    author = models.ForeignKey(User, on_delete=models.SET_NULL, related_name='snippets', null=True, blank=True)
 
     def __str__(self):
         return self.title
@@ -60,7 +60,7 @@ class Snippet(models.Model):
 # Yorum Modeli
 class Comment(models.Model):
     snippet = models.ForeignKey(Snippet, related_name='comments', on_delete=models.CASCADE)
-    author = models.ForeignKey(User, on_delete=models.CASCADE) # İsmi 'author' olarak sabitledik
+    author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True) # İsmi 'author' olarak sabitledik
     text = models.TextField() # İsmi 'text' olarak sabitledik
     experience_rating = models.IntegerField(
     default=5, 
@@ -70,7 +70,8 @@ class Comment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.author.username} - {self.snippet.title}"
+        author_name = self.author.username if self.author else "anonymous"
+        return f"{author_name} - {self.snippet.title}"
 
 # Çalışan Durumu Modeli
 class EmploymentStatus(models.Model):
@@ -114,6 +115,10 @@ class TeamMessage(models.Model):
     )
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
+    deleted_for_sender = models.BooleanField(default=False)
+    deleted_for_recipient = models.BooleanField(default=False)
+    deleted_for_everyone = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["created_at"]

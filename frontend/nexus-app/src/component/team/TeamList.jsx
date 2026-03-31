@@ -11,6 +11,7 @@ function TeamList({
   onDelete,
   onInspect,
   onMessageClick,
+  isMessageDisabled,
   canManage,
   emptyMessage,
   onMemberDragStart,
@@ -64,6 +65,7 @@ function TeamList({
             onDragEnd={onMemberDragEnd}
             isDragging={String(draggedMemberId || "") === String(member.id)}
             isDropTarget={String(dropTargetMemberId || "") === String(member.id)}
+            isMessageDisabled={Boolean(isMessageDisabled?.(member))}
             messageLabel={t("team.moveToChat")}
           />
         ))}

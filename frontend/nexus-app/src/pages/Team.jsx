@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useCreate,
   useDelete,
@@ -83,6 +83,32 @@ function Team() {
       .trim()
       .toLocaleLowerCase("tr")
       .replace(/\s+/g, " ");
+  const currentUserNameKeys = useMemo(() => {
+    const keys = new Set();
+    const usernameKey = normalizeIdentity(userData?.username);
+    const fullNameKey = normalizeIdentity(
+      `${userData?.firstName || ""} ${userData?.lastName || ""}`
+    );
+
+    if (usernameKey) keys.add(usernameKey);
+    if (fullNameKey) keys.add(fullNameKey);
+
+    return keys;
+  }, [userData?.firstName, userData?.lastName, userData?.username]);
+  const isCurrentUserMember = useCallback(
+    (member) => {
+      if (!member) return false;
+
+      const linkedUserId = member.user_details?.id || member.user || null;
+      if (linkedUserId && userData?.id && String(linkedUserId) === String(userData.id)) {
+        return true;
+      }
+
+      const employeeNameKey = normalizeIdentity(member.employee_name);
+      return Boolean(employeeNameKey) && currentUserNameKeys.has(employeeNameKey);
+    },
+    [currentUserNameKeys, userData?.id]
+  );
 
   const routeChatMember = useMemo(() => {
     if (chatMemberId) {
@@ -367,6 +393,15 @@ function Team() {
   };
 
   const handleChatPanelDragOver = (event) => {
+    const draggedId =
+      dragState.draggedId || event.dataTransfer.getData("text/plain") || null;
+    const draggedMember =
+      orderedTeamMembers.find((member) => String(member.id) === String(draggedId)) || null;
+
+    if (isCurrentUserMember(draggedMember)) {
+      return;
+    }
+
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
 
@@ -467,6 +502,10 @@ function Team() {
 
   const openMessaging = (member, options = {}) => {
     const { scroll = true } = options;
+    if (!member || isCurrentUserMember(member)) {
+      return;
+    }
+
     if (chatMemberId || chatUserId) {
       navigate("/team", { replace: true });
     }
@@ -482,6 +521,16 @@ function Team() {
   };
 
   const canManageTeam = Boolean(userData?.isAdmin);
+  const activeConversationMember =
+    routeChatMember && !isCurrentUserMember(routeChatMember)
+      ? routeChatMember
+      : selectedMember && !isCurrentUserMember(selectedMember)
+        ? selectedMember
+        : null;
+  const draggedChatPreviewMember =
+    orderedTeamMembers.find(
+      (member) => String(member.id) === String(dragState.draggedId || "")
+    ) || null;
   const activeErrorMessage =
     teamErrorMessage ||
     (teamQuery.error || usersQuery.error || projectsQuery.error
@@ -491,11 +540,17 @@ function Team() {
     orderedTeamMembers.find((member) => String(member.id) === String(confirmMemberId || "")) ||
     null;
   const actionMember =
-    routeChatMember ||
-    selectedMember ||
-    profileMember ||
-    orderedTeamMembers[0] ||
+    [routeChatMember, selectedMember, profileMember, ...orderedTeamMembers].find(
+      (member) => member && !isCurrentUserMember(member)
+    ) ||
     null;
+
+  useEffect(() => {
+    if ((chatMemberId || chatUserId) && routeChatMember && isCurrentUserMember(routeChatMember)) {
+      navigate("/team", { replace: true });
+    }
+  }, [chatMemberId, chatUserId, isCurrentUserMember, navigate, routeChatMember]);
+
   return (
     <div className="flex h-screen w-full items-start overflow-hidden bg-transparent font-sans text-slate-900">
       <Sidebar activeItem="team" showTeamSubmenu={true} logoClickable={true} />
@@ -547,6 +602,7 @@ function Team() {
             actionMember={actionMember}
             onInspect={openProfile}
             onMessageClick={openMessaging}
+            isMessageDisabled={isCurrentUserMember}
             onMemberDragStart={handleMemberDragStart}
             onMemberDragOver={handleMemberDragOver}
             onMemberDrop={handleMemberDrop}
@@ -573,11 +629,11 @@ function Team() {
               ) : null}
 
               <TeamConversationPanel
-                member={routeChatMember || selectedMember}
+                member={activeConversationMember}
                 dropPreviewMember={
-                  orderedTeamMembers.find(
-                    (member) => String(member.id) === String(dragState.draggedId || "")
-                  ) || null
+                  isCurrentUserMember(draggedChatPreviewMember)
+                    ? null
+                    : draggedChatPreviewMember
                 }
                 isDropActive={dragState.overChatPanel}
                 onPanelDragOver={handleChatPanelDragOver}
@@ -596,6 +652,7 @@ function Team() {
                 onDelete={openDeleteMemberConfirm}
                 onInspect={openProfile}
                 onMessageClick={openMessaging}
+                isMessageDisabled={isCurrentUserMember}
                 canManage={canManageTeam}
                 emptyMessage={t("team.noBusyMembers")}
                 onMemberDragStart={handleMemberDragStart}
@@ -615,6 +672,7 @@ function Team() {
                 onDelete={openDeleteMemberConfirm}
                 onInspect={openProfile}
                 onMessageClick={openMessaging}
+                isMessageDisabled={isCurrentUserMember}
                 canManage={canManageTeam}
                 emptyMessage={t("team.noAvailableMembers")}
                 onMemberDragStart={handleMemberDragStart}
@@ -634,6 +692,7 @@ function Team() {
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
         onMessageClick={openMessaging}
+        isMessageDisabled={isCurrentUserMember(profileMember)}
       />
 
       <ConfirmDialog

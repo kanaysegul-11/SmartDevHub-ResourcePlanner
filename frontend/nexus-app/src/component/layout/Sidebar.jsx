@@ -23,6 +23,7 @@ import { useUser } from "../../UserContext.jsx";
 import { useI18n } from "../../I18nContext.jsx";
 import { apiClient } from "../../refine/axios";
 import { NOTIFICATIONS_UPDATED_EVENT } from "../../refine/notifications.js";
+import { getSessionValue } from "../../refine/sessionStorage.js";
 import { Avatar } from "../../ui/components/Avatar";
 import { SidebarWithSections } from "../../ui/components/SidebarWithSections";
 import {
@@ -102,9 +103,9 @@ function Sidebar({
   const sidebarUserKey = useMemo(
     () =>
       String(
-        localStorage.getItem("user_id") ||
+        getSessionValue("user_id") ||
         userData?.username ||
-        localStorage.getItem("username") ||
+        getSessionValue("username") ||
         "guest"
       ),
     [userData?.username]

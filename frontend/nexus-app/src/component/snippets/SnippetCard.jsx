@@ -9,11 +9,18 @@ import {
 import { useDelete } from "@refinedev/core";
 import { Popconfirm } from "antd";
 import { useI18n } from "../../I18nContext.jsx";
+import { useUser } from "../../UserContext.jsx";
 
 function SnippetCard({ snippet, onClick }) {
   const { mutate: deleteSnippet } = useDelete();
   const { t } = useI18n();
+  const { userData } = useUser();
   const risks = scanCodeSecurity(snippet.code || "");
+  const currentUsername = String(userData?.username || "").trim().toLowerCase();
+  const canDeleteSnippet =
+    Boolean(userData?.isAdmin) ||
+    String(snippet.author_details?.id || "") === String(userData?.id || "") ||
+    String(snippet.author_details?.username || "").trim().toLowerCase() === currentUsername;
 
   const handleDelete = (e) => {
     e.stopPropagation();
@@ -38,13 +45,15 @@ function SnippetCard({ snippet, onClick }) {
 
   return (
     <div onClick={onClick} className="group relative flex min-h-[340px] h-auto cursor-pointer flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-purple-400 hover:shadow-md">
-      <div className="absolute right-10 top-4 z-10 opacity-0 transition-opacity group-hover:opacity-100">
-        <Popconfirm title={t("snippets.deleteConfirm")} onConfirm={handleDelete} onCancel={(e) => e.stopPropagation()} okText={t("snippets.deleteYes")} cancelText={t("snippets.deleteCancel")} okButtonProps={{ danger: true, type: "primary", style: { backgroundColor: "#ff4d4f", color: "white", fontWeight: "bold" } }}>
-          <div onClick={(e) => e.stopPropagation()} className="flex h-9 w-9 items-center justify-center rounded-full border border-red-200 bg-red-100 text-red-600 shadow-sm transition-all hover:bg-red-600 hover:text-white">
-            <FeatherTrash2 size={16} />
-          </div>
-        </Popconfirm>
-      </div>
+      {canDeleteSnippet ? (
+        <div className="absolute right-10 top-4 z-10 opacity-0 transition-opacity group-hover:opacity-100">
+          <Popconfirm title={t("snippets.deleteConfirm")} onConfirm={handleDelete} onCancel={(e) => e.stopPropagation()} okText={t("snippets.deleteYes")} cancelText={t("snippets.deleteCancel")} okButtonProps={{ danger: true, type: "primary", style: { backgroundColor: "#ff4d4f", color: "white", fontWeight: "bold" } }}>
+            <div onClick={(e) => e.stopPropagation()} className="flex h-9 w-9 items-center justify-center rounded-full border border-red-200 bg-red-100 text-red-600 shadow-sm transition-all hover:bg-red-600 hover:text-white">
+              <FeatherTrash2 size={16} />
+            </div>
+          </Popconfirm>
+        </div>
+      ) : null}
 
       <div className="mb-3 flex items-center justify-between">
         <span className="rounded-md bg-purple-50 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-purple-600">{snippet.language}</span>

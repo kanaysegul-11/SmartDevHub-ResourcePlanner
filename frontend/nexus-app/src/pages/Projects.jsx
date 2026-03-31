@@ -119,6 +119,55 @@ function Projects() {
     }).format(date);
   };
 
+  const parseProjectDate = (value) => {
+    if (!value) return null;
+
+    const normalizedValue = String(value).trim();
+    const dateOnlyMatch = normalizedValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+    if (dateOnlyMatch) {
+      const [, year, month, day] = dateOnlyMatch;
+      return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+
+    const parsedDate = new Date(normalizedValue);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return null;
+    }
+
+    return new Date(
+      parsedDate.getFullYear(),
+      parsedDate.getMonth(),
+      parsedDate.getDate()
+    );
+  };
+
+  const hasProjectDeadlinePassed = (project) => {
+    const deliveryDate = parseProjectDate(project?.end_date);
+    if (!deliveryDate) {
+      return false;
+    }
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    return deliveryDate < today;
+  };
+
+  const getProjectAccessLabel = (project) => {
+    if (!canManageProjects) {
+      return t("projects.readOnly");
+    }
+
+    const projectStatus = project?.effective_status || project?.status;
+    const isLockedProject =
+      Boolean(project?.is_completed_archive) ||
+      projectStatus === "completed" ||
+      hasProjectDeadlinePassed(project);
+
+    return isLockedProject ? null : t("projects.editable");
+  };
+
   const translateStatus = (value) => statusOptions.find((item) => item.value === value)?.label || value;
   const translatePriority = (value) => priorityOptions.find((item) => item.value === value)?.label || value;
 
@@ -230,6 +279,7 @@ function Projects() {
   const renderProjectCard = (project) => {
     const isSelected = !isCreateMode && project.id === selectedProjectId;
     const statusLabel = translateStatus(project.effective_status || project.status);
+    const accessLabel = getProjectAccessLabel(project);
     const baseClass = project.is_completed_archive
       ? "border-emerald-200/80 bg-emerald-50/60 hover:border-emerald-300 hover:bg-white"
       : "border-slate-200/80 bg-slate-50/75 hover:border-slate-300 hover:bg-white";
@@ -260,9 +310,11 @@ function Projects() {
             <Badge variant={project.priority === "critical" ? "error" : project.priority === "high" ? "warning" : "neutral"}>
               {translatePriority(project.priority)}
             </Badge>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-              {canManageProjects ? t("projects.editable") : t("projects.readOnly")}
-            </span>
+            {accessLabel ? (
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                {accessLabel}
+              </span>
+            ) : null}
           </div>
         </div>
         <p className="mt-4 line-clamp-3 text-sm leading-7 text-slate-600">{project.summary}</p>

@@ -9,11 +9,13 @@ import ProfileCard from "../component/team/ProfileCard";
 import { useI18n } from "../I18nContext.jsx";
 import { apiClient } from "../refine/axios";
 import { SESSION_MARKER_KEY } from "../refine/session";
+import { consumeRememberedLoginNotice, getSessionValue } from "../refine/sessionStorage";
+import { toast } from "sonner";
 
 const APP_BOOT_ID = __APP_BOOT_ID__;
 
 function Dashboard() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const dashboardQueryOptions = {
     queryOptions: {
       staleTime: 15000,
@@ -50,10 +52,28 @@ function Dashboard() {
   const [unreadNotifications, setUnreadNotifications] = useState([]);
   const [showUnreadNotificationBanner, setShowUnreadNotificationBanner] = useState(false);
   const sessionMarker =
-    localStorage.getItem(SESSION_MARKER_KEY) ||
-    localStorage.getItem("user_id") ||
+    getSessionValue(SESSION_MARKER_KEY) ||
+    getSessionValue("user_id") ||
     "anonymous";
   const unreadNotificationBannerStorageKey = `nexus:dashboard-notification-banner:${APP_BOOT_ID}:${sessionMarker}`;
+
+  useEffect(() => {
+    const sessionLanguage =
+      getSessionValue("language") || localStorage.getItem("language") || "en";
+
+    if (sessionLanguage !== language) {
+      return;
+    }
+
+    if (!consumeRememberedLoginNotice()) {
+      return;
+    }
+
+    toast.success(t("auth.rememberMeToast"), {
+      description: t("auth.rememberMeToastBody"),
+      duration: 5000,
+    });
+  }, [language, t]);
 
   useEffect(() => {
     let ignore = false;

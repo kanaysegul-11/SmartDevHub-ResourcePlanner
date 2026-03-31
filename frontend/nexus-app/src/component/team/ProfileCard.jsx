@@ -6,12 +6,20 @@ import { Avatar } from "../../ui/components/Avatar";
 import { Badge } from "../../ui/components/Badge";
 import { useI18n } from "../../I18nContext.jsx";
 
-function ProfileCard({ member, isOpen, onClose, onMessageClick, showCloseButton = true }) {
+function ProfileCard({
+  member,
+  isOpen,
+  onClose,
+  onMessageClick,
+  isMessageDisabled = false,
+  showCloseButton = true,
+}) {
   const { language, t } = useI18n();
 
   if (!isOpen || !member) return null;
   const projectCount = Number(member.projectCount || 0);
-  const canOpenMessaging = typeof onMessageClick === "function";
+  const canOpenMessaging =
+    typeof onMessageClick === "function" && !isMessageDisabled;
   const projectName = member.currentProjectName || "";
   const clientName = member.currentProjectClient || "";
 
@@ -147,7 +155,9 @@ function ProfileCard({ member, isOpen, onClose, onMessageClick, showCloseButton 
                       </button>
                     </>
                   ) : (
-                    <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/90 px-4 py-5 text-sm text-slate-500" />
+                    <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/90 px-4 py-5 text-sm text-slate-500">
+                      {isMessageDisabled ? t("team.cannotMessageSelf") : ""}
+                    </div>
                   )}
                 </div>
               </div>

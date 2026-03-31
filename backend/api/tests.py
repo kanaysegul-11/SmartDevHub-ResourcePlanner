@@ -5,7 +5,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import EmploymentStatus, Project, Task, UserNotification, UserProfile
+from .models import Comment, EmploymentStatus, Project, Snippet, Task, TeamMessage, UserNotification, UserProfile
 
 
 class ApiBehaviorTests(APITestCase):
@@ -17,23 +17,120 @@ class ApiBehaviorTests(APITestCase):
         )
         self.client.force_authenticate(user=self.user)
 
-    def test_admin_contacts_creates_status_records_for_admins(self):
+    def test_admin_contacts_returns_existing_status_records_without_creating_new_rows(self):
         admin_user = User.objects.create_user(
             username="admin",
             password="strong-pass-123",
             email="admin@example.com",
             is_staff=True,
         )
+        admin_status = EmploymentStatus.objects.create(
+            user=admin_user,
+            employee_name="Admin User",
+            position="Administrator",
+            current_work="Destek taleplerini takip ediyor.",
+            status_type="available",
+        )
+        before_count = EmploymentStatus.objects.count()
 
         response = self.client.get("/api/admin-contacts/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["id"], admin_status.id)
         self.assertEqual(response.data[0]["user_details"]["id"], admin_user.id)
+        self.assertEqual(EmploymentStatus.objects.count(), before_count)
 
-        admin_status = EmploymentStatus.objects.get(user=admin_user)
-        self.assertEqual(admin_status.position, "Administrator")
-        self.assertEqual(admin_status.status_type, "available")
+    def test_admin_contacts_does_not_recreate_missing_status_rows(self):
+        admin_user = User.objects.create_user(
+            username="admin-without-status",
+            password="strong-pass-123",
+            email="admin-without-status@example.com",
+            is_staff=True,
+        )
+
+        response = self.client.get("/api/admin-contacts/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+        self.assertFalse(EmploymentStatus.objects.filter(user=admin_user).exists())
+
+    def test_non_author_cannot_delete_foreign_snippet(self):
+        other_user = User.objects.create_user(
+            username="snippet-owner",
+            password="strong-pass-123",
+            email="snippet-owner@example.com",
+        )
+        snippet = Snippet.objects.create(
+            title="Shared utility",
+            description="Library helper",
+            code="print('hello')",
+            language="python",
+            author=other_user,
+        )
+
+        response = self.client.delete(f"/api/snippets/{snippet.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Snippet.objects.filter(id=snippet.id).exists())
+
+    def test_non_author_cannot_update_foreign_comment(self):
+        other_user = User.objects.create_user(
+            username="comment-owner",
+            password="strong-pass-123",
+            email="comment-owner@example.com",
+        )
+        snippet = Snippet.objects.create(
+            title="Portal helper",
+            description="Reusable note",
+            code="const value = 1;",
+            language="javascript",
+            author=self.user,
+        )
+        comment = Comment.objects.create(
+            snippet=snippet,
+            author=other_user,
+            text="Original feedback",
+            experience_rating=4,
+        )
+
+        response = self.client.patch(
+            f"/api/comments/{comment.id}/",
+            {"text": "Blocked change"},
+            format="json",
+        )
+
+        comment.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(comment.text, "Original feedback")
+
+    def test_deleting_user_preserves_snippets_and_comments(self):
+        author = User.objects.create_user(
+            username="library-owner",
+            password="strong-pass-123",
+            email="library-owner@example.com",
+        )
+        snippet = Snippet.objects.create(
+            title="Reusable card",
+            description="UI snippet",
+            code="export const Card = () => null;",
+            language="react/js",
+            author=author,
+        )
+        comment = Comment.objects.create(
+            snippet=snippet,
+            author=author,
+            text="Looks solid",
+            experience_rating=5,
+        )
+
+        author.delete()
+        snippet.refresh_from_db()
+        comment.refresh_from_db()
+
+        self.assertIsNone(snippet.author)
+        self.assertIsNone(comment.author)
 
     def test_non_admin_task_patch_only_updates_allowed_fields(self):
         task = Task.objects.create(
@@ -360,6 +457,174 @@ class ApiBehaviorTests(APITestCase):
         status_response = self.client.get("/api/status/")
         self.assertEqual(status_response.status_code, status.HTTP_200_OK)
         self.assertEqual(status_response.data[0]["active_project_count"], 1)
+
+    def test_sender_can_edit_own_team_message(self):
+        other_user = User.objects.create_user(
+            username="other",
+            password="strong-pass-123",
+            email="other@example.com",
+        )
+        recipient_status = EmploymentStatus.objects.create(
+            user=other_user,
+            employee_name="Other User",
+            position="Developer",
+            status_type="available",
+        )
+        message = TeamMessage.objects.create(
+            sender=self.user,
+            recipient=recipient_status,
+            content="Initial content",
+        )
+
+        response = self.client.patch(
+            f"/api/team-messages/{message.id}/",
+            {"content": "Updated content"},
+            format="json",
+        )
+
+        message.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(message.content, "Updated content")
+        self.assertIsNotNone(message.edited_at)
+
+    def test_user_cannot_send_team_message_to_self(self):
+        own_status = EmploymentStatus.objects.create(
+            user=self.user,
+            employee_name="Member User",
+            position="Developer",
+            status_type="available",
+        )
+
+        response = self.client.post(
+            "/api/team-messages/",
+            {"recipient": own_status.id, "content": "Self message"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(TeamMessage.objects.count(), 0)
+
+    def test_recipient_cannot_edit_foreign_team_message(self):
+        sender = User.objects.create_user(
+            username="sender",
+            password="strong-pass-123",
+            email="sender@example.com",
+        )
+        recipient_status = EmploymentStatus.objects.create(
+            user=self.user,
+            employee_name="Member User",
+            position="Developer",
+            status_type="available",
+        )
+        message = TeamMessage.objects.create(
+            sender=sender,
+            recipient=recipient_status,
+            content="Recipient should not edit this",
+        )
+
+        response = self.client.patch(
+            f"/api/team-messages/{message.id}/",
+            {"content": "Blocked update"},
+            format="json",
+        )
+
+        message.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(message.content, "Recipient should not edit this")
+
+    def test_sender_can_delete_team_message_only_for_self(self):
+        other_user = User.objects.create_user(
+            username="other-team",
+            password="strong-pass-123",
+            email="other-team@example.com",
+        )
+        recipient_status = EmploymentStatus.objects.create(
+            user=other_user,
+            employee_name="Other Team Member",
+            position="Developer",
+            status_type="available",
+        )
+        message = TeamMessage.objects.create(
+            sender=self.user,
+            recipient=recipient_status,
+            content="Delete only for me",
+        )
+
+        response = self.client.post(
+            f"/api/team-messages/{message.id}/remove/",
+            {"scope": "self"},
+            format="json",
+        )
+
+        message.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertTrue(message.deleted_for_sender)
+        self.assertFalse(message.deleted_for_everyone)
+
+        sender_history = self.client.get(
+            "/api/team-messages/",
+            {"conversation_with": recipient_status.id},
+        )
+        self.assertEqual(sender_history.status_code, status.HTTP_200_OK)
+        self.assertEqual(sender_history.data, [])
+
+        self.client.force_authenticate(user=other_user)
+        recipient_history = self.client.get("/api/team-messages/")
+        self.assertEqual(recipient_history.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(recipient_history.data), 1)
+
+    def test_sender_can_delete_team_message_for_everyone_but_recipient_cannot(self):
+        other_user = User.objects.create_user(
+            username="other-team-2",
+            password="strong-pass-123",
+            email="other-team-2@example.com",
+        )
+        recipient_status = EmploymentStatus.objects.create(
+            user=other_user,
+            employee_name="Other Team Member 2",
+            position="Developer",
+            status_type="available",
+        )
+        message = TeamMessage.objects.create(
+            sender=self.user,
+            recipient=recipient_status,
+            content="Delete for everyone",
+        )
+
+        self.client.force_authenticate(user=other_user)
+        forbidden_response = self.client.post(
+            f"/api/team-messages/{message.id}/remove/",
+            {"scope": "everyone"},
+            format="json",
+        )
+        self.assertEqual(forbidden_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(user=self.user)
+        delete_response = self.client.post(
+            f"/api/team-messages/{message.id}/remove/",
+            {"scope": "everyone"},
+            format="json",
+        )
+
+        message.refresh_from_db()
+
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertTrue(message.deleted_for_everyone)
+
+        sender_history = self.client.get(
+            "/api/team-messages/",
+            {"conversation_with": recipient_status.id},
+        )
+        self.assertEqual(sender_history.status_code, status.HTTP_200_OK)
+        self.assertEqual(sender_history.data, [])
+
+        self.client.force_authenticate(user=other_user)
+        recipient_history = self.client.get("/api/team-messages/")
+        self.assertEqual(recipient_history.status_code, status.HTTP_200_OK)
+        self.assertEqual(recipient_history.data, [])
 
     def test_user_can_delete_only_own_notification(self):
         other_user = User.objects.create_user(

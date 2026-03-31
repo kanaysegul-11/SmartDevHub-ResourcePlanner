@@ -20,6 +20,7 @@ function TeamHeader({
   actionMember = null,
   onInspect,
   onMessageClick,
+  isMessageDisabled,
   onMemberDragStart,
   onMemberDragOver,
   onMemberDrop,
@@ -29,6 +30,7 @@ function TeamHeader({
 }) {
   const { t } = useI18n();
   const activeActionMember = actionMember || spotlightMembers[0] || null;
+  const actionDisabled = Boolean(isMessageDisabled?.(activeActionMember));
 
   if (loading) {
     return (
@@ -115,6 +117,8 @@ function TeamHeader({
                 variant="neutral-secondary"
                 className="h-12 justify-between rounded-2xl border-white/10 bg-white/10 px-4 text-white hover:bg-white/15"
                 icon={<FeatherMessageCircle />}
+                disabled={actionDisabled}
+                title={actionDisabled ? t("team.cannotMessageSelf") : ""}
                 onClick={() => activeActionMember && onMessageClick?.(activeActionMember)}
               >
                 {t("team.moveToChat")}
@@ -188,7 +192,13 @@ function TeamHeader({
               <button
                 type="button"
                 onClick={() => onMessageClick?.(member)}
-                className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                disabled={Boolean(isMessageDisabled?.(member))}
+                title={isMessageDisabled?.(member) ? t("team.cannotMessageSelf") : ""}
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  isMessageDisabled?.(member)
+                    ? "cursor-not-allowed bg-slate-200 text-slate-500"
+                    : "bg-slate-950 text-white hover:bg-slate-800"
+                }`}
               >
                 <FeatherMessageCircle size={16} />
                 {t("team.moveToChat")}

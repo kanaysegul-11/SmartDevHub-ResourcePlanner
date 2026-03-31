@@ -39,14 +39,27 @@ export const translations = {
     },
     auth: {
       loginTag: "Nexus Login",
-      loginTitle: "Return to your command center",
+      loginTitle: "Return to your resource planning center",
       loginBody:
-        "Manage dashboards, team chat, analytics, and the code library from one connected workspace. Admin and user views adapt to each role.",
+        "Access dashboards, projects, tasks, and team coordination from one institutional workspace. Your role-specific flow is ready the moment you sign in.",
       loginHeading: "Sign in",
       loginSubheading:
-        "Continue with your username and password or use Google for instant access.",
+        "Continue with your username and password to reach your workspace securely.",
+      loginPanelTag: "Institutional access",
+      loginHighlightOne:
+        "Projects, team planning, and task follow-up stay under one secure login.",
+      loginHighlightTwo:
+        "Remember me keeps your session on this device so you do not have to log in again.",
+      loginHighlightThree:
+        "The same Nexus identity opens dashboard, messaging, analytics, and the code library together.",
       username: "Username",
       password: "Password",
+      rememberMe: "Remember me",
+      rememberMeBody:
+        "Keep this device signed in and remember your username for the next visit.",
+      rememberMeToast: "Your sign-in is remembered on this device.",
+      rememberMeToastBody:
+        "We kept your session active without storing your raw password.",
       signIn: "Sign In",
       signingIn: "Signing in...",
       noAccount: "Don't have an account?",
@@ -298,6 +311,7 @@ export const translations = {
       chatConnected: "The message action on the profile card now lands here. Messages are stored and visible again later.",
       selectedPerson: "Selected person",
       waiting: "Waiting",
+      cannotMessageSelf: "You cannot message yourself.",
       selectMemberTitle: "Select a team member",
       selectMemberBody: "Once you select someone from a card or profile modal, this area becomes a real conversation history.",
       dropMemberToChat: "Drop a team member here to open the chat.",
@@ -313,6 +327,24 @@ export const translations = {
       sendMessage: "Send message",
       messageSaved: "Message added to the flow.",
       messageError: "Message could not be sent. Please try again.",
+      messageUpdated: "Message updated.",
+      messageUpdateError: "Message could not be updated. Please try again.",
+      messageDeletedForMe: "Message removed from your view.",
+      messageDeletedForEveryone: "Message removed for everyone.",
+      messageDeleteError: "Message could not be deleted. Please try again.",
+      sendShortcut: "Press Ctrl + Enter to send faster.",
+      editMessage: "Edit",
+      saveEdit: "Save",
+      deleteMessage: "Delete message",
+      deleteMessageTitle: "Delete message",
+      deleteMessageBody:
+        "Choose whether this message should disappear only for you or for everyone in the conversation.",
+      deleteMessageMineBody:
+        "This message belongs to the other person, so you can remove it only from your own view.",
+      deleteForMe: "Delete for me",
+      deleteForEveryone: "Delete for everyone",
+      edited: "Edited",
+      you: "You",
       liveTeamMessage: "Messaging stays live inside the Team page.",
       inspectProfile: "Inspect profile",
       profileCard: "Inspect Profile",
@@ -647,14 +679,27 @@ export const translations = {
     },
     auth: {
       loginTag: "Nexus Giriş",
-      loginTitle: "Yönetim merkezine geri dön",
+      loginTitle: "Kaynak planlama merkezine geri dön",
       loginBody:
-        "Dashboard, ekip sohbeti, analitik ve kod kütüphanesini tek merkezden yönet. Yönetici ve kullanıcı görünümleri role göre uyarlanır.",
+        "Dashboard, projeler, görevler ve ekip koordinasyonuna tek kurumsal çalışma alanından eriş. Rolüne uygun akış giriş yaptığın anda hazır olur.",
       loginHeading: "Giriş Yap",
       loginSubheading:
-        "Kullanıcı adı ve şifrenle devam et veya Google ile hızlıca giriş yap.",
+        "Çalışma alanına güvenli şekilde ulaşmak için kullanıcı adı ve şifrenle devam et.",
+      loginPanelTag: "Kurumsal erişim",
+      loginHighlightOne:
+        "Projeler, ekip planlaması ve görev takibi tek güvenli giriş altında toplanır.",
+      loginHighlightTwo:
+        "Beni hatırla bu cihazda oturumunu açık tutar ve sonraki giriş için kullanıcı adını hatırlar.",
+      loginHighlightThree:
+        "Aynı Nexus kimliğiyle dashboard, mesajlaşma, analitik ve kod kütüphanesi birlikte açılır.",
       username: "Kullanıcı Adı",
       password: "Şifre",
+      rememberMe: "Beni hatırla",
+      rememberMeBody:
+        "Bu cihazda oturumun açık kalsın ve sonraki ziyaretinde kullanıcı adın hazır gelsin.",
+      rememberMeToast: "Girişin bu cihaz için hatırlandı.",
+      rememberMeToastBody:
+        "Oturumun kaydedildi; ham şifren düz metin olarak saklanmadı.",
       signIn: "Giriş Yap",
       signingIn: "Giriş yapılıyor...",
       noAccount: "Hesabın yok mu?",
@@ -752,7 +797,7 @@ export const translations = {
       modernWorkspace: "Modern Workspace",
       dailyFocusReady: "Günlük odak hazır",
       greeting: "Merhaba",
-      heroTitle: "Bugünün akışını sakin, net ve daha estetik bir merkezden yönet.",
+      heroTitle: "Bugünün planı burada.",
       heroBody:
         "Bu alan artık yalnızca veri göstermiyor. Ekip kapasitesi, kütüphane sağlığı ve son hareketler tek yüzeyde bir araya geliyor.",
       designLanguage: "Tasarım dili",
@@ -906,6 +951,7 @@ export const translations = {
       chatConnected: "Profil kartındaki mesaj aksiyonu buraya bağlandı. Yazılanlar kaydolur ve tekrar görülebilir.",
       selectedPerson: "Seçili kişi",
       waiting: "Bekleniyor",
+      cannotMessageSelf: "Kendine mesaj gönderemezsin.",
       selectMemberTitle: "Bir ekip üyesi seç",
       selectMemberBody: "Kartlardan veya profil modalından bir kişi seçince bu alan gerçek konuşma geçmişine dönüşür.",
       dropMemberToChat: "Sohbeti açmak için ekip üyesini buraya bırak.",
@@ -921,6 +967,24 @@ export const translations = {
       sendMessage: "Mesajı gönder",
       messageSaved: "Mesaj akışa eklendi.",
       messageError: "Mesaj gönderilemedi. Lütfen tekrar dene.",
+      messageUpdated: "Mesaj güncellendi.",
+      messageUpdateError: "Mesaj güncellenemedi. Lütfen tekrar dene.",
+      messageDeletedForMe: "Mesaj senin ekranından kaldırıldı.",
+      messageDeletedForEveryone: "Mesaj herkes için kaldırıldı.",
+      messageDeleteError: "Mesaj silinemedi. Lütfen tekrar dene.",
+      sendShortcut: "Hızlı göndermek için Ctrl + Enter kullan.",
+      editMessage: "Düzenle",
+      saveEdit: "Kaydet",
+      deleteMessage: "Mesajı sil",
+      deleteMessageTitle: "Mesajı sil",
+      deleteMessageBody:
+        "Bu mesajın sadece senden mi yoksa konuşmadaki herkesten mi kaldırılacağını seç.",
+      deleteMessageMineBody:
+        "Bu mesaj karşı tarafa ait olduğu için yalnızca kendi ekranından kaldırabilirsin.",
+      deleteForMe: "Benden sil",
+      deleteForEveryone: "Herkesten sil",
+      edited: "Düzenlendi",
+      you: "Sen",
       liveTeamMessage: "Mesajlaşma Team sayfası içinde canlı tutuluyor.",
       inspectProfile: "Profil İncele",
       profileCard: "Profil İncele",

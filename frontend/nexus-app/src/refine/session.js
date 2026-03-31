@@ -1,4 +1,10 @@
 import { apiClient } from "./axios";
+import {
+  clearSessionValue,
+  queueRememberedLoginNotice,
+  setRememberedLogin,
+  setSessionValue,
+} from "./sessionStorage";
 
 export const SESSION_UPDATED_EVENT = "nexus:session-updated";
 export const SESSION_MARKER_KEY = "nexus:session-marker";
@@ -9,42 +15,54 @@ export function notifySessionUpdated() {
   }
 }
 
-export function applySessionPayload(payload = {}) {
+export function applySessionPayload(payload = {}, options = {}) {
   const token = payload?.token;
+  const rememberMe = options?.rememberMe ?? true;
+  const rememberedUsername = payload?.username || options?.rememberedUsername || "";
+  const showRememberNotice = options?.showRememberNotice ?? false;
 
   if (!token) {
     return false;
   }
 
-  localStorage.setItem("token", token);
+  setSessionValue("token", token, { rememberMe });
   apiClient.defaults.headers.common.Authorization = `Token ${token}`;
 
-  if (payload?.username) {
-    localStorage.setItem("username", payload.username);
+  if (payload?.username || rememberedUsername) {
+    setSessionValue("username", payload?.username || rememberedUsername, {
+      rememberMe,
+    });
   }
 
   if (payload?.user_id) {
-    localStorage.setItem("user_id", String(payload.user_id));
+    setSessionValue("user_id", String(payload.user_id), { rememberMe });
   }
 
   if (payload?.language) {
+    setSessionValue("language", payload.language, { rememberMe });
     localStorage.setItem("language", payload.language);
   }
 
-  localStorage.setItem("is_admin", payload?.is_admin ? "true" : "false");
-  localStorage.setItem(SESSION_MARKER_KEY, String(Date.now()));
+  setSessionValue("is_admin", payload?.is_admin ? "true" : "false", { rememberMe });
+  setSessionValue(SESSION_MARKER_KEY, String(Date.now()), { rememberMe });
+  setRememberedLogin(rememberedUsername, rememberMe);
+
+  if (rememberMe && showRememberNotice) {
+    queueRememberedLoginNotice();
+  }
+
   notifySessionUpdated();
 
   return true;
 }
 
 export function clearSessionPayload() {
-  localStorage.removeItem("token");
-  localStorage.removeItem("username");
-  localStorage.removeItem("user_id");
-  localStorage.removeItem("is_admin");
-  localStorage.removeItem("language");
-  localStorage.removeItem(SESSION_MARKER_KEY);
+  clearSessionValue("token");
+  clearSessionValue("username");
+  clearSessionValue("user_id");
+  clearSessionValue("is_admin");
+  clearSessionValue("language");
+  clearSessionValue(SESSION_MARKER_KEY);
   delete apiClient.defaults.headers.common.Authorization;
   notifySessionUpdated();
 }

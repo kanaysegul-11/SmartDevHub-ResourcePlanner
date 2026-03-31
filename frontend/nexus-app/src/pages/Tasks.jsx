@@ -70,6 +70,10 @@ function Tasks() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   const tasks = useMemo(() => tasksQuery.data?.data ?? EMPTY_LIST, [tasksQuery.data]);
+  const visibleTasks = useMemo(
+    () => tasks.filter((task) => task.status !== "done"),
+    [tasks]
+  );
   const projects = useMemo(() => projectsQuery.data?.data ?? EMPTY_LIST, [projectsQuery.data]);
   const teamMembers = useMemo(
     () =>
@@ -80,8 +84,8 @@ function Tasks() {
   );
   const users = useMemo(() => usersQuery.data?.data ?? EMPTY_LIST, [usersQuery.data]);
   const selectedTask = useMemo(
-    () => tasks.find((task) => task.id === selectedTaskId) || null,
-    [selectedTaskId, tasks]
+    () => visibleTasks.find((task) => task.id === selectedTaskId) || null,
+    [selectedTaskId, visibleTasks]
   );
   const selectedProject = useMemo(
     () => projects.find((project) => String(project.id) === String(formData.project)) || null,
@@ -132,13 +136,20 @@ function Tasks() {
         return;
       }
 
+      if (!visibleTasks.length) {
+        setSelectedTaskId(null);
+        setIsCreateMode(false);
+        setFormData(emptyForm);
+        return;
+      }
+
       if (isCreateMode) {
         setFormData(emptyForm);
         return;
       }
 
       if (!selectedTask) {
-        setSelectedTaskId(tasks[0].id);
+        setSelectedTaskId(visibleTasks[0]?.id || null);
         return;
       }
 
@@ -148,11 +159,11 @@ function Tasks() {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [isCreateMode, selectedTask, selectedTaskGroup, tasks]);
+  }, [isCreateMode, selectedTask, selectedTaskGroup, tasks, visibleTasks]);
 
   const stats = useMemo(() => {
     const now = new Date();
-    const dueSoon = tasks.filter((task) => {
+    const dueSoon = visibleTasks.filter((task) => {
       if (!task.deadline) return false;
       const date = new Date(task.deadline);
       const diff = date.getTime() - now.getTime();
@@ -160,12 +171,14 @@ function Tasks() {
     }).length;
 
     return {
-      total: tasks.length,
+      total: visibleTasks.length,
       dueSoon,
-      inReview: tasks.filter((task) => task.status === "review").length,
-      completed: tasks.filter((task) => task.status === "done").length,
+      inReview: visibleTasks.filter((task) => task.status === "review").length,
+      completed: canManageTasks
+        ? tasks.filter((task) => task.status === "done").length
+        : 0,
     };
-  }, [tasks]);
+  }, [canManageTasks, tasks, visibleTasks]);
 
   const userLookup = useMemo(() => {
     const nextLookup = new Map();
@@ -485,7 +498,10 @@ function Tasks() {
     }).format(date);
   };
 
-  const getDeadlineLabel = (value) => {
+  const getDeadlineLabel = (task) => {
+    if (task?.status === "done") return t("tasks.completed");
+
+    const value = task?.deadline;
     if (!value) return t("projects.notSet");
     const today = new Date();
     const date = new Date(value);
@@ -565,8 +581,8 @@ function Tasks() {
                 </div>
 
                 <div className="space-y-4">
-                  {tasks.length ? (
-                    tasks.map((task) => (
+                  {visibleTasks.length ? (
+                    visibleTasks.map((task) => (
                       <button
                         key={task.id}
                         type="button"
@@ -601,7 +617,7 @@ function Tasks() {
                               task.assignee_details?.username ||
                               t("tasks.unassigned")}
                           </span>
-                          <span>{getDeadlineLabel(task.deadline)}</span>
+                          <span>{getDeadlineLabel(task)}</span>
                         </div>
                       </button>
                     ))

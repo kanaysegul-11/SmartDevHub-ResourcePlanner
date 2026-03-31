@@ -8,12 +8,14 @@ from rest_framework.decorators import api_view, action
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission, SAFE_METHODS
+from rest_framework.exceptions import PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Snippet, Comment, EmploymentStatus, PageConfig, TeamMessage, Project, UserProfile, Task, UserNotification
 from .serializers import SnippetSerializer, CommentSerializer, StatusSerializer, PageConfigSerializer, TeamMessageSerializer, ProjectSerializer, TaskSerializer, UserSerializer, UserNotificationSerializer
 from rest_framework.decorators import api_view, permission_classes
 from django.conf import settings
 from django.db import OperationalError
+from django.utils import timezone
 from urllib import request as urllib_request
 from urllib.parse import urlencode
 from .text_utils import normalize_legacy_turkish_text
@@ -74,6 +76,18 @@ class IsAdminOrReadOnly(BasePermission):
             and request.user.is_authenticated
             and (request.user.is_staff or request.user.is_superuser)
         )
+
+
+class IsAuthorOrAdminOrReadOnly(BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        if request.method in SAFE_METHODS:
+            return True
+        return getattr(obj, "author_id", None) == request.user.id
 
 
 class TaskPermission(BasePermission):
@@ -177,6 +191,7 @@ def recalculate_project_progress(project_id):
 class SnippetViewSet(viewsets.ModelViewSet):
     queryset = Snippet.objects.all().order_by('-created_at')
     serializer_class = SnippetSerializer
+    permission_classes = [IsAuthorOrAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['language']
     search_fields = ['title', 'description', 'code']
@@ -188,7 +203,7 @@ class SnippetViewSet(viewsets.ModelViewSet):
 class CommentViewSet(viewsets.ModelViewSet):
     queryset = Comment.objects.all()
     serializer_class = CommentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthorOrAdminOrReadOnly]
 
     def perform_create(self, serializer):
         # Modelde alan ismi 'author' olduğu için 'author=...' şeklinde kaydettik
@@ -211,6 +226,17 @@ class TeamMessageViewSet(viewsets.ModelViewSet):
     serializer_class = TeamMessageSerializer
     permission_classes = [IsAuthenticated]
 
+    def _exclude_hidden_messages(self, queryset, current_user_status_id):
+        recipient_visibility = Q(recipient__user=self.request.user)
+        if current_user_status_id:
+            recipient_visibility |= Q(recipient_id=current_user_status_id)
+
+        hidden_filters = Q(deleted_for_everyone=True)
+        hidden_filters |= Q(sender=self.request.user, deleted_for_sender=True)
+        hidden_filters |= recipient_visibility & Q(deleted_for_recipient=True)
+
+        return queryset.exclude(hidden_filters)
+
     def get_queryset(self):
         queryset = TeamMessage.objects.select_related(
             'sender',
@@ -230,13 +256,20 @@ class TeamMessageViewSet(viewsets.ModelViewSet):
 
             partner_user = resolve_status_user(partner_status)
             partner_user_id = getattr(partner_user, "id", None)
+            if partner_user_id == self.request.user.id or (
+                current_user_status_id and partner_status.id == current_user_status_id
+            ):
+                return queryset.none()
             filters = Q(sender=self.request.user, recipient_id=conversation_with_id)
             if partner_user_id:
                 incoming_filters = Q(sender_id=partner_user_id, recipient__user=self.request.user)
                 if current_user_status_id:
                     incoming_filters |= Q(sender_id=partner_user_id, recipient_id=current_user_status_id)
                 filters |= incoming_filters
-            return queryset.filter(filters)
+            return self._exclude_hidden_messages(
+                queryset.filter(filters),
+                current_user_status_id,
+            )
 
         recipient_id = self.request.query_params.get('recipient')
         if recipient_id:
@@ -247,23 +280,32 @@ class TeamMessageViewSet(viewsets.ModelViewSet):
                 visibility_filters |= Q(recipient_id=current_user_status_id)
             queryset = queryset.filter(visibility_filters)
 
-        return queryset
+        return self._exclude_hidden_messages(queryset, current_user_status_id)
 
     def perform_create(self, serializer):
+        recipient = serializer.validated_data.get("recipient")
+        recipient_user = resolve_status_user(recipient) if recipient else None
+        current_user_status = resolve_status_for_user(self.request.user)
+
+        if recipient and (
+            getattr(recipient_user, "id", None) == self.request.user.id
+            or (current_user_status and recipient.id == current_user_status.id)
+        ):
+            raise PermissionDenied("You cannot send a message to yourself.")
+
         message = serializer.save(sender=self.request.user)
         recipient_user = resolve_status_user(message.recipient) if message.recipient else None
         recipient_user_id = getattr(recipient_user, "id", None)
         if message.recipient and recipient_user_id and recipient_user_id != self.request.user.id:
-            sender_status = resolve_status_for_user(self.request.user)
             recipient_is_admin = bool(
                 recipient_user.is_staff or recipient_user.is_superuser
             )
             notification_link = "/team"
-            if sender_status:
+            if current_user_status:
                 notification_link = (
-                    f"/team?chat={sender_status.id}"
+                    f"/team?chat={current_user_status.id}"
                     if recipient_is_admin
-                    else f"/administrators?chat={sender_status.id}"
+                    else f"/administrators?chat={current_user_status.id}"
                 )
 
             create_notification(
@@ -274,6 +316,78 @@ class TeamMessageViewSet(viewsets.ModelViewSet):
                 body=f"{self.request.user.username} size bir mesaj gönderdi.",
                 link=notification_link,
             )
+
+    def perform_update(self, serializer):
+        serializer.save(edited_at=timezone.now())
+
+    def partial_update(self, request, *args, **kwargs):
+        message = self.get_object()
+
+        if message.sender_id != request.user.id:
+            return Response(
+                {"detail": "You can only edit your own messages."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if message.deleted_for_everyone:
+            return Response(
+                {"detail": "This message is no longer editable."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return super().partial_update(request, *args, **kwargs)
+
+    @action(detail=True, methods=["post"], url_path="remove")
+    def remove_message(self, request, pk=None):
+        message = self.get_object()
+        current_user_status = resolve_status_for_user(request.user)
+        current_user_status_id = getattr(current_user_status, "id", None)
+        recipient_user_id = getattr(message.recipient, "user_id", None)
+        is_sender = message.sender_id == request.user.id
+        is_recipient = recipient_user_id == request.user.id or (
+            current_user_status_id and message.recipient_id == current_user_status_id
+        )
+
+        if not (is_sender or is_recipient):
+            return Response(
+                {"detail": "You do not have permission to manage this message."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        scope = str(request.data.get("scope") or "self").lower()
+        if scope not in {"self", "everyone"}:
+            return Response(
+                {"detail": "Invalid delete scope."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if scope == "everyone":
+            if not is_sender:
+                return Response(
+                    {"detail": "Only the sender can delete a message for everyone."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if not message.deleted_for_everyone:
+                message.deleted_for_everyone = True
+                message.save(update_fields=["deleted_for_everyone"])
+
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        update_fields = []
+        if is_sender and not message.deleted_for_sender:
+            message.deleted_for_sender = True
+            update_fields.append("deleted_for_sender")
+        elif is_recipient and not message.deleted_for_recipient:
+            message.deleted_for_recipient = True
+            update_fields.append("deleted_for_recipient")
+
+        if message.deleted_for_sender and message.deleted_for_recipient:
+            message.delete()
+        elif update_fields:
+            message.save(update_fields=update_fields)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -295,7 +409,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
                     recipient=member.user,
                     actor=self.request.user,
                     notification_type="project",
-                    title="Yeni projeye eklendiniz",
+                    title="Yeni Projeye Eklendiniz",
                     body=f"{project.name} projesine dahil edildiniz.",
                     link="/projects",
                 )
@@ -356,7 +470,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                 recipient=task.assignee,
                 actor=self.request.user,
                 notification_type="task",
-                title="Size yeni görev atandı",
+                title="Size Yeni Görev Atandı",
                 body=f"{task.title} görevi size atandı.",
                 link="/tasks",
             )
@@ -439,31 +553,27 @@ class AdminContactListView(APIView):
             Q(is_staff=True) | Q(is_superuser=True)
         ).order_by("username")
 
+        statuses_by_user_id = {
+            status.user_id: status
+            for status in EmploymentStatus.objects.select_related("user").filter(
+                user_id__in=admin_users.values_list("id", flat=True)
+            )
+        }
         admin_statuses = []
         for admin_user in admin_users:
-            full_name = f"{admin_user.first_name} {admin_user.last_name}".strip()
-            status, created = EmploymentStatus.objects.get_or_create(
-                user=admin_user,
-                defaults={
-                    "employee_name": full_name or admin_user.username,
-                    "position": "Administrator",
-                    "current_work": "Yönetici destek taleplerini takip ediyor.",
-                    "status_type": "available",
-                },
-            )
+            status = statuses_by_user_id.get(admin_user.id)
+            if not status:
+                continue
 
-            updated_fields = []
+            full_name = f"{admin_user.first_name} {admin_user.last_name}".strip()
             if not status.employee_name:
                 status.employee_name = full_name or admin_user.username
-                updated_fields.append("employee_name")
             if not status.position:
                 status.position = "Administrator"
-                updated_fields.append("position")
             if not status.current_work:
                 status.current_work = "Yönetici destek taleplerini takip ediyor."
-                updated_fields.append("current_work")
-            if updated_fields:
-                status.save(update_fields=updated_fields)
+            if not status.status_type:
+                status.status_type = "available"
 
             admin_statuses.append(status)
 

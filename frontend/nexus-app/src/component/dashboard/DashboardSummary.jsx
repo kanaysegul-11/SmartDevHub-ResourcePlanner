@@ -168,7 +168,7 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
 
           <div className="relative flex flex-col gap-8">
             <div className="flex flex-col gap-5 border-b border-slate-200/70 pb-8 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-2xl">
+              <div className="min-w-0 max-w-2xl">
                 <Badge variant="neutral" icon={<FeatherActivity />}>
                   {t("dashboard.operationFocus")}
                 </Badge>
@@ -177,10 +177,10 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
                 </h2>
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3 lg:flex-nowrap gap-3">
                 <Button
-                  variant="brand-secondary"
-                  className="rounded-2xl bg-slate-900 px-4 text-white hover:bg-slate-800"
+                  variant="neutral-secondary"
+                  className="rounded-3xl border-slate-200 bg-white/80 px-5 "
                   icon={<FeatherArrowUpRight />}
                   onClick={() => navigate("/snippets")}
                 >
@@ -188,7 +188,7 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
                 </Button>
                 <Button
                   variant="neutral-secondary"
-                  className="rounded-2xl border-slate-200 bg-white/80 px-4"
+                  className="rounded-3xl border-slate-200 bg-white/80 px-5"
                   icon={<FeatherUsers />}
                   onClick={() => navigate("/team")}
                 >
@@ -354,124 +354,12 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
                       <p className="text-sm text-slate-400">{t("dashboard.noDistribution")}</p>
                     )}
                   </div>
+                  
                 </div>
+                
               </div>
             </div>
-          </div>
-        </DashboardPanel>
-
-        <DashboardPanel className="p-7 lg:p-8">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Badge variant="neutral" icon={<FeatherClock />}>
-                {t("dashboard.recentActivity")}
-              </Badge>
-              <h3 className="mt-4 font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
-                {t("dashboard.recentActivityTitle")}
-              </h3>
-            </div>
-            <Button
-              variant="neutral-tertiary"
-              size="small"
-              className="rounded-2xl"
-              icon={<FeatherArrowUpRight />}
-              onClick={() => navigate("/analytics")}
-            >
-              {t("dashboard.seeMore")}
-            </Button>
-          </div>
-
-          <div className="mt-8 flex flex-col gap-5">
-            {recentActivity.map((item, index) => {
-              const config = getActivityConfig(item.type, t);
-              return (
-                <div key={item.id} className="relative flex gap-4">
-                  {index !== recentActivity.length - 1 ? (
-                    <div className="absolute left-6 top-14 h-[calc(100%-8px)] w-px bg-slate-200" />
-                  ) : null}
-                  <div
-                    className={`relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] ${config.tone}`}
-                  >
-                    {config.icon}
-                  </div>
-                  <div className="min-w-0 flex-1 rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="line-clamp-2 break-words text-sm font-bold text-slate-900">{item.title}</p>
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                        {config.label}
-                      </span>
-                    </div>
-                    <p className="mt-2 break-words text-sm leading-6 text-slate-500">{item.meta}</p>
-                    <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
-                      {formatRelativeDate(item.timestamp, language, t)}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </DashboardPanel>
-      </section>
-
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)] xl:gap-8">
-        <DashboardPanel className="p-7 lg:p-8">
-          <div className="flex flex-col gap-4 border-b border-slate-200/70 pb-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <Badge variant="neutral" icon={<FeatherMessageCircle />}>
-                {t("dashboard.reviewQueue")}
-              </Badge>
-              <h3 className="mt-4 font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
-                {t("dashboard.reviewQueueTitle")}
-              </h3>
-            </div>
-            <Button
-              variant="neutral-tertiary"
-              size="small"
-              className="rounded-2xl"
-              icon={<FeatherArrowUpRight />}
-              onClick={() => navigate("/snippets")}
-            >
-              {t("dashboard.goLibrary")}
-            </Button>
-          </div>
-
-          <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-2">
-            {reviewQueue.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => navigate(`/snippets/${item.id}`)}
-                className="rounded-[28px] border border-slate-200/80 bg-slate-50/75 p-5 text-left transition duration-200 hover:-translate-y-1 hover:bg-white hover:shadow-[0_16px_36px_rgba(148,163,184,0.14)]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-lg font-black tracking-tight text-slate-900">
-                      {item.title}
-                    </p>
-                    <p className="mt-3 line-clamp-2 text-sm leading-7 text-slate-500">
-                      {item.description || t("dashboard.noDescription")}
-                    </p>
-                  </div>
-                  <Badge variant="neutral">{item.language || t("dashboard.activityCode")}</Badge>
-                </div>
-                <div className="mt-5 flex items-center justify-between text-sm">
-                  <span className="font-medium text-slate-500">
-                    {item.commentCount === 0
-                      ? t("dashboard.noCommentsYet")
-                      : `${item.commentCount} ${t("dashboard.commentsSuffix")}`}
-                  </span>
-                  <span className="font-semibold text-slate-700">
-                    {item.averageRating
-                      ? `${item.averageRating.toFixed(1)} / 5`
-                      : t("dashboard.ratingPending")}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </DashboardPanel>
-
-        <DashboardPanel className="p-7 lg:p-8">
+             <DashboardPanel className="p-7 lg:p-8">
           <Badge variant="neutral" icon={<FeatherUsers />}>
             {t("dashboard.quickAccess")}
           </Badge>
@@ -538,6 +426,121 @@ function DashboardSummary({ stats, teamActivities = [], onMemberClick }) {
             </div>
           </div>
         </DashboardPanel>
+          </div>
+        </DashboardPanel>
+
+        <DashboardPanel className="p-7 lg:p-9">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Badge variant="neutral" icon={<FeatherClock />}>
+                {t("dashboard.recentActivity")}
+              </Badge>
+              <h3 className="mt-4 font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
+                {t("dashboard.recentActivityTitle")}
+              </h3>
+            </div>
+            <Button
+              variant="neutral-tertiary"
+              size="small"
+              className="rounded-2xl"
+              icon={<FeatherArrowUpRight />}
+              onClick={() => navigate("/analytics")}
+            >
+              {t("dashboard.seeMore")}
+            </Button>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-5">
+            {recentActivity.map((item, index) => {
+              const config = getActivityConfig(item.type, t);
+              return (
+                <div key={item.id} className="relative flex gap-4">
+                  {index !== recentActivity.length - 1 ? (
+                    <div className="absolute left-6 top-14 h-[calc(100%-8px)] w-px bg-slate-200" />
+                  ) : null}
+                  <div
+                    className={`relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] ${config.tone}`}
+                  >
+                    {config.icon}
+                  </div>
+                  <div className="min-w-0 flex-1 rounded-[24px] border border-slate-200/80 bg-slate-50/80 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="line-clamp-2 break-words text-sm font-bold text-slate-900">{item.title}</p>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                        {config.label}
+                      </span>
+                    </div>
+                    <p className="mt-2 break-words text-sm leading-6 text-slate-500">{item.meta}</p>
+                    <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
+                      {formatRelativeDate(item.timestamp, language, t)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </DashboardPanel>
+      </section>
+
+      <section className="grid grid-cols-1 gap-8 ">
+        <DashboardPanel className="p-9 lg:p-8">
+          <div className="flex flex-col gap-4 border-b border-slate-200/70 pb-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <Badge variant="neutral" icon={<FeatherMessageCircle />}>
+                {t("dashboard.reviewQueue")}
+              </Badge>
+              <h3 className="mt-4 font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
+                {t("dashboard.reviewQueueTitle")}
+              </h3>
+            </div>
+            <Button
+              variant="neutral-tertiary"
+              size="small"
+              className="rounded-2xl"
+              icon={<FeatherArrowUpRight />}
+              onClick={() => navigate("/snippets")}
+            >
+              {t("dashboard.goLibrary")}
+            </Button>
+          </div>
+
+          <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {reviewQueue.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => navigate(`/snippets/${item.id}`)}
+                className="rounded-[28px] border border-slate-200/80 bg-slate-50/75 p-5 text-left transition duration-200 hover:-translate-y-1 hover:bg-white hover:shadow-[0_16px_36px_rgba(148,163,184,0.14)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-lg font-black tracking-tight text-slate-900">
+                      {item.title}
+                    </p>
+                    <p className="mt-3 line-clamp-2 text-sm leading-7 text-slate-500">
+                      {item.description || t("dashboard.noDescription")}
+                    </p>
+                  </div>
+                  <Badge variant="neutral">{item.language || t("dashboard.activityCode")}</Badge>
+                </div>
+                <div className="mt-5 flex items-center justify-between text-sm">
+                  <span className="font-medium text-slate-500">
+                    {item.commentCount === 0
+                      ? t("dashboard.noCommentsYet")
+                      : `${item.commentCount} ${t("dashboard.commentsSuffix")}`}
+                  </span>
+                  <span className="font-semibold text-slate-700">
+                    {item.averageRating
+                      ? `${item.averageRating.toFixed(1)} / 5`
+                      : t("dashboard.ratingPending")}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </DashboardPanel>
+
+       
       </section>
     </div>
   );

@@ -180,8 +180,9 @@ class TeamMessageSerializer(serializers.ModelSerializer):
             'sender_details',
             'content',
             'created_at',
+            'edited_at',
         ]
-        read_only_fields = ['sender']
+        read_only_fields = ['sender', 'edited_at']
 
 
 class ProjectSerializer(serializers.ModelSerializer):

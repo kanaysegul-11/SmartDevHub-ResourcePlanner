@@ -25,6 +25,7 @@ import Tasks from "./pages/Tasks";
 import NotificationsPage from "./pages/NotificationsPage";
 import ContactAdmin from "./pages/ContactAdmin";
 import { useUser } from "./UserContext.jsx";
+import { Toaster } from "sonner";
 
 function AdminOnlyRoute({ children }) {
   const { userData } = useUser();
@@ -173,6 +174,13 @@ function App() {
       </Routes>
       <UnsavedChangesNotifier />
       <DocumentTitleHandler />
+      <Toaster
+        richColors
+        position="top-right"
+        toastOptions={{
+          className: "font-sans",
+        }}
+      />
     </Refine>
   );
 }

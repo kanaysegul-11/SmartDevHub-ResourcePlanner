@@ -7,30 +7,36 @@ import {
 } from "react";
 import { apiClient } from "./refine/axios";
 import { SESSION_UPDATED_EVENT } from "./refine/session";
+import {
+  getSessionValue,
+  hasSessionValue,
+  REMEMBER_ME_KEY,
+  setSessionValue,
+} from "./refine/sessionStorage";
 
 const UserContext = createContext(null);
 const defaultUserData = {
-  username: localStorage.getItem("username") || "User",
+  username: getSessionValue("username") || "User",
   email: "",
   firstName: "",
   lastName: "",
   avatar: localStorage.getItem("userAvatar") || "",
-  isAdmin: localStorage.getItem("is_admin") === "true",
-  language: localStorage.getItem("language") || "en",
+  isAdmin: getSessionValue("is_admin") === "true",
+  language: getSessionValue("language") || localStorage.getItem("language") || "en",
 };
 
 const readUserDataFromStorage = (prevState = defaultUserData) => {
-  const hasToken = Boolean(localStorage.getItem("token"));
+  const hasToken = hasSessionValue("token");
 
   return {
     ...prevState,
     username: hasToken
-      ? localStorage.getItem("username") || prevState.username || "User"
+      ? getSessionValue("username") || prevState.username || "User"
       : "User",
     avatar: hasToken ? localStorage.getItem("userAvatar") || prevState.avatar || "" : "",
-    isAdmin: hasToken && localStorage.getItem("is_admin") === "true",
+    isAdmin: hasToken && getSessionValue("is_admin") === "true",
     language: hasToken
-      ? localStorage.getItem("language") || prevState.language || "en"
+      ? getSessionValue("language") || localStorage.getItem("language") || prevState.language || "en"
       : "en",
   };
 };
@@ -45,24 +51,26 @@ export const UserProvider = ({ children }) => {
   const updateUserData = useCallback((nextData) => {
     setUserDataState((prev) => {
       const merged = { ...prev, ...nextData };
+      const rememberMe = localStorage.getItem(REMEMBER_ME_KEY) === "true";
 
       if (merged.username) {
-        localStorage.setItem("username", merged.username);
+        setSessionValue("username", merged.username, { rememberMe });
       }
       if (typeof merged.avatar === "string") {
         localStorage.setItem("userAvatar", merged.avatar);
       }
       if (merged.language) {
+        setSessionValue("language", merged.language, { rememberMe });
         localStorage.setItem("language", merged.language);
       }
-      localStorage.setItem("is_admin", merged.isAdmin ? "true" : "false");
+      setSessionValue("is_admin", merged.isAdmin ? "true" : "false", { rememberMe });
       return merged;
     });
   }, []);
 
   const refreshUserData = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
+      const token = getSessionValue("token");
       if (!token) {
         syncFromStorage();
         return;
@@ -88,8 +96,9 @@ export const UserProvider = ({ children }) => {
 
   useEffect(() => {
     const handleSessionUpdated = () => {
-      const token = localStorage.getItem("token");
+      const token = getSessionValue("token");
       if (token) {
+        syncFromStorage();
         void refreshUserData();
         return;
       }

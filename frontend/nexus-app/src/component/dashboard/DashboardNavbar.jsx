@@ -4,9 +4,42 @@ import { useUser } from "../../UserContext.jsx";
 import { useI18n } from "../../I18nContext.jsx";
 import { Badge } from "../../ui/components/Badge";
 
+const toTitleCase = (value) =>
+  value
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const getDashboardDisplayName = (userData, fallback) => {
+  const fullName = [userData?.firstName, userData?.lastName]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
+
+  if (fullName) {
+    return fullName;
+  }
+
+  const username = String(userData?.username || "").trim();
+
+  if (!username) {
+    return fallback;
+  }
+
+  const normalizedUsername = username
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\d+\b/g, "")
+    .trim();
+
+  return toTitleCase(normalizedUsername || username);
+};
+
 function Navbar() {
   const { userData } = useUser();
   const { t } = useI18n();
+  const displayName = getDashboardDisplayName(userData, t("app.user"));
 
   return (
     <div className="relative overflow-hidden rounded-[34px] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(255,255,255,0.82))] p-8 shadow-[0_24px_70px_rgba(148,163,184,0.18)] backdrop-blur xl:p-10">
@@ -24,8 +57,7 @@ function Navbar() {
           </div>
 
           <h1 className="max-w-2xl font-['Newsreader'] text-4xl font-medium leading-tight tracking-tight text-slate-900 md:text-5xl">
-            {t("dashboard.greeting")}, {userData.username || t("app.user")}.{" "}
-            {t("dashboard.heroTitle")}
+            {t("dashboard.greeting")}, {displayName}. {t("dashboard.heroTitle")}
           </h1>
         </div>
 
