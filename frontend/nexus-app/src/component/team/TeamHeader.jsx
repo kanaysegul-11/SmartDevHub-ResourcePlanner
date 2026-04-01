@@ -42,7 +42,7 @@ function TeamHeader({
 
   return (
     <div className="flex w-full flex-col gap-6 px-6 pt-6 md:px-8 xl:px-10">
-      <section className="relative overflow-hidden rounded-[34px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.86))] p-7 shadow-[0_24px_70px_rgba(148,163,184,0.16)] backdrop-blur lg:p-8">
+      <section className="relative overflow-hidden rounded-[34px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.86))] p-7 shadow-[0_24px_70px_rgba(148,163,184,0.16)] backdrop-blur lg:p-8 ">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.18),transparent_46%),radial-gradient(circle_at_top_right,rgba(251,191,36,0.16),transparent_38%)]" />
 
         <div className="relative grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -104,10 +104,10 @@ function TeamHeader({
                 {activeActionMember?.employee_name || t("team.waiting")}
               </p>
             </div>
-            <div className="mt-6 flex flex-col gap-3">
+            <div className="mt-6 flex flex-col gap-3 ">
               <Button
                 variant="neutral-secondary"
-                className="h-12 justify-between rounded-2xl border-white/10 bg-white/10 px-4 text-white hover:bg-white/15"
+                className="h-12 justify-between rounded-2xl text-white "
                 icon={<FeatherArrowUpRight />}
                 onClick={() => activeActionMember && onInspect?.(activeActionMember)}
               >
@@ -115,7 +115,7 @@ function TeamHeader({
               </Button>
               <Button
                 variant="neutral-secondary"
-                className="h-12 justify-between rounded-2xl border-white/10 bg-white/10 px-4 text-white hover:bg-white/15"
+                className="h-12 justify-between rounded-2xl text-white "
                 icon={<FeatherMessageCircle />}
                 disabled={actionDisabled}
                 title={actionDisabled ? t("team.cannotMessageSelf") : ""}

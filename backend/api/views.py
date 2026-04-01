@@ -18,6 +18,7 @@ from django.db import OperationalError
 from django.utils import timezone
 from urllib import request as urllib_request
 from urllib.parse import urlencode
+from .runtime_i18n import format_team_member_count, runtime_text
 from .text_utils import normalize_legacy_turkish_text
 import json
 
@@ -124,7 +125,7 @@ def create_notification(*, recipient, actor=None, notification_type="system", ti
 
 def get_user_display_name(user):
     if not user:
-        return "Kullanıcı"
+        return "User"
 
     full_name = f"{user.first_name} {user.last_name}".strip()
     return full_name or user.username
@@ -158,15 +159,25 @@ def notify_task_completed(*, task, actor):
         add_recipient(admin_user)
 
     actor_name = get_user_display_name(actor)
-    project_name = task.project.name if task.project else "Bağımsız görev"
 
     for recipient in recipients.values():
+        project_name = (
+            task.project.name
+            if task.project
+            else runtime_text(recipient, "independent_task")
+        )
         create_notification(
             recipient=recipient,
             actor=actor,
             notification_type="task",
-            title="Görev Tamamlandı",
-            body=f"{actor_name}, {project_name} içindeki {task.title} görevini tamamladı.",
+            title=runtime_text(recipient, "task_completed_title"),
+            body=runtime_text(
+                recipient,
+                "task_completed_body",
+                actor_name=actor_name,
+                project_name=project_name,
+                task_title=task.title,
+            ),
             link="/tasks",
         )
 
@@ -209,6 +220,32 @@ class CommentViewSet(viewsets.ModelViewSet):
         # Modelde alan ismi 'author' olduğu için 'author=...' şeklinde kaydettik
         serializer.save(author=self.request.user)
 
+    def perform_create(self, serializer):
+        comment = serializer.save(author=self.request.user)
+        snippet_author = getattr(comment.snippet, "author", None)
+
+        if snippet_author and snippet_author.id != self.request.user.id:
+            actor_name = get_user_display_name(self.request.user)
+            snippet_title = comment.snippet.title or runtime_text(
+                snippet_author, "code_snippet"
+            )
+            create_notification(
+                recipient=snippet_author,
+                actor=self.request.user,
+                notification_type="comment",
+                title=runtime_text(
+                    snippet_author,
+                    "comment_title",
+                    actor_name=actor_name,
+                ),
+                body=runtime_text(
+                    snippet_author,
+                    "comment_body",
+                    snippet_title=snippet_title,
+                ),
+                link=f"/snippets/{comment.snippet_id}",
+            )
+
 # Ekip Durumu
 class EmployeeStatusViewSet(viewsets.ModelViewSet):
     serializer_class = StatusSerializer
@@ -217,6 +254,7 @@ class EmployeeStatusViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return (
             EmploymentStatus.objects.select_related('user')
+            .prefetch_related("projects__tasks")
             .exclude(Q(user__is_staff=True) | Q(user__is_superuser=True))
             .order_by('-last_updated')
         )
@@ -300,6 +338,7 @@ class TeamMessageViewSet(viewsets.ModelViewSet):
             recipient_is_admin = bool(
                 recipient_user.is_staff or recipient_user.is_superuser
             )
+            actor_name = get_user_display_name(self.request.user)
             notification_link = "/team"
             if current_user_status:
                 notification_link = (
@@ -312,8 +351,16 @@ class TeamMessageViewSet(viewsets.ModelViewSet):
                 recipient=recipient_user,
                 actor=self.request.user,
                 notification_type="message",
-                title="Yeni ekip mesajı",
-                body=f"{self.request.user.username} size bir mesaj gönderdi.",
+                title=runtime_text(
+                    recipient_user,
+                    "message_title",
+                    actor_name=actor_name,
+                ),
+                body=runtime_text(
+                    recipient_user,
+                    "message_body",
+                    actor_name=actor_name,
+                ),
                 link=notification_link,
             )
 
@@ -409,8 +456,12 @@ class ProjectViewSet(viewsets.ModelViewSet):
                     recipient=member.user,
                     actor=self.request.user,
                     notification_type="project",
-                    title="Yeni Projeye Eklendiniz",
-                    body=f"{project.name} projesine dahil edildiniz.",
+                    title=runtime_text(member.user, "project_added_title"),
+                    body=runtime_text(
+                        member.user,
+                        "project_added_body",
+                        project_name=project.name,
+                    ),
                     link="/projects",
                 )
 
@@ -423,8 +474,12 @@ class ProjectViewSet(viewsets.ModelViewSet):
                     recipient=member.user,
                     actor=self.request.user,
                     notification_type="project",
-                    title="Proje bilgisi güncellendi",
-                    body=f"{project.name} projesiyle ilgili yeni bir güncelleme var.",
+                    title=runtime_text(member.user, "project_updated_title"),
+                    body=runtime_text(
+                        member.user,
+                        "project_updated_body",
+                        project_name=project.name,
+                    ),
                     link="/projects",
                 )
 
@@ -470,8 +525,12 @@ class TaskViewSet(viewsets.ModelViewSet):
                 recipient=task.assignee,
                 actor=self.request.user,
                 notification_type="task",
-                title="Size Yeni Görev Atandı",
-                body=f"{task.title} görevi size atandı.",
+                title=runtime_text(task.assignee, "task_assigned_title"),
+                body=runtime_text(
+                    task.assignee,
+                    "task_assigned_body",
+                    task_title=task.title,
+                ),
                 link="/tasks",
             )
 
@@ -512,8 +571,12 @@ class TaskViewSet(viewsets.ModelViewSet):
                 recipient=updated_task.assignee,
                 actor=request.user,
                 notification_type="task",
-                title="Size Görev Atandı",
-                body=f"{updated_task.title} görevi size atandı.",
+                title=runtime_text(updated_task.assignee, "task_reassigned_title"),
+                body=runtime_text(
+                    updated_task.assignee,
+                    "task_reassigned_body",
+                    task_title=updated_task.title,
+                ),
                 link="/tasks",
             )
         return response
@@ -569,9 +632,11 @@ class AdminContactListView(APIView):
             if not status.employee_name:
                 status.employee_name = full_name or admin_user.username
             if not status.position:
-                status.position = "Administrator"
+                status.position = runtime_text(request.user, "administrator_role")
             if not status.current_work:
-                status.current_work = "Yönetici destek taleplerini takip ediyor."
+                status.current_work = runtime_text(
+                    request.user, "admin_support_tracking"
+                )
             if not status.status_type:
                 status.status_type = "available"
 
@@ -620,38 +685,59 @@ class DashboardActivityView(APIView):
             assignee_name = (
                 getattr(getattr(task.assignee, "employment_status", None), "employee_name", None)
                 or getattr(task.assignee, "username", None)
-                or "Atanmadı"
+                or runtime_text(request.user, "dashboard_unassigned")
             )
-            project_name = task.project.name if task.project else "Proje bağlanmadı"
+            project_name = (
+                task.project.name
+                if task.project
+                else runtime_text(request.user, "dashboard_no_project")
+            )
             activity.append(
                 {
                     "id": f"task-{task.id}",
                     "type": "task",
                     "title": task.title,
-                    "meta": f"{project_name} - Atanan: {assignee_name}",
+                    "meta": runtime_text(
+                        request.user,
+                        "dashboard_task_meta",
+                        project_name=project_name,
+                        assignee_name=assignee_name,
+                    ),
                     "timestamp": task.updated_at or task.created_at,
                 }
             )
 
         for project in projects.order_by("-updated_at")[:10]:
+            client_name = project.client_name or runtime_text(
+                request.user, "dashboard_internal_project"
+            )
             activity.append(
                 {
                     "id": f"project-{project.id}",
                     "type": "project",
                     "title": project.name,
-                    "meta": f"{project.client_name or 'İç proje'} - {project.team_members.count()} ekip üyesi",
+                    "meta": runtime_text(
+                        request.user,
+                        "dashboard_project_meta",
+                        client_name=client_name,
+                        team_member_count=format_team_member_count(
+                            request.user, project.team_members.count()
+                        ),
+                    ),
                     "timestamp": project.updated_at or project.created_at,
                 }
             )
 
         for message in messages.order_by("-created_at")[:10]:
-            recipient_name = message.recipient.employee_name or "Ekip üyesi"
+            recipient_name = message.recipient.employee_name or runtime_text(
+                request.user, "dashboard_team_member"
+            )
             activity.append(
                 {
                     "id": f"message-{message.id}",
                     "type": "message",
                     "title": recipient_name,
-                    "meta": "Takım mesajı gönderildi",
+                    "meta": runtime_text(request.user, "dashboard_message_meta"),
                     "timestamp": message.created_at,
                 }
             )
@@ -673,14 +759,24 @@ class DashboardActivityView(APIView):
                     "id": f"snippet-{snippet.id}",
                     "type": "snippet",
                     "title": snippet.title,
-                    "meta": snippet.language or "Kod",
+                    "meta": snippet.language
+                    or runtime_text(request.user, "dashboard_code_label"),
                     "timestamp": snippet.updated_at or snippet.created_at,
                 }
             )
 
         for status_item in statuses.order_by("-last_updated")[:10]:
-            member_name = status_item.employee_name or getattr(status_item.user, "username", "Ekip üyesi")
-            status_label = "Meşgul" if status_item.status_type == "busy" else "Müsait"
+            member_name = status_item.employee_name or getattr(
+                status_item.user,
+                "username",
+                runtime_text(request.user, "dashboard_team_member"),
+            )
+            status_label = runtime_text(
+                request.user,
+                "dashboard_busy"
+                if status_item.status_type == "busy"
+                else "dashboard_available",
+            )
             activity.append(
                 {
                     "id": f"status-{status_item.id}",

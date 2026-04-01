@@ -430,10 +430,16 @@ function Sidebar({
           </SidebarWithSections.NavItem>
           <div
             className={`flex flex-col gap-1 overflow-hidden pl-9 transition-all duration-300 ${isLibraryHovered
-                ? "mb-2 max-h-20 opacity-100"
+                ? "mb-2 max-h-32 opacity-100"
                 : "pointer-events-none max-h-0 opacity-0"
               }`}
           >
+            <button
+              onClick={() => navigate("/snippets?view=mine")}
+              className={submenuLinkClass}
+            >
+              <FeatherCode size={14} /> {t("sidebar.mySnippets")}
+            </button>
             <button
               onClick={() => navigate("/add-snippets")}
               className={submenuLinkClass}

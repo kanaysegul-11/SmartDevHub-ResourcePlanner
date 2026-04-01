@@ -13,7 +13,7 @@ function SnippetCodePanel({ language, code }) {
         <span className="font-mono text-xs text-slate-500">{language}</span>
       </div>
       <div className="overflow-x-auto p-8">
-        <pre className="font-mono leading-relaxed text-[#c9d1d9]">
+        <pre className="font-mono leading-relaxed text-[#c9d1d9] ">
           <code>{code}</code>
         </pre>
       </div>

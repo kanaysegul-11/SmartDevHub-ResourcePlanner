@@ -16,6 +16,7 @@ import {
 
 const UserContext = createContext(null);
 const defaultUserData = {
+  id: getSessionValue("user_id") || "",
   username: getSessionValue("username") || "User",
   email: "",
   firstName: "",
@@ -30,6 +31,7 @@ const readUserDataFromStorage = (prevState = defaultUserData) => {
 
   return {
     ...prevState,
+    id: hasToken ? getSessionValue("user_id") || prevState.id || "" : "",
     username: hasToken
       ? getSessionValue("username") || prevState.username || "User"
       : "User",
@@ -55,6 +57,9 @@ export const UserProvider = ({ children }) => {
 
       if (merged.username) {
         setSessionValue("username", merged.username, { rememberMe });
+      }
+      if (merged.id) {
+        setSessionValue("user_id", merged.id, { rememberMe });
       }
       if (typeof merged.avatar === "string") {
         localStorage.setItem("userAvatar", merged.avatar);

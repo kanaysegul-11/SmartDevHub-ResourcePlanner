@@ -1,7 +1,13 @@
 "use client";
 import React from "react";
 import { Avatar } from "../../ui/components/Avatar";
-import { FeatherChevronRight, FeatherMessageSquare, FeatherAlertTriangle, FeatherTrash2 } from "@subframe/core";
+import {
+  FeatherAlertTriangle,
+  FeatherChevronRight,
+  FeatherEdit2,
+  FeatherMessageSquare,
+  FeatherTrash2,
+} from "@subframe/core";
 import {
   renderHighlightedCodeLines,
   scanCodeSecurity,
@@ -10,16 +16,22 @@ import { useDelete } from "@refinedev/core";
 import { Popconfirm } from "antd";
 import { useI18n } from "../../I18nContext.jsx";
 import { useUser } from "../../UserContext.jsx";
+import { getSessionValue } from "../../refine/sessionStorage.js";
 
-function SnippetCard({ snippet, onClick }) {
+function SnippetCard({ snippet, onClick, onEdit }) {
   const { mutate: deleteSnippet } = useDelete();
   const { t } = useI18n();
   const { userData } = useUser();
   const risks = scanCodeSecurity(snippet.code || "");
-  const currentUsername = String(userData?.username || "").trim().toLowerCase();
-  const canDeleteSnippet =
+  const currentUserId = String(userData?.id || getSessionValue("user_id") || "").trim();
+  const currentUsername = String(
+    userData?.username || getSessionValue("username") || ""
+  )
+    .trim()
+    .toLowerCase();
+  const canManageSnippet =
     Boolean(userData?.isAdmin) ||
-    String(snippet.author_details?.id || "") === String(userData?.id || "") ||
+    String(snippet.author_details?.id || "").trim() === currentUserId ||
     String(snippet.author_details?.username || "").trim().toLowerCase() === currentUsername;
 
   const handleDelete = (e) => {
@@ -35,6 +47,11 @@ function SnippetCard({ snippet, onClick }) {
     });
   };
 
+  const handleEdit = (event) => {
+    event.stopPropagation();
+    onEdit?.(snippet);
+  };
+
   const highlightRisks = (code) => {
     return renderHighlightedCodeLines(
       code,
@@ -45,8 +62,16 @@ function SnippetCard({ snippet, onClick }) {
 
   return (
     <div onClick={onClick} className="group relative flex min-h-[340px] h-auto cursor-pointer flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-purple-400 hover:shadow-md">
-      {canDeleteSnippet ? (
-        <div className="absolute right-10 top-4 z-10 opacity-0 transition-opacity group-hover:opacity-100">
+      {canManageSnippet ? (
+        <div className="absolute right-4 top-4 z-10 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            type="button"
+            onClick={handleEdit}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-sky-200 bg-sky-100 text-sky-700 shadow-sm transition-all hover:bg-sky-600 hover:text-white"
+            aria-label={t("snippets.editSnippet")}
+          >
+            <FeatherEdit2 size={16} />
+          </button>
           <Popconfirm title={t("snippets.deleteConfirm")} onConfirm={handleDelete} onCancel={(e) => e.stopPropagation()} okText={t("snippets.deleteYes")} cancelText={t("snippets.deleteCancel")} okButtonProps={{ danger: true, type: "primary", style: { backgroundColor: "#ff4d4f", color: "white", fontWeight: "bold" } }}>
             <div onClick={(e) => e.stopPropagation()} className="flex h-9 w-9 items-center justify-center rounded-full border border-red-200 bg-red-100 text-red-600 shadow-sm transition-all hover:bg-red-600 hover:text-white">
               <FeatherTrash2 size={16} />

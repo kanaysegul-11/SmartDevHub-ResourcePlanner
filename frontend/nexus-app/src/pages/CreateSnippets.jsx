@@ -1,32 +1,100 @@
 "use client";
-import React, { useMemo, useState } from "react";
-import { useList, useForm } from "@refinedev/core";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { useCreate, useList, useOne, useUpdate } from "@refinedev/core";
+import { useNavigate, useParams } from "react-router-dom";
 import { notification } from "antd";
-import { FeatherChevronLeft, FeatherCode2, FeatherShield, FeatherZap } from "@subframe/core";
+import {
+  FeatherChevronLeft,
+  FeatherCode2,
+  FeatherEdit2,
+  FeatherShield,
+  FeatherZap,
+} from "@subframe/core";
 import Sidebar from "../component/layout/Sidebar";
 import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
 import { Badge } from "../ui/components/Badge";
 import { Button } from "../ui/components/Button";
 import { scanCodeSecurity } from "../utils/SecurityScanner";
 import { useI18n } from "../I18nContext.jsx";
+import { useUser } from "../UserContext.jsx";
+import { getSessionValue } from "../refine/sessionStorage.js";
+
+const EMPTY_FORM = {
+  title: "",
+  description: "",
+  code: "",
+  language: "python",
+};
+
+const runMutation = (mutate, params) =>
+  new Promise((resolve, reject) => {
+    mutate(params, {
+      onSuccess: (result) => resolve(result),
+      onError: (error) => reject(error),
+    });
+  });
 
 function CreateSnippet() {
+  const { id } = useParams();
+  const isEditMode = Boolean(id);
   const navigate = useNavigate();
   const { t } = useI18n();
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    code: "",
-    language: "python",
+  const { userData } = useUser();
+  const [formData, setFormData] = useState(EMPTY_FORM);
+  const { data: allSnippets } = useList({
+    resource: "snippets",
+    queryOptions: {
+      staleTime: 15000,
+      refetchOnWindowFocus: false,
+    },
   });
-  const { data: allSnippets } = useList({ resource: "snippets" });
-  const { onFinish: handleRefineSubmit, formLoading } = useForm({ resource: "snippets", action: "create" });
+  const snippetQuery = useOne({
+    resource: "snippets",
+    id,
+    queryOptions: {
+      enabled: isEditMode,
+      staleTime: 15000,
+      refetchOnWindowFocus: false,
+    },
+  });
+  const { mutate: createSnippet, isLoading: isCreating } = useCreate();
+  const { mutate: updateSnippet, isLoading: isUpdating } = useUpdate();
+
+  const snippet = snippetQuery.data?.data;
+  const formLoading = isEditMode ? snippetQuery.isLoading || isUpdating : isCreating;
+  const currentUserId = String(userData?.id || getSessionValue("user_id") || "").trim();
+  const currentUsername = String(
+    userData?.username || getSessionValue("username") || ""
+  )
+    .trim()
+    .toLowerCase();
+  const canManageSnippet =
+    !isEditMode ||
+    !snippet ||
+    Boolean(userData?.isAdmin) ||
+    String(snippet.author_details?.id || "").trim() === currentUserId ||
+    String(snippet.author_details?.username || "").trim().toLowerCase() === currentUsername;
+
+  useEffect(() => {
+    if (!isEditMode || !snippet) {
+      return;
+    }
+
+    setFormData({
+      title: snippet.title || "",
+      description: snippet.description || "",
+      code: snippet.code || "",
+      language: snippet.language || "python",
+    });
+  }, [isEditMode, snippet]);
 
   const onFinish = async (values) => {
     const risks = scanCodeSecurity(values?.code ?? "");
+    const normalizedNextCode = (values?.code || "").replace(/\s/g, "");
     const isDuplicate = allSnippets?.data?.some(
-      (item) => item.code.replace(/\s/g, "") === values.code.replace(/\s/g, "")
+      (item) =>
+        String(item.id) !== String(id || "") &&
+        (item.code || "").replace(/\s/g, "") === normalizedNextCode
     );
 
     if (isDuplicate) {
@@ -48,10 +116,22 @@ function CreateSnippet() {
     }
 
     try {
-      await handleRefineSubmit(values);
+      if (isEditMode) {
+        await runMutation(updateSnippet, {
+          resource: "snippets",
+          id,
+          values,
+        });
+      } else {
+        await runMutation(createSnippet, {
+          resource: "snippets",
+          values,
+        });
+      }
+
       notification.success({
-        message: t("snippets.successTitle"),
-        description: t("snippets.successBody"),
+        message: isEditMode ? t("snippets.updatedTitle") : t("snippets.successTitle"),
+        description: isEditMode ? t("snippets.updatedBody") : t("snippets.successBody"),
         placement: "topRight",
       });
       return true;
@@ -73,10 +153,56 @@ function CreateSnippet() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     const success = await onFinish(formData);
-    if (success) navigate("/snippets");
+
+    if (success) {
+      navigate(isEditMode ? `/snippets/${id}` : "/snippets");
+    }
   };
 
-  const currentRisks = useMemo(() => scanCodeSecurity(formData.code || ""), [formData.code]);
+  const currentRisks = useMemo(
+    () => scanCodeSecurity(formData.code || ""),
+    [formData.code]
+  );
+  const pageTitle = isEditMode ? t("snippets.editTitle") : t("snippets.createTitle");
+
+  if (isEditMode && snippetQuery.isLoading && !snippet) {
+    return (
+      <div className="p-20 text-center font-bold italic text-sky-600 animate-pulse">
+        {t("snippets.detailLoading")}
+      </div>
+    );
+  }
+
+  if (isEditMode && (snippetQuery.isError || !snippet)) {
+    return (
+      <div className="flex flex-col items-center gap-4 p-20 text-center">
+        <p className="font-bold text-slate-500">{t("snippets.detailNotFound")}</p>
+        <button onClick={() => navigate("/snippets")} className="text-sm text-blue-500 underline">
+          {t("snippets.backToList")}
+        </button>
+      </div>
+    );
+  }
+
+  if (isEditMode && !canManageSnippet) {
+    return (
+      <div className="flex flex-col items-center gap-4 p-20 text-center">
+        <p className="text-2xl font-black tracking-tight text-slate-900">
+          {t("snippets.editBlockedTitle")}
+        </p>
+        <p className="max-w-lg text-sm leading-7 text-slate-500">
+          {t("snippets.editBlockedBody")}
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate(`/snippets/${id}`)}
+          className="rounded-full bg-slate-950 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
+        >
+          {t("snippets.backToList")}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-full items-start overflow-hidden bg-transparent font-sans text-slate-900">
@@ -87,7 +213,11 @@ function CreateSnippet() {
         <div className="relative flex w-full flex-col gap-6">
           <TopbarWithRightNav
             className="mx-6 mt-6 rounded-[28px] border border-white/65 bg-white/55 px-6 py-4 shadow-[0_20px_50px_rgba(148,163,184,0.12)] backdrop-blur md:mx-8 xl:mx-10"
-            leftSlot={<Badge variant="neutral" icon={<FeatherCode2 />}>{t("snippets.createTitle")}</Badge>}
+            leftSlot={
+              <Badge variant="neutral" icon={isEditMode ? <FeatherEdit2 /> : <FeatherCode2 />}>
+                {pageTitle}
+              </Badge>
+            }
             rightSlot={<Badge variant="success">{t("snippets.workspace")}</Badge>}
           />
 
@@ -95,7 +225,7 @@ function CreateSnippet() {
             <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.12fr)_340px]">
               <div className="rounded-[34px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.86))] p-7 shadow-[0_24px_70px_rgba(148,163,184,0.16)] backdrop-blur lg:p-8">
                 <button
-                  onClick={() => navigate("/snippets")}
+                  onClick={() => navigate(isEditMode ? `/snippets/${id}` : "/snippets")}
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-sky-200 hover:text-sky-700"
                 >
                   <FeatherChevronLeft size={16} />
@@ -112,7 +242,7 @@ function CreateSnippet() {
                 </div>
 
                 <h1 className="mt-4 max-w-3xl font-['Newsreader'] text-4xl font-medium leading-tight tracking-tight text-slate-950">
-                  {t("snippets.createTitle")}
+                  {pageTitle}
                 </h1>
               </div>
 
@@ -175,7 +305,7 @@ function CreateSnippet() {
                   <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{t("snippets.detailCodeSurface")}</p>
-                      <p className="mt-2 text-xl font-black text-white">{formData.title || t("snippets.createTitle")}</p>
+                      <p className="mt-2 text-xl font-black text-white">{formData.title || pageTitle}</p>
                     </div>
                     <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
                       {formData.language}
@@ -196,7 +326,9 @@ function CreateSnippet() {
                   <FeatherShield size={20} />
                 </div>
                 <p className="mt-5 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{t("analytics.insightPanel")}</p>
-                <p className="mt-3 text-2xl font-black tracking-tight text-slate-950">{t("snippets.saveToLibrary")}</p>
+                <p className="mt-3 text-2xl font-black tracking-tight text-slate-950">
+                  {isEditMode ? t("snippets.updateSnippet") : t("snippets.saveToLibrary")}
+                </p>
 
                 <div className="mt-6 flex flex-col gap-3">
                   <Button
@@ -204,11 +336,15 @@ function CreateSnippet() {
                     className="w-full rounded-[18px] bg-slate-950 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
                     disabled={formLoading}
                   >
-                    {formLoading ? t("snippets.saving") : t("snippets.saveToLibrary")}
+                    {formLoading
+                      ? t("snippets.saving")
+                      : isEditMode
+                        ? t("snippets.updateSnippet")
+                        : t("snippets.saveToLibrary")}
                   </Button>
                   <Button
                     type="button"
-                    onClick={() => navigate("/snippets")}
+                    onClick={() => navigate(isEditMode ? `/snippets/${id}` : "/snippets")}
                     className="w-full rounded-[18px] bg-slate-100 py-3 text-sm font-bold text-slate-700"
                   >
                     {t("app.cancel")}

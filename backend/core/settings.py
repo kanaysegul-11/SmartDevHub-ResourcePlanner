@@ -140,13 +140,14 @@ CSRF_TRUSTED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication', # BU KALSIN
-        # 'rest_framework.authentication.SessionAuthentication', # BU SATIRI SİL VEYA BAŞINA # KOY
+        'rest_framework.authentication.TokenAuthentication',   # Token ile giriş
+        'rest_framework.authentication.SessionAuthentication', # Tarayıcıda login için (opsiyonel)
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticatedOrReadOnly',
+        'rest_framework.permissions.IsAuthenticatedOrReadOnly', # Doğru permission class
     ],
 }
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')

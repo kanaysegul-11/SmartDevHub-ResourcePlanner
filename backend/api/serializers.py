@@ -94,6 +94,59 @@ class StatusSerializer(serializers.ModelSerializer):
 
         return self._open_task_cache[resolved_user.id]
 
+    def _get_member_projects(self, obj):
+        if not hasattr(self, "_member_project_cache"):
+            self._member_project_cache = {}
+
+        if obj.id not in self._member_project_cache:
+            prefetched_projects = getattr(obj, "_prefetched_objects_cache", {}).get("projects")
+            self._member_project_cache[obj.id] = list(
+                prefetched_projects if prefetched_projects is not None else obj.projects.all()
+            )
+
+        return self._member_project_cache[obj.id]
+
+    def _get_project_tasks(self, project):
+        if not hasattr(self, "_project_task_cache"):
+            self._project_task_cache = {}
+
+        if project.id not in self._project_task_cache:
+            prefetched_tasks = getattr(project, "_prefetched_objects_cache", {}).get("tasks")
+            self._project_task_cache[project.id] = list(
+                prefetched_tasks if prefetched_tasks is not None else project.tasks.all()
+            )
+
+        return self._project_task_cache[project.id]
+
+    def _is_active_member_project(self, project):
+        if not project or project.status == "completed":
+            return False
+
+        project_tasks = self._get_project_tasks(project)
+        all_tasks_completed = bool(project_tasks) and all(
+            task.status == "done" for task in project_tasks
+        )
+        due_reached = bool(project.end_date and project.end_date <= timezone.localdate())
+
+        return not (
+            all_tasks_completed
+            or (due_reached and int(project.progress or 0) >= 100)
+        )
+
+    def _get_active_project_ids(self, obj):
+        task_project_ids = {
+            task.project_id
+            for task in self._get_open_tasks(obj)
+            if task.project_id
+        }
+        member_project_ids = {
+            project.id
+            for project in self._get_member_projects(obj)
+            if self._is_active_member_project(project)
+        }
+
+        return task_project_ids | member_project_ids
+
     def _get_active_task(self, obj):
         open_tasks = self._get_open_tasks(obj)
         return open_tasks[0] if open_tasks else None
@@ -126,7 +179,7 @@ class StatusSerializer(serializers.ModelSerializer):
         return task.project.end_date if task and task.project else None
 
     def get_active_project_count(self, obj):
-        return len({task.project_id for task in self._get_open_tasks(obj) if task.project_id})
+        return len(self._get_active_project_ids(obj))
 
 class CommentSerializer(serializers.ModelSerializer):
     author_details = UserSerializer(source='author', read_only=True)
@@ -135,6 +188,13 @@ class CommentSerializer(serializers.ModelSerializer):
         model = Comment
         fields = ['id', 'snippet', 'text', 'experience_rating', 'created_at', 'author', 'author_details']
         read_only_fields = ['author']
+        extra_kwargs = {
+            'experience_rating': {
+                'required': True,
+                'min_value': 1,
+                'max_value': 5,
+            },
+        }
 
 class SnippetSerializer(serializers.ModelSerializer):
     comments = CommentSerializer(many=True, read_only=True) 

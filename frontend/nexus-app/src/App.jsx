@@ -24,6 +24,7 @@ import Projects from "./pages/Projects";
 import Tasks from "./pages/Tasks";
 import NotificationsPage from "./pages/NotificationsPage";
 import ContactAdmin from "./pages/ContactAdmin";
+import MessageNotificationWatcher from "./component/notifications/MessageNotificationWatcher.jsx";
 import { useUser } from "./UserContext.jsx";
 import { Toaster } from "sonner";
 
@@ -55,6 +56,7 @@ function App() {
           name: "snippets",
           list: "/snippets",
           create: "/add-snippets",
+          edit: "/snippets/:id/edit",
           show: "/snippets/:id",
           meta: {
             label: "Code Library",
@@ -141,6 +143,7 @@ function App() {
           <Route path="/snippets" element={<SnippetList />} />
           <Route path="/snippets/:id" element={<SnippetDetail />} />
           <Route path="/add-snippets" element={<CreateSnippet />} />
+          <Route path="/snippets/:id/edit" element={<CreateSnippet />} />
           <Route path="/team" element={<Team />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/tasks" element={<Tasks />} />
@@ -172,6 +175,7 @@ function App() {
 
         <Route path="*" element={<CatchAllNavigate to="/dashboard" />} />
       </Routes>
+      <MessageNotificationWatcher />
       <UnsavedChangesNotifier />
       <DocumentTitleHandler />
       <Toaster

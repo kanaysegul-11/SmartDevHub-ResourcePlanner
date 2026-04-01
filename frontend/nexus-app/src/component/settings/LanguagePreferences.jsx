@@ -13,6 +13,9 @@ function LanguagePreferences({ selectedLanguage, onSelectLanguage, onSave, loadi
         <h3 className="text-xl font-black text-slate-800">
           {t("settings.languageTitle")}
         </h3>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-500">
+          {t("settings.languageScopeNote")}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

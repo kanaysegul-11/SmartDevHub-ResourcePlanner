@@ -74,6 +74,26 @@ class ApiBehaviorTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Snippet.objects.filter(id=snippet.id).exists())
 
+    def test_snippet_create_normalizes_broken_turkish_dotted_i(self):
+        response = self.client.post(
+            "/api/snippets/",
+            {
+                "title": "Backend ?şlem Log Stilleri",
+                "description": "Satır ?çi etiket kullanımı için örnek.",
+                "code": "print('normalized')",
+                "language": "python",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["title"], "Backend İşlem Log Stilleri")
+        self.assertEqual(response.data["description"], "Satır İçi etiket kullanımı için örnek.")
+
+        snippet = Snippet.objects.get(id=response.data["id"])
+        self.assertEqual(snippet.title, "Backend İşlem Log Stilleri")
+        self.assertEqual(snippet.description, "Satır İçi etiket kullanımı için örnek.")
+
     def test_non_author_cannot_update_foreign_comment(self):
         other_user = User.objects.create_user(
             username="comment-owner",
@@ -104,6 +124,212 @@ class ApiBehaviorTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(comment.text, "Original feedback")
+
+    def test_admin_can_update_foreign_comment(self):
+        admin_user = User.objects.create_user(
+            username="comment-admin",
+            password="strong-pass-123",
+            email="comment-admin@example.com",
+            is_staff=True,
+        )
+        other_user = User.objects.create_user(
+            username="comment-owner-admin-update",
+            password="strong-pass-123",
+            email="comment-owner-admin-update@example.com",
+        )
+        snippet = Snippet.objects.create(
+            title="Portal helper",
+            description="Reusable note",
+            code="const value = 1;",
+            language="javascript",
+            author=self.user,
+        )
+        comment = Comment.objects.create(
+            snippet=snippet,
+            author=other_user,
+            text="Original feedback",
+            experience_rating=4,
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.patch(
+            f"/api/comments/{comment.id}/",
+            {"text": "Admin updated feedback"},
+            format="json",
+        )
+
+        comment.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(comment.text, "Admin updated feedback")
+
+    def test_author_can_update_own_comment(self):
+        snippet = Snippet.objects.create(
+            title="Portal helper",
+            description="Reusable note",
+            code="const value = 1;",
+            language="javascript",
+            author=self.user,
+        )
+        comment = Comment.objects.create(
+            snippet=snippet,
+            author=self.user,
+            text="Original feedback",
+            experience_rating=4,
+        )
+
+        response = self.client.patch(
+            f"/api/comments/{comment.id}/",
+            {"text": "Updated feedback", "experience_rating": 2},
+            format="json",
+        )
+
+        comment.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(comment.text, "Updated feedback")
+        self.assertEqual(comment.experience_rating, 2)
+
+    def test_author_can_delete_own_comment(self):
+        snippet = Snippet.objects.create(
+            title="Portal helper",
+            description="Reusable note",
+            code="const value = 1;",
+            language="javascript",
+            author=self.user,
+        )
+        comment = Comment.objects.create(
+            snippet=snippet,
+            author=self.user,
+            text="Original feedback",
+            experience_rating=4,
+        )
+
+        response = self.client.delete(f"/api/comments/{comment.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Comment.objects.filter(id=comment.id).exists())
+
+    def test_admin_can_delete_foreign_comment(self):
+        admin_user = User.objects.create_user(
+            username="comment-admin-delete",
+            password="strong-pass-123",
+            email="comment-admin-delete@example.com",
+            is_staff=True,
+        )
+        other_user = User.objects.create_user(
+            username="comment-owner-admin-delete",
+            password="strong-pass-123",
+            email="comment-owner-admin-delete@example.com",
+        )
+        snippet = Snippet.objects.create(
+            title="Portal helper",
+            description="Reusable note",
+            code="const value = 1;",
+            language="javascript",
+            author=self.user,
+        )
+        comment = Comment.objects.create(
+            snippet=snippet,
+            author=other_user,
+            text="Original feedback",
+            experience_rating=4,
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.delete(f"/api/comments/{comment.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Comment.objects.filter(id=comment.id).exists())
+
+    def test_commenting_on_foreign_snippet_creates_notification_for_owner(self):
+        self.user.first_name = "Kaan"
+        self.user.last_name = "Yildiz"
+        self.user.save(update_fields=["first_name", "last_name"])
+        snippet_owner = User.objects.create_user(
+            username="snippet-owner",
+            password="strong-pass-123",
+            email="snippet-owner@example.com",
+        )
+        snippet = Snippet.objects.create(
+            title="Shared utility",
+            description="Library helper",
+            code="print('shared')",
+            language="python",
+            author=snippet_owner,
+        )
+
+        response = self.client.post(
+            "/api/comments/",
+            {
+                "snippet": snippet.id,
+                "text": "Looks reusable",
+                "experience_rating": 4,
+            },
+            format="json",
+        )
+
+        notification = UserNotification.objects.filter(
+            recipient=snippet_owner,
+            actor=self.user,
+            type="comment",
+        ).first()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNotNone(notification)
+        self.assertIn("Kaan Yildiz", notification.title)
+        self.assertIn(snippet.title, notification.body)
+        self.assertEqual(notification.link, f"/snippets/{snippet.id}")
+
+    def test_comment_creation_requires_rating(self):
+        snippet = Snippet.objects.create(
+            title="Shared utility",
+            description="Library helper",
+            code="print('shared')",
+            language="python",
+            author=self.user,
+        )
+
+        response = self.client.post(
+            "/api/comments/",
+            {
+                "snippet": snippet.id,
+                "text": "Missing score",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("experience_rating", response.data)
+        self.assertFalse(Comment.objects.filter(snippet=snippet, text="Missing score").exists())
+
+    def test_commenting_on_own_snippet_does_not_create_notification(self):
+        snippet = Snippet.objects.create(
+            title="Self note",
+            description="Owned by current user",
+            code="print('self')",
+            language="python",
+            author=self.user,
+        )
+
+        response = self.client.post(
+            "/api/comments/",
+            {
+                "snippet": snippet.id,
+                "text": "My own note",
+                "experience_rating": 5,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(
+            UserNotification.objects.filter(
+                recipient=self.user,
+                actor=self.user,
+                type="comment",
+            ).exists()
+        )
 
     def test_deleting_user_preserves_snippets_and_comments(self):
         author = User.objects.create_user(
@@ -171,6 +397,44 @@ class ApiBehaviorTests(APITestCase):
         self.assertEqual(profile.language, "tr")
         self.assertEqual(response.data["language"], "tr")
 
+    def test_dashboard_activity_uses_english_runtime_labels_for_english_profile(self):
+        EmploymentStatus.objects.create(
+            user=self.user,
+            employee_name="Member User",
+            position="Developer",
+            current_work="",
+            status_type="available",
+        )
+        project = Project.objects.create(
+            name="Portal Refresh",
+            summary="First project",
+            status="active",
+        )
+        project.team_members.add(self.user.employment_status)
+        task = Task.objects.create(
+            title="Landing page polish",
+            project=project,
+            assignee=self.user,
+            status="in_progress",
+        )
+
+        response = self.client.get("/api/dashboard-activity/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        task_item = next(item for item in response.data if item["id"] == f"task-{task.id}")
+        project_item = next(
+            item for item in response.data if item["id"] == f"project-{project.id}"
+        )
+        status_item = next(
+            item
+            for item in response.data
+            if item["id"] == f"status-{self.user.employment_status.id}"
+        )
+
+        self.assertEqual(task_item["meta"], "Portal Refresh - Assignee: Member User")
+        self.assertEqual(project_item["meta"], "Internal project - 1 team member")
+        self.assertEqual(status_item["meta"], "Available")
+
     def test_status_endpoint_clears_project_count_when_only_completed_tasks_remain(self):
         employment_status = EmploymentStatus.objects.create(
             user=self.user,
@@ -214,6 +478,35 @@ class ApiBehaviorTests(APITestCase):
         self.assertEqual(response.data[0]["active_task_project_name"], "")
         self.assertTrue(first_project.team_members.filter(id=employment_status.id).exists())
         self.assertTrue(second_project.team_members.filter(id=employment_status.id).exists())
+
+    def test_status_endpoint_counts_active_project_membership_without_project_task(self):
+        employment_status = EmploymentStatus.objects.create(
+            user=self.user,
+            employee_name="Member User",
+            position="Developer",
+            current_work="Projeye atandi ama gorevi bagimsiz ilerliyor.",
+            status_type="busy",
+        )
+        project = Project.objects.create(
+            name="Egitim Teknolojileri",
+            summary="Takim atamasi gorevden bagimsiz tutulabilir.",
+            status="planning",
+            end_date=timezone.localdate() + timedelta(days=30),
+        )
+        project.team_members.add(employment_status)
+        Task.objects.create(
+            title="React + Vite arayuzu",
+            assignee=self.user,
+            status="todo",
+        )
+
+        response = self.client.get("/api/status/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["effective_status"], "busy")
+        self.assertEqual(response.data[0]["active_project_count"], 1)
+        self.assertEqual(response.data[0]["active_task_project_name"], "")
 
     def test_admin_task_creation_adds_persistent_membership_and_counts_distinct_active_projects(self):
         admin_user = User.objects.create_user(
@@ -410,7 +703,7 @@ class ApiBehaviorTests(APITestCase):
             recipient=admin_user,
             actor=self.user,
             type="task",
-            title="Görev tamamlandı",
+            title="Task completed",
         ).first()
 
         self.assertIsNotNone(notification)
@@ -504,6 +797,40 @@ class ApiBehaviorTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(TeamMessage.objects.count(), 0)
+
+    def test_sending_team_message_creates_named_notification_for_recipient(self):
+        self.user.first_name = "Kaan"
+        self.user.last_name = "Yıldız"
+        self.user.save(update_fields=["first_name", "last_name"])
+
+        other_user = User.objects.create_user(
+            username="other-team-notify",
+            password="strong-pass-123",
+            email="other-team-notify@example.com",
+        )
+        recipient_status = EmploymentStatus.objects.create(
+            user=other_user,
+            employee_name="Other Team Notify",
+            position="Developer",
+            status_type="available",
+        )
+
+        response = self.client.post(
+            "/api/team-messages/",
+            {"recipient": recipient_status.id, "content": "Merhaba"},
+            format="json",
+        )
+
+        notification = UserNotification.objects.filter(
+            recipient=other_user,
+            actor=self.user,
+            type="message",
+        ).first()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNotNone(notification)
+        self.assertIn("Kaan Yıldız", notification.title)
+        self.assertIn("Kaan Yıldız", notification.body)
 
     def test_recipient_cannot_edit_foreign_team_message(self):
         sender = User.objects.create_user(
@@ -694,7 +1021,7 @@ class ApiBehaviorTests(APITestCase):
         response = self.client.get("/api/notifications/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data[0]["title"], "Görev tamamlandı")
+        self.assertEqual(response.data[0]["title"], "Görev Tamamlandı")
         self.assertEqual(
             response.data[0]["body"],
             "Demo projesi içindeki Test görevini tamamladı.",

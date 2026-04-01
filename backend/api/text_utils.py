@@ -1,3 +1,21 @@
+import re
+import unicodedata
+
+
+BROKEN_TURKISH_DOTTED_I_RE = re.compile(
+    r"(^|[\s(\[{\"'/-])\?(?=[a-zçğıöşü])",
+    re.UNICODE,
+)
+
+
+def restore_missing_turkish_dotted_i(value):
+    if not isinstance(value, str) or not value:
+        return value
+
+    normalized = unicodedata.normalize("NFC", value)
+    return BROKEN_TURKISH_DOTTED_I_RE.sub(r"\1İ", normalized)
+
+
 def normalize_legacy_turkish_text(value):
     if not isinstance(value, str) or not value:
         return value

@@ -3,19 +3,30 @@ import React from "react";
 import { FeatherChevronLeft, FeatherCode, FeatherMessageCircle, FeatherShield } from "@subframe/core";
 import { useI18n } from "../../I18nContext.jsx";
 
-function SnippetDetailHeader({ title, description, language, commentCount = 0, riskCount = 0, onBack }) {
+function SnippetDetailHeader({
+  title,
+  description,
+  language,
+  commentCount = 0,
+  riskCount = 0,
+  onBack,
+  actionSlot = null,
+}) {
   const { t } = useI18n();
 
   return (
     <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.15fr)_320px]">
       <div className="rounded-[34px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(255,255,255,0.88))] p-7 shadow-[0_24px_70px_rgba(148,163,184,0.16)] backdrop-blur lg:p-8">
-        <button
-          onClick={onBack}
-          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-sky-200 hover:text-sky-700"
-        >
-          <FeatherChevronLeft size={16} />
-          {t("snippets.back")}
-        </button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <button
+            onClick={onBack}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-sky-200 hover:text-sky-700"
+          >
+            <FeatherChevronLeft size={16} />
+            {t("snippets.back")}
+          </button>
+          {actionSlot}
+        </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold tracking-[0.18em] text-sky-700">
@@ -38,7 +49,7 @@ function SnippetDetailHeader({ title, description, language, commentCount = 0, r
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
           {t("snippets.detailSideLabel")}
         </p>
-        <p className="mt-3 text-2xl font-black tracking-tight text-slate-950">
+        <p className="mt-3 text-2xl font-black tracking-tight text-slate-950 ">
           {t("snippets.detailSideTitle")}
         </p>
 

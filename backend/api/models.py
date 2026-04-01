@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.core.validators import MaxValueValidator, MinValueValidator
+from .text_utils import restore_missing_turkish_dotted_i
 
 
 
@@ -53,6 +54,11 @@ class Snippet(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     author = models.ForeignKey(User, on_delete=models.SET_NULL, related_name='snippets', null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        self.title = restore_missing_turkish_dotted_i(self.title)
+        self.description = restore_missing_turkish_dotted_i(self.description)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.title
