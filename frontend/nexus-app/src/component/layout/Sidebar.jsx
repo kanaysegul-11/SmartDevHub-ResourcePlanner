@@ -5,6 +5,7 @@ import { useLogout } from "@refinedev/core";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   FeatherBell,
+  FeatherBriefcase,
   FeatherChevronDown,
   FeatherCode,
   FeatherFolderKanban,
@@ -78,6 +79,8 @@ function Sidebar({
           ? "projects"
           : pathname === "/tasks"
             ? "tasks"
+            : pathname === "/software-assets"
+              ? "software-assets"
             : pathname === "/notifications"
               ? "notifications"
               : pathname === "/contact-admin" || pathname === "/administrators"
@@ -114,7 +117,7 @@ function Sidebar({
     const nextItems = ["dashboard"];
 
     if (menuPreset === "full") {
-      nextItems.push("team", "projects", "tasks", "snippets", "analytics");
+      nextItems.push("team", "projects", "tasks", "software-assets", "snippets", "analytics");
     }
 
     return nextItems;
@@ -404,6 +407,21 @@ function Sidebar({
       );
     }
 
+    if (itemId === "software-assets") {
+      return renderDraggableItem(
+        GENERAL_SECTION_KEY,
+        itemId,
+        <SidebarWithSections.NavItem
+          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+          selected={resolvedActive === "software-assets"}
+          icon={<FeatherBriefcase />}
+          onClick={() => navigate("/software-assets")}
+        >
+          {t("sidebar.softwareAssets", "Software Assets")}
+        </SidebarWithSections.NavItem>
+      );
+    }
+
     if (itemId === "snippets") {
       return renderDraggableItem(
         GENERAL_SECTION_KEY,
@@ -502,7 +520,7 @@ function Sidebar({
           icon={<FeatherMessageCircle />}
           onClick={() => navigate("/administrators")}
         >
-          {t("sidebar.administrators")}
+          {canManageTeam ? t("sidebar.adminInbox") : t("sidebar.administrators")}
         </SidebarWithSections.NavItem>
       );
     }

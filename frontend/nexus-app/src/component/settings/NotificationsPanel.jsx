@@ -140,12 +140,19 @@ function NotificationsPanel() {
       await markAsRead(item.id);
     }
 
-    if (item.type === "message" && item.actor_details?.id) {
-      navigate(
-        item.actor_details.is_admin
-          ? `/administrators?chatUser=${item.actor_details.id}`
-          : `/team?chatUser=${item.actor_details.id}`
-      );
+    if (item.type === "message") {
+      if (item.link) {
+        navigate(item.link);
+        return;
+      }
+
+      if (item.actor_details?.id) {
+        navigate(
+          item.actor_details.is_admin
+            ? `/administrators?chatUser=${item.actor_details.id}`
+            : `/team?chatUser=${item.actor_details.id}`
+        );
+      }
       return;
     }
 

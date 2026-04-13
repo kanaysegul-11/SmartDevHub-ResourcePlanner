@@ -1,5 +1,21 @@
+from datetime import timedelta
+
 from rest_framework import serializers
-from .models import Snippet, Comment, EmploymentStatus, PageConfig, TeamMessage, Project, Task, UserNotification
+from .models import (
+    Snippet,
+    Comment,
+    EmploymentStatus,
+    PageConfig,
+    TeamMessage,
+    Project,
+    Task,
+    UserNotification,
+    SoftwareAsset,
+    SoftwareAssetAssignment,
+    SoftwareAssetAuditLog,
+    SoftwareAssetSyncLog,
+    LicenseRequest,
+)
 from .text_utils import normalize_legacy_turkish_text
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -380,6 +396,422 @@ class TaskSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
         read_only_fields = ['created_by']
+
+
+class SoftwareAssetAssignmentSerializer(serializers.ModelSerializer):
+    user_details = UserSerializer(source="user", read_only=True)
+    effective_email = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SoftwareAssetAssignment
+        fields = [
+            "id",
+            "user",
+            "user_details",
+            "access_email",
+            "effective_email",
+            "assigned_at",
+            "is_active",
+        ]
+        read_only_fields = ["assigned_at"]
+
+    def get_effective_email(self, obj):
+        return obj.access_email or getattr(obj.user, "email", "") or ""
+
+
+class SoftwareAssetAuditLogSerializer(serializers.ModelSerializer):
+    actor_details = UserSerializer(source="actor", read_only=True)
+    asset_name = serializers.CharField(source="asset.name", read_only=True)
+
+    class Meta:
+        model = SoftwareAssetAuditLog
+        fields = [
+            "id",
+            "asset",
+            "asset_name",
+            "actor",
+            "actor_details",
+            "event_type",
+            "message",
+            "payload",
+            "created_at",
+        ]
+
+
+class SoftwareAssetSyncLogSerializer(serializers.ModelSerializer):
+    triggered_by_details = UserSerializer(source="triggered_by", read_only=True)
+    asset_name = serializers.CharField(source="asset.name", read_only=True)
+
+    class Meta:
+        model = SoftwareAssetSyncLog
+        fields = [
+            "id",
+            "asset",
+            "asset_name",
+            "provider_code",
+            "status",
+            "message",
+            "payload",
+            "triggered_by",
+            "triggered_by_details",
+            "created_at",
+        ]
+
+
+class SoftwareAssetSerializer(serializers.ModelSerializer):
+    assignments = serializers.SerializerMethodField()
+    primary_assignment = serializers.SerializerMethodField()
+    shared_user_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        write_only=True,
+        required=False,
+    )
+    assigned_user_id = serializers.IntegerField(
+        min_value=1,
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    lifecycle_status = serializers.SerializerMethodField()
+    renewal_window = serializers.SerializerMethodField()
+    seats_used = serializers.SerializerMethodField()
+    seats_available = serializers.SerializerMethodField()
+    utilization_rate = serializers.SerializerMethodField()
+    monthly_cost_estimate = serializers.SerializerMethodField()
+    annual_cost_estimate = serializers.SerializerMethodField()
+    created_by_details = UserSerializer(source="created_by", read_only=True)
+    approved_by_details = UserSerializer(source="approved_by", read_only=True)
+    purchased_by_details = UserSerializer(source="purchased_by", read_only=True)
+    renewal_owner_details = UserSerializer(source="renewal_owner", read_only=True)
+
+    class Meta:
+        model = SoftwareAsset
+        fields = [
+            "id",
+            "name",
+            "vendor",
+            "plan_name",
+            "record_type",
+            "license_mode",
+            "operational_status",
+            "provider_code",
+            "record_source",
+            "external_id",
+            "external_workspace_id",
+            "account_email",
+            "billing_email",
+            "seats_total",
+            "billing_cycle",
+            "department",
+            "cost_center",
+            "invoice_number",
+            "contract_reference",
+            "purchase_date",
+            "renewal_date",
+            "auto_renew",
+            "last_synced_at",
+            "sync_status",
+            "sync_error",
+            "purchase_price",
+            "currency",
+            "approved_by",
+            "approved_by_details",
+            "purchased_by",
+            "purchased_by_details",
+            "renewal_owner",
+            "renewal_owner_details",
+            "vendor_contact",
+            "support_link",
+            "documentation_link",
+            "is_scim_managed",
+            "is_sso_managed",
+            "extra_metadata",
+            "notes",
+            "created_by",
+            "created_by_details",
+            "assignments",
+            "primary_assignment",
+            "shared_user_ids",
+            "assigned_user_id",
+            "lifecycle_status",
+            "renewal_window",
+            "seats_used",
+            "seats_available",
+            "utilization_rate",
+            "monthly_cost_estimate",
+            "annual_cost_estimate",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_by", "created_at", "updated_at"]
+
+    def _get_visible_assignments(self, obj):
+        request = self.context.get("request")
+        assignments = obj.assignments.select_related("user").all()
+
+        if request and not (request.user.is_staff or request.user.is_superuser):
+            assignments = assignments.filter(user=request.user, is_active=True)
+
+        return assignments
+
+    def get_assignments(self, obj):
+        return SoftwareAssetAssignmentSerializer(
+            self._get_visible_assignments(obj),
+            many=True,
+            context=self.context,
+        ).data
+
+    def get_primary_assignment(self, obj):
+        assignment = self._get_visible_assignments(obj).filter(is_active=True).first()
+        if not assignment:
+            return None
+
+        return SoftwareAssetAssignmentSerializer(
+            assignment,
+            context=self.context,
+        ).data
+
+    def get_lifecycle_status(self, obj):
+        if obj.operational_status == "archived":
+            return "archived"
+        if obj.operational_status == "inactive":
+            return "inactive"
+        if obj.renewal_date and obj.renewal_date < timezone.localdate():
+            return "expired"
+        if obj.renewal_date and obj.renewal_date <= timezone.localdate() + timedelta(days=7):
+            return "expiring_soon"
+        return "active"
+
+    def get_renewal_window(self, obj):
+        if not obj.renewal_date:
+            return "none"
+        if obj.renewal_date < timezone.localdate():
+            return "expired"
+        if obj.renewal_date <= timezone.localdate() + timedelta(days=7):
+            return "7_days"
+        return "future"
+
+    def get_seats_used(self, obj):
+        return obj.assignments.filter(is_active=True).count()
+
+    def get_seats_available(self, obj):
+        return max(int(obj.seats_total or 0) - self.get_seats_used(obj), 0)
+
+    def get_utilization_rate(self, obj):
+        total = max(int(obj.seats_total or 0), 1)
+        return round((self.get_seats_used(obj) / total) * 100, 2)
+
+    def _get_price_value(self, obj):
+        if obj.purchase_price in (None, ""):
+            return 0
+        try:
+            return float(obj.purchase_price)
+        except (TypeError, ValueError):
+            return 0
+
+    def _get_purchase_units(self, obj):
+        try:
+            return max(int(obj.seats_total or 1), 1)
+        except (TypeError, ValueError):
+            return 1
+
+    def get_monthly_cost_estimate(self, obj):
+        price = self._get_price_value(obj)
+        seats_total = self._get_purchase_units(obj)
+        if obj.billing_cycle == "yearly":
+            return round((price * seats_total) / 12, 2)
+        if obj.billing_cycle == "quarterly":
+            return round((price * seats_total) / 3, 2)
+        if obj.billing_cycle == "one_time":
+            return 0
+        return round(price * seats_total, 2)
+
+    def get_annual_cost_estimate(self, obj):
+        price = self._get_price_value(obj)
+        seats_total = self._get_purchase_units(obj)
+        if obj.billing_cycle == "monthly":
+            return round(price * seats_total * 12, 2)
+        if obj.billing_cycle == "quarterly":
+            return round(price * seats_total * 4, 2)
+        if obj.billing_cycle == "one_time":
+            return round(price * seats_total, 2)
+        return round(price * seats_total, 2)
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        current_mode = attrs.get(
+            "license_mode",
+            getattr(self.instance, "license_mode", "assigned"),
+        )
+        shared_user_ids = attrs.get("shared_user_ids", None)
+        assigned_user_id = attrs.get("assigned_user_id", None)
+
+        if request and request.user and request.user.is_authenticated and not (
+            request.user.is_staff or request.user.is_superuser
+        ):
+            raise serializers.ValidationError(
+                {"detail": "Only admins can manage software records."}
+            )
+
+        if current_mode == "shared":
+            seats_total = attrs.get("seats_total", getattr(self.instance, "seats_total", 1)) or 1
+            if seats_total < 1:
+                raise serializers.ValidationError({"seats_total": "Seats must be at least 1."})
+
+            if assigned_user_id not in (None, ""):
+                raise serializers.ValidationError(
+                    {"assigned_user_id": "Shared licenses cannot target a single dedicated user."}
+                )
+
+            if shared_user_ids is not None:
+                unique_ids = {int(user_id) for user_id in shared_user_ids}
+                if len(unique_ids) > seats_total:
+                    raise serializers.ValidationError(
+                        {"shared_user_ids": "Assigned users cannot exceed total seats."}
+                    )
+                if User.objects.filter(id__in=unique_ids).count() != len(unique_ids):
+                    raise serializers.ValidationError(
+                        {"shared_user_ids": "One or more selected users do not exist."}
+                    )
+        else:
+            attrs["seats_total"] = 1
+            if shared_user_ids not in (None, []):
+                raise serializers.ValidationError(
+                    {"shared_user_ids": "Assigned licenses do not use shared user lists."}
+                )
+
+            effective_assigned_user_id = assigned_user_id
+            if effective_assigned_user_id in (None, "") and self.instance:
+                effective_assigned_user_id = (
+                    self.instance.assignments.filter(is_active=True)
+                    .values_list("user_id", flat=True)
+                    .first()
+                )
+
+            if effective_assigned_user_id in (None, ""):
+                raise serializers.ValidationError(
+                    {"assigned_user_id": "Assigned licenses must be linked to one user."}
+                )
+
+            if not User.objects.filter(id=effective_assigned_user_id).exists():
+                raise serializers.ValidationError(
+                    {"assigned_user_id": "The selected user does not exist."}
+                )
+
+        return attrs
+
+    def create(self, validated_data):
+        shared_user_ids = validated_data.pop("shared_user_ids", None)
+        assigned_user_id = validated_data.pop("assigned_user_id", None)
+        asset = super().create(validated_data)
+        self._sync_assignments(
+            asset,
+            shared_user_ids=shared_user_ids,
+            assigned_user_id=assigned_user_id,
+        )
+        return asset
+
+    def update(self, instance, validated_data):
+        shared_user_ids = validated_data.pop("shared_user_ids", None)
+        assigned_user_id = validated_data.pop("assigned_user_id", None)
+        asset = super().update(instance, validated_data)
+        self._sync_assignments(
+            asset,
+            shared_user_ids=shared_user_ids,
+            assigned_user_id=assigned_user_id,
+        )
+        return asset
+
+    def _sync_assignments(self, asset, *, shared_user_ids=None, assigned_user_id=None):
+        if asset.license_mode == "shared":
+            desired_ids = (
+                {int(user_id) for user_id in (shared_user_ids or [])}
+                if shared_user_ids is not None
+                else {
+                    assignment.user_id
+                    for assignment in asset.assignments.filter(is_active=True)
+                }
+            )
+        else:
+            if assigned_user_id not in (None, ""):
+                desired_ids = {int(assigned_user_id)}
+            else:
+                existing_user_id = (
+                    asset.assignments.filter(is_active=True)
+                    .values_list("user_id", flat=True)
+                    .first()
+                )
+                desired_ids = {existing_user_id} if existing_user_id else set()
+
+        existing_by_user_id = {
+            assignment.user_id: assignment
+            for assignment in asset.assignments.select_related("user").all()
+        }
+        users_by_id = User.objects.in_bulk(desired_ids)
+
+        for removed_user_id in set(existing_by_user_id) - desired_ids:
+            existing_by_user_id[removed_user_id].delete()
+
+        for desired_user_id in desired_ids:
+            user = users_by_id.get(desired_user_id)
+            if not user:
+                continue
+
+            assignment = existing_by_user_id.get(desired_user_id)
+            if assignment:
+                next_email = assignment.access_email or user.email or ""
+                if assignment.access_email != next_email or not assignment.is_active:
+                    assignment.access_email = next_email
+                    assignment.is_active = True
+                    assignment.save(update_fields=["access_email", "is_active", "updated_at"])
+                continue
+
+            SoftwareAssetAssignment.objects.create(
+                asset=asset,
+                user=user,
+                access_email=user.email or "",
+            )
+
+
+class LicenseRequestSerializer(serializers.ModelSerializer):
+    requester_details = UserSerializer(source="requester", read_only=True)
+    resolved_by_details = UserSerializer(source="resolved_by", read_only=True)
+    asset_name = serializers.CharField(source="asset.name", read_only=True)
+
+    class Meta:
+        model = LicenseRequest
+        fields = [
+            "id",
+            "asset",
+            "asset_name",
+            "requester",
+            "requester_details",
+            "requested_product",
+            "provider_code",
+            "request_type",
+            "preferred_plan",
+            "department",
+            "cost_center",
+            "justification",
+            "status",
+            "resolution_note",
+            "resolved_by",
+            "resolved_by_details",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "requester",
+            "resolved_by",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        if request and not (request.user and request.user.is_authenticated):
+            raise serializers.ValidationError({"detail": "Authentication is required."})
+        return attrs
 
 
 class UserNotificationSerializer(serializers.ModelSerializer):

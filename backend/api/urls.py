@@ -1,7 +1,7 @@
 from django import views
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import SnippetViewSet, CommentViewSet, EmployeeStatusViewSet, PageConfigViewSet, TeamMessageViewSet, ProjectViewSet, TaskViewSet, UserAccountViewSet, UserNotificationViewSet
+from .views import SnippetViewSet, CommentViewSet, EmployeeStatusViewSet, PageConfigViewSet, TeamMessageViewSet, ProjectViewSet, TaskViewSet, UserAccountViewSet, UserNotificationViewSet, SoftwareAssetViewSet, LicenseRequestViewSet
 from django.urls import path
 from .views import CustomLoginView, LogoutView, change_password, update_profile, register_user, google_auth, DashboardActivityView, AdminContactListView
 
@@ -16,6 +16,8 @@ router.register(r'tasks', TaskViewSet, basename='task')
 router.register(r'users', UserAccountViewSet, basename='user-account')
 router.register(r'notifications', UserNotificationViewSet, basename='notification')
 router.register(r'page-configs', PageConfigViewSet, basename='page-config')
+router.register(r'software-assets', SoftwareAssetViewSet, basename='software-asset')
+router.register(r'license-requests', LicenseRequestViewSet, basename='license-request')
 
 
 urlpatterns = [

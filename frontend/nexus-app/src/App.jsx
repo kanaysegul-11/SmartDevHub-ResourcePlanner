@@ -22,6 +22,7 @@ import Settings from "./pages/Settings";
 import Register from "./pages/Register";
 import Projects from "./pages/Projects";
 import Tasks from "./pages/Tasks";
+import SoftwareAssets from "./pages/SoftwareAssets";
 import NotificationsPage from "./pages/NotificationsPage";
 import ContactAdmin from "./pages/ContactAdmin";
 import MessageNotificationWatcher from "./component/notifications/MessageNotificationWatcher.jsx";
@@ -82,6 +83,19 @@ function App() {
           list: "/tasks",
           meta: {
             label: "Tasks",
+          },
+        },
+        {
+          name: "software-assets",
+          list: "/software-assets",
+          meta: {
+            label: "Licenses & Subscriptions",
+          },
+        },
+        {
+          name: "license-requests",
+          meta: {
+            label: "License Requests",
           },
         },
         {
@@ -147,6 +161,7 @@ function App() {
           <Route path="/team" element={<Team />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/tasks" element={<Tasks />} />
+          <Route path="/software-assets" element={<SoftwareAssets />} />
           <Route
             path="/add-member"
             element={

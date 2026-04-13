@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from rest_framework import viewsets, filters, status
 from django.db.models import Count, Q
 from django.contrib.auth.hashers import check_password
@@ -10,11 +12,39 @@ from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission, SAFE_METHODS
 from rest_framework.exceptions import PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Snippet, Comment, EmploymentStatus, PageConfig, TeamMessage, Project, UserProfile, Task, UserNotification
-from .serializers import SnippetSerializer, CommentSerializer, StatusSerializer, PageConfigSerializer, TeamMessageSerializer, ProjectSerializer, TaskSerializer, UserSerializer, UserNotificationSerializer
+from .models import (
+    Snippet,
+    Comment,
+    EmploymentStatus,
+    PageConfig,
+    TeamMessage,
+    Project,
+    UserProfile,
+    Task,
+    UserNotification,
+    SoftwareAsset,
+    SoftwareAssetAuditLog,
+    SoftwareAssetSyncLog,
+    LicenseRequest,
+)
+from .serializers import (
+    SnippetSerializer,
+    CommentSerializer,
+    StatusSerializer,
+    PageConfigSerializer,
+    TeamMessageSerializer,
+    ProjectSerializer,
+    TaskSerializer,
+    UserSerializer,
+    UserNotificationSerializer,
+    SoftwareAssetSerializer,
+    SoftwareAssetAuditLogSerializer,
+    SoftwareAssetSyncLogSerializer,
+    LicenseRequestSerializer,
+)
 from rest_framework.decorators import api_view, permission_classes
 from django.conf import settings
-from django.db import OperationalError
+from django.db import OperationalError, transaction
 from django.utils import timezone
 from urllib import request as urllib_request
 from urllib.parse import urlencode
@@ -109,6 +139,40 @@ class TaskPermission(BasePermission):
         return obj.assignee_id == request.user.id
 
 
+class SoftwareAssetPermission(BasePermission):
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+
+        if request.method in SAFE_METHODS:
+            return True
+
+        return bool(request.user.is_staff or request.user.is_superuser)
+
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+
+        if request.method in SAFE_METHODS:
+            return obj.assignments.filter(user=request.user, is_active=True).exists()
+
+        return False
+
+
+class LicenseRequestPermission(BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        if is_admin_user(request.user):
+            return True
+
+        if request.method in SAFE_METHODS:
+            return obj.requester_id == request.user.id
+
+        return False
+
+
 def create_notification(*, recipient, actor=None, notification_type="system", title="", body="", link=""):
     if not recipient:
         return
@@ -121,6 +185,149 @@ def create_notification(*, recipient, actor=None, notification_type="system", ti
         body=normalize_legacy_turkish_text(body),
         link=link,
     )
+
+
+def is_admin_user(user):
+    return bool(user and (user.is_staff or user.is_superuser))
+
+
+def get_asset_monthly_cost(asset):
+    if asset.purchase_price in (None, ""):
+        return 0.0
+
+    seat_count = max(int(getattr(asset, "seats_total", 1) or 1), 1)
+    price = float(asset.purchase_price)
+    if asset.billing_cycle == "yearly":
+        return round((price * seat_count) / 12, 2)
+    if asset.billing_cycle == "quarterly":
+        return round((price * seat_count) / 3, 2)
+    if asset.billing_cycle == "one_time":
+        return 0.0
+    return round(price * seat_count, 2)
+
+
+def get_asset_annual_cost(asset):
+    if asset.purchase_price in (None, ""):
+        return 0.0
+
+    seat_count = max(int(getattr(asset, "seats_total", 1) or 1), 1)
+    price = float(asset.purchase_price)
+    if asset.billing_cycle == "monthly":
+        return round(price * seat_count * 12, 2)
+    if asset.billing_cycle == "quarterly":
+        return round(price * seat_count * 4, 2)
+    return round(price * seat_count, 2)
+
+
+def get_asset_lifecycle_status(asset):
+    if asset.operational_status == "archived":
+        return "archived"
+    if asset.operational_status == "inactive":
+        return "inactive"
+    if asset.renewal_date and asset.renewal_date < timezone.localdate():
+        return "expired"
+    if asset.renewal_date and asset.renewal_date <= timezone.localdate() + timedelta(days=7):
+        return "expiring_soon"
+    return "active"
+
+
+def get_asset_renewal_window(asset):
+    if not asset.renewal_date:
+        return "none"
+    if asset.renewal_date < timezone.localdate():
+        return "expired"
+    if asset.renewal_date <= timezone.localdate() + timedelta(days=7):
+        return "7_days"
+    return "future"
+
+
+def get_asset_visible_assignments(asset, *, user=None):
+    assignments = asset.assignments.select_related("user").filter(is_active=True)
+    if user and not is_admin_user(user):
+        assignments = assignments.filter(user=user)
+    return assignments
+
+
+def log_software_asset_event(*, asset=None, actor=None, event_type, message, payload=None):
+    return SoftwareAssetAuditLog.objects.create(
+        asset=asset,
+        actor=actor,
+        event_type=event_type,
+        message=message,
+        payload=payload or {},
+    )
+
+
+def log_software_asset_sync(
+    *,
+    asset=None,
+    actor=None,
+    provider_code="manual",
+    status_value="pending",
+    message="",
+    payload=None,
+):
+    return SoftwareAssetSyncLog.objects.create(
+        asset=asset,
+        provider_code=provider_code or "manual",
+        status=status_value,
+        triggered_by=actor,
+        message=message,
+        payload=payload or {},
+    )
+
+
+def sync_asset_assignments(asset, *, user_ids):
+    desired_ids = {int(user_id) for user_id in (user_ids or []) if user_id}
+    existing_assignments = {
+        assignment.user_id: assignment
+        for assignment in asset.assignments.select_related("user").all()
+    }
+    users_by_id = User.objects.in_bulk(desired_ids)
+    assignment_model = asset.assignments.model
+
+    for removed_user_id in set(existing_assignments) - desired_ids:
+        existing_assignments[removed_user_id].delete()
+
+    for desired_user_id in desired_ids:
+        user = users_by_id.get(desired_user_id)
+        if not user:
+            continue
+
+        assignment = existing_assignments.get(desired_user_id)
+        if assignment:
+            next_email = assignment.access_email or user.email or ""
+            if assignment.access_email != next_email or not assignment.is_active:
+                assignment.access_email = next_email
+                assignment.is_active = True
+                assignment.save(update_fields=["access_email", "is_active", "updated_at"])
+            continue
+
+        assignment_model.objects.create(
+            asset=asset,
+            user=user,
+            access_email=user.email or "",
+        )
+
+    SoftwareAsset.objects.filter(id=asset.id).update(updated_at=timezone.now())
+
+
+def assign_user_to_asset(asset, user):
+    if not asset or not user:
+        return
+
+    if asset.license_mode == "shared":
+        active_user_ids = list(
+            asset.assignments.filter(is_active=True).values_list("user_id", flat=True)
+        )
+        if user.id not in active_user_ids:
+            active_user_ids.append(user.id)
+        if len(set(active_user_ids)) > max(int(asset.seats_total or 1), 1):
+            raise PermissionDenied("This license does not have an open seat.")
+        sync_asset_assignments(asset, user_ids=active_user_ids)
+        return
+
+    sync_asset_assignments(asset, user_ids=[user.id])
 
 
 def get_user_display_name(user):
@@ -338,14 +545,18 @@ class TeamMessageViewSet(viewsets.ModelViewSet):
             recipient_is_admin = bool(
                 recipient_user.is_staff or recipient_user.is_superuser
             )
+            sender_is_admin = bool(
+                self.request.user.is_staff or self.request.user.is_superuser
+            )
             actor_name = get_user_display_name(self.request.user)
             notification_link = "/team"
             if current_user_status:
-                notification_link = (
-                    f"/team?chat={current_user_status.id}"
-                    if recipient_is_admin
-                    else f"/administrators?chat={current_user_status.id}"
-                )
+                if recipient_is_admin:
+                    notification_link = f"/administrators?chat={current_user_status.id}"
+                elif sender_is_admin:
+                    notification_link = f"/administrators?chat={current_user_status.id}"
+                else:
+                    notification_link = f"/team?chat={current_user_status.id}"
 
             create_notification(
                 recipient=recipient_user,
@@ -585,6 +796,760 @@ class TaskViewSet(viewsets.ModelViewSet):
         project_id = instance.project_id
         super().perform_destroy(instance)
         recalculate_project_progress(project_id)
+
+
+class SoftwareAssetViewSet(viewsets.ModelViewSet):
+    serializer_class = SoftwareAssetSerializer
+    permission_classes = [SoftwareAssetPermission]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = [
+        "license_mode",
+        "provider_code",
+        "currency",
+        "auto_renew",
+        "sync_status",
+        "record_source",
+        "record_type",
+        "operational_status",
+        "billing_cycle",
+        "department",
+        "cost_center",
+    ]
+    search_fields = [
+        "name",
+        "vendor",
+        "plan_name",
+        "account_email",
+        "billing_email",
+        "external_id",
+        "external_workspace_id",
+        "department",
+        "cost_center",
+        "invoice_number",
+        "contract_reference",
+        "vendor_contact",
+    ]
+    ordering_fields = [
+        "renewal_date",
+        "purchase_date",
+        "updated_at",
+        "created_at",
+        "name",
+        "purchase_price",
+        "vendor",
+    ]
+
+    def get_queryset(self):
+        queryset = (
+            SoftwareAsset.objects.select_related(
+                "created_by",
+                "approved_by",
+                "purchased_by",
+                "renewal_owner",
+            )
+            .prefetch_related("assignments__user")
+            .all()
+        )
+
+        if not is_admin_user(self.request.user):
+            queryset = queryset.filter(
+                assignments__user=self.request.user,
+                assignments__is_active=True,
+            ).distinct()
+
+        renewal_bucket = self.request.query_params.get("renewal_bucket")
+        today = timezone.localdate()
+        if renewal_bucket == "7_days":
+            queryset = queryset.filter(renewal_date__gte=today, renewal_date__lte=today + timedelta(days=7))
+        elif renewal_bucket == "expired":
+            queryset = queryset.filter(renewal_date__lt=today)
+        elif renewal_bucket == "future":
+            queryset = queryset.filter(renewal_date__gt=today + timedelta(days=7))
+
+        lifecycle_status = self.request.query_params.get("lifecycle_status")
+        if lifecycle_status == "inactive":
+            queryset = queryset.filter(operational_status="inactive")
+        elif lifecycle_status == "archived":
+            queryset = queryset.filter(operational_status="archived")
+        elif lifecycle_status == "expired":
+            queryset = queryset.filter(operational_status="active", renewal_date__lt=today)
+        elif lifecycle_status == "expiring_soon":
+            queryset = queryset.filter(
+                operational_status="active",
+                renewal_date__gte=today,
+                renewal_date__lte=today + timedelta(days=7),
+            )
+        elif lifecycle_status == "active":
+            queryset = queryset.filter(
+                operational_status="active"
+            ).exclude(renewal_date__lt=today)
+
+        return queryset
+
+    def _capture_asset_snapshot(self, asset):
+        return {
+            "name": asset.name,
+            "vendor": asset.vendor,
+            "plan_name": asset.plan_name,
+            "record_type": asset.record_type,
+            "license_mode": asset.license_mode,
+            "operational_status": asset.operational_status,
+            "provider_code": asset.provider_code,
+            "record_source": asset.record_source,
+            "billing_cycle": asset.billing_cycle,
+            "department": asset.department,
+            "cost_center": asset.cost_center,
+            "renewal_date": str(asset.renewal_date or ""),
+            "purchase_price": str(asset.purchase_price or ""),
+            "currency": asset.currency,
+            "assigned_user_ids": sorted(
+                list(asset.assignments.filter(is_active=True).values_list("user_id", flat=True))
+            ),
+        }
+
+    def _serialize_asset_brief(self, asset):
+        visible_assignments = get_asset_visible_assignments(asset, user=self.request.user)
+        primary_assignment = visible_assignments.first()
+        seats_used = asset.assignments.filter(is_active=True).count()
+        seats_available = max(int(asset.seats_total or 0) - seats_used, 0)
+
+        return {
+            "id": asset.id,
+            "name": asset.name,
+            "vendor": asset.vendor,
+            "plan_name": asset.plan_name,
+            "record_type": asset.record_type,
+            "license_mode": asset.license_mode,
+            "operational_status": asset.operational_status,
+            "provider_code": asset.provider_code,
+            "record_source": asset.record_source,
+            "renewal_date": asset.renewal_date,
+            "renewal_window": get_asset_renewal_window(asset),
+            "lifecycle_status": get_asset_lifecycle_status(asset),
+            "account_email": asset.account_email,
+            "billing_email": asset.billing_email,
+            "support_link": asset.support_link,
+            "vendor_contact": asset.vendor_contact,
+            "seats_total": asset.seats_total,
+            "seats_used": seats_used,
+            "seats_available": seats_available,
+            "monthly_cost": get_asset_monthly_cost(asset),
+            "annual_cost": get_asset_annual_cost(asset),
+            "primary_assignment": {
+                "user_id": getattr(primary_assignment, "user_id", None),
+                "name": getattr(getattr(primary_assignment, "user", None), "username", ""),
+                "email": getattr(primary_assignment, "effective_email", None)
+                or getattr(primary_assignment, "access_email", "")
+                or getattr(getattr(primary_assignment, "user", None), "email", ""),
+            }
+            if primary_assignment
+            else None,
+        }
+
+    def _build_alerts(self, assets):
+        alerts = []
+        overlap_groups = {}
+
+        for asset in assets:
+            seats_used = asset.assignments.filter(is_active=True).count()
+            seats_available = max(int(asset.seats_total or 0) - seats_used, 0)
+            annual_cost = get_asset_annual_cost(asset)
+            renewal_window = get_asset_renewal_window(asset)
+            lifecycle_status = get_asset_lifecycle_status(asset)
+            utilization_rate = round((seats_used / max(int(asset.seats_total or 1), 1)) * 100, 2)
+
+            if renewal_window == "expired":
+                alerts.append(
+                    {
+                        "kind": "expired",
+                        "severity": "error",
+                        "asset_id": asset.id,
+                        "asset_name": asset.name,
+                        "title": f"{asset.name} already expired",
+                        "description": "Renewal date has passed and action is required.",
+                    }
+                )
+            elif renewal_window == "7_days":
+                alerts.append(
+                    {
+                        "kind": "renewal_due",
+                        "severity": "warning",
+                        "asset_id": asset.id,
+                        "asset_name": asset.name,
+                        "title": f"{asset.name} renewal is approaching",
+                        "description": "Track renewal owner, billing cycle, and usage before the due date.",
+                    }
+                )
+
+            if annual_cost > 0 and seats_used == 0:
+                alerts.append(
+                    {
+                        "kind": "paid_unused",
+                        "severity": "warning",
+                        "asset_id": asset.id,
+                        "asset_name": asset.name,
+                        "title": f"{asset.name} is paid but unassigned",
+                        "description": "This record has recurring cost but no active user assignment.",
+                    }
+                )
+
+            if asset.license_mode == "shared" and seats_available == 0 and lifecycle_status == "active":
+                alerts.append(
+                    {
+                        "kind": "seat_full",
+                        "severity": "info",
+                        "asset_id": asset.id,
+                        "asset_name": asset.name,
+                        "title": f"{asset.name} has no open seats",
+                        "description": "Shared capacity is full. Consider reclaiming or adding seats.",
+                    }
+                )
+
+            if asset.sync_status == "error":
+                alerts.append(
+                    {
+                        "kind": "sync_error",
+                        "severity": "error",
+                        "asset_id": asset.id,
+                        "asset_name": asset.name,
+                        "title": f"{asset.name} sync needs attention",
+                        "description": asset.sync_error or "Last provider sync ended with an error.",
+                    }
+                )
+
+            if (
+                asset.record_source == "manual"
+                and asset.provider_code != "manual"
+                and (asset.external_id or asset.external_workspace_id)
+            ):
+                alerts.append(
+                    {
+                        "kind": "source_mismatch",
+                        "severity": "info",
+                        "asset_id": asset.id,
+                        "asset_name": asset.name,
+                        "title": f"{asset.name} has manual/provider mismatch",
+                        "description": "Manual record contains provider identifiers. Review whether sync should own this record.",
+                    }
+                )
+
+            if renewal_window == "7_days" and utilization_rate <= 40 and annual_cost > 0:
+                alerts.append(
+                    {
+                        "kind": "low_usage_before_renewal",
+                        "severity": "warning",
+                        "asset_id": asset.id,
+                        "asset_name": asset.name,
+                        "title": f"{asset.name} has low usage before renewal",
+                        "description": "Usage is low compared with paid capacity while renewal is close.",
+                    }
+                )
+
+            for assignment in asset.assignments.select_related("user").filter(is_active=True):
+                if not assignment.user.is_active:
+                    alerts.append(
+                        {
+                            "kind": "offboarded_assignment",
+                            "severity": "error",
+                            "asset_id": asset.id,
+                            "user_id": assignment.user_id,
+                            "asset_name": asset.name,
+                            "user_name": assignment.user.username,
+                            "title": f"{assignment.user.username} left but still holds {asset.name}",
+                            "description": "Reclaim this license from an inactive user account.",
+                        }
+                    )
+
+                overlap_key = (
+                    assignment.user_id,
+                    asset.provider_code,
+                    asset.name.strip().lower(),
+                )
+                overlap_groups.setdefault(overlap_key, []).append(asset)
+
+        for (user_id, _, _), grouped_assets in overlap_groups.items():
+            if len(grouped_assets) < 2:
+                continue
+
+            user = User.objects.filter(id=user_id).first()
+            product_names = ", ".join(asset.name for asset in grouped_assets[:3])
+            alerts.append(
+                {
+                    "kind": "duplicate_assignment",
+                    "severity": "warning",
+                    "asset_id": grouped_assets[0].id,
+                    "user_id": user_id,
+                    "asset_name": grouped_assets[0].name,
+                    "user_name": get_user_display_name(user),
+                    "product_names": [asset.name for asset in grouped_assets[:3]],
+                    "title": f"{get_user_display_name(user)} has overlapping licenses",
+                    "description": f"Potential duplicate access detected across: {product_names}.",
+                }
+            )
+
+        severity_order = {"error": 0, "warning": 1, "info": 2}
+        alerts.sort(
+            key=lambda item: (
+                severity_order.get(item["severity"], 3),
+                item.get("asset_name", ""),
+                item.get("kind", ""),
+            )
+        )
+        return alerts
+
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        assets = list(self.get_queryset())
+        requests_queryset = LicenseRequest.objects.select_related(
+            "asset",
+            "requester",
+            "resolved_by",
+        )
+        if not is_admin_user(request.user):
+            requests_queryset = requests_queryset.filter(requester=request.user)
+
+        request_stats = {
+            "pending": requests_queryset.filter(status="pending").count(),
+            "approved": requests_queryset.filter(status="approved").count(),
+            "fulfilled": requests_queryset.filter(status="fulfilled").count(),
+            "rejected": requests_queryset.filter(status="rejected").count(),
+        }
+
+        provider_rollup = {}
+        renewals = {
+            "expired": [],
+            "next_7_days": [],
+        }
+        stats = {
+            "total_records": len(assets),
+            "active_records": 0,
+            "inactive_records": 0,
+            "shared_records": 0,
+            "assigned_records": 0,
+            "expiring_7_days": 0,
+            "expired_records": 0,
+            "monthly_cost_total": 0,
+            "annual_cost_total": 0,
+            "total_seats": 0,
+            "used_seats": 0,
+            "idle_seats": 0,
+            "paid_unused_records": 0,
+        }
+
+        for asset in assets:
+            seats_used = asset.assignments.filter(is_active=True).count()
+            seats_available = max(int(asset.seats_total or 0) - seats_used, 0)
+            monthly_cost = get_asset_monthly_cost(asset)
+            annual_cost = get_asset_annual_cost(asset)
+            renewal_window = get_asset_renewal_window(asset)
+            lifecycle_status = get_asset_lifecycle_status(asset)
+            provider_bucket = provider_rollup.setdefault(
+                asset.provider_code,
+                {
+                    "provider_code": asset.provider_code,
+                    "record_count": 0,
+                    "monthly_cost": 0,
+                    "annual_cost": 0,
+                    "used_seats": 0,
+                    "total_seats": 0,
+                },
+            )
+
+            provider_bucket["record_count"] += 1
+            provider_bucket["monthly_cost"] += monthly_cost
+            provider_bucket["annual_cost"] += annual_cost
+            provider_bucket["used_seats"] += seats_used
+            provider_bucket["total_seats"] += int(asset.seats_total or 0)
+
+            stats["monthly_cost_total"] += monthly_cost
+            stats["annual_cost_total"] += annual_cost
+            stats["used_seats"] += seats_used
+            stats["total_seats"] += int(asset.seats_total or 0)
+            stats["idle_seats"] += seats_available
+            stats["shared_records"] += 1 if asset.license_mode == "shared" else 0
+            stats["assigned_records"] += 1 if asset.license_mode == "assigned" else 0
+            stats["active_records"] += 1 if lifecycle_status == "active" else 0
+            stats["inactive_records"] += 1 if lifecycle_status in {"inactive", "archived"} else 0
+            stats["paid_unused_records"] += 1 if annual_cost > 0 and seats_used == 0 else 0
+
+            serialized_asset = self._serialize_asset_brief(asset)
+            if renewal_window == "expired":
+                stats["expired_records"] += 1
+                renewals["expired"].append(serialized_asset)
+            elif renewal_window == "7_days":
+                stats["expiring_7_days"] += 1
+                renewals["next_7_days"].append(serialized_asset)
+
+        utilization_rate = (
+            round((stats["used_seats"] / max(stats["total_seats"], 1)) * 100, 2)
+            if stats["total_seats"]
+            else 0
+        )
+        stats["utilization_rate"] = utilization_rate
+        stats["cost_per_used_seat"] = (
+            round(stats["monthly_cost_total"] / max(stats["used_seats"], 1), 2)
+            if stats["used_seats"]
+            else 0
+        )
+
+        sync_logs = SoftwareAssetSyncLog.objects.select_related("asset", "triggered_by")
+        audit_logs = SoftwareAssetAuditLog.objects.select_related("asset", "actor")
+        if not is_admin_user(request.user):
+            sync_logs = sync_logs.filter(
+                asset__assignments__user=request.user,
+                asset__assignments__is_active=True,
+            ).distinct()
+            audit_logs = audit_logs.filter(
+                asset__assignments__user=request.user,
+                asset__assignments__is_active=True,
+            ).distinct()
+
+        return Response(
+            {
+                "stats": stats,
+                "provider_spend": sorted(
+                    [
+                        {
+                            **bucket,
+                            "monthly_cost": round(bucket["monthly_cost"], 2),
+                            "annual_cost": round(bucket["annual_cost"], 2),
+                        }
+                        for bucket in provider_rollup.values()
+                    ],
+                    key=lambda item: item["annual_cost"],
+                    reverse=True,
+                ),
+                "renewals": {
+                    "expired": renewals["expired"][:8],
+                    "next_7_days": renewals["next_7_days"][:8],
+                },
+                "alerts": self._build_alerts(assets)[:24],
+                "sync_logs": SoftwareAssetSyncLogSerializer(sync_logs[:20], many=True).data,
+                "audit_logs": SoftwareAssetAuditLogSerializer(audit_logs[:20], many=True).data,
+                "requests": LicenseRequestSerializer(
+                    requests_queryset[:20],
+                    many=True,
+                    context={"request": request},
+                ).data,
+                "request_stats": request_stats,
+                "user_cards": [self._serialize_asset_brief(asset) for asset in assets[:12]],
+            }
+        )
+
+    def perform_create(self, serializer):
+        asset = serializer.save(created_by=self.request.user)
+        log_software_asset_event(
+            asset=asset,
+            actor=self.request.user,
+            event_type="created",
+            message=f"{asset.name} record created.",
+            payload=self._capture_asset_snapshot(asset),
+        )
+
+    def perform_update(self, serializer):
+        current_asset = self.get_object()
+        before_snapshot = self._capture_asset_snapshot(current_asset)
+        asset = serializer.save()
+        after_snapshot = self._capture_asset_snapshot(asset)
+        changed_fields = sorted(
+            [key for key in after_snapshot if before_snapshot.get(key) != after_snapshot.get(key)]
+        )
+        log_software_asset_event(
+            asset=asset,
+            actor=self.request.user,
+            event_type="updated",
+            message=f"{asset.name} record updated.",
+            payload={"changed_fields": changed_fields},
+        )
+
+    def perform_destroy(self, instance):
+        snapshot = self._capture_asset_snapshot(instance)
+        log_software_asset_event(
+            actor=self.request.user,
+            event_type="deleted",
+            message=f"{instance.name} record deleted.",
+            payload=snapshot,
+        )
+        super().perform_destroy(instance)
+
+    @action(detail=False, methods=["post"], url_path="import-csv")
+    def import_csv(self, request):
+        rows = request.data.get("rows") or []
+        if not isinstance(rows, list) or not rows:
+            return Response(
+                {"detail": "Provide a non-empty `rows` array for CSV import."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        created_records = []
+        errors = []
+
+        for index, row in enumerate(rows, start=1):
+            serializer = self.get_serializer(data=row)
+            if not serializer.is_valid():
+                errors.append({"row": index, "errors": serializer.errors})
+                continue
+
+            asset = serializer.save(created_by=request.user)
+            created_records.append(asset.id)
+            log_software_asset_event(
+                asset=asset,
+                actor=request.user,
+                event_type="imported",
+                message=f"{asset.name} imported from CSV.",
+                payload={"row": index},
+            )
+
+        return Response(
+            {
+                "created_count": len(created_records),
+                "created_ids": created_records,
+                "errors": errors,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"], url_path="bulk-assign")
+    def bulk_assign(self, request):
+        asset_ids = request.data.get("asset_ids") or []
+        user_ids = request.data.get("user_ids") or []
+        if not asset_ids or not user_ids:
+            return Response(
+                {"detail": "`asset_ids` and `user_ids` are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        assets = SoftwareAsset.objects.prefetch_related("assignments").filter(id__in=asset_ids)
+        updated_ids = []
+        errors = []
+
+        for asset in assets:
+            existing_user_ids = list(
+                asset.assignments.filter(is_active=True).values_list("user_id", flat=True)
+            )
+            if asset.license_mode == "assigned" and len(user_ids) > 1:
+                errors.append(
+                    {
+                        "asset_id": asset.id,
+                        "detail": "Assigned licenses can only target one user at a time.",
+                    }
+                )
+                continue
+
+            next_user_ids = (
+                [int(user_ids[0])]
+                if asset.license_mode == "assigned"
+                else sorted(set(existing_user_ids + [int(user_id) for user_id in user_ids]))
+            )
+            if asset.license_mode == "shared" and len(next_user_ids) > max(int(asset.seats_total or 1), 1):
+                errors.append(
+                    {
+                        "asset_id": asset.id,
+                        "detail": "Assigned users would exceed available seats.",
+                    }
+                )
+                continue
+
+            sync_asset_assignments(asset, user_ids=next_user_ids)
+            updated_ids.append(asset.id)
+            log_software_asset_event(
+                asset=asset,
+                actor=request.user,
+                event_type="assignment_changed",
+                message=f"{asset.name} assignments updated in bulk.",
+                payload={"user_ids": next_user_ids},
+            )
+
+        return Response(
+            {"updated_ids": updated_ids, "errors": errors},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="reclaim")
+    def reclaim(self, request, pk=None):
+        asset = self.get_object()
+        requested_user_ids = request.data.get("user_ids") or list(
+            asset.assignments.filter(is_active=True).values_list("user_id", flat=True)
+        )
+        current_user_ids = list(
+            asset.assignments.filter(is_active=True).values_list("user_id", flat=True)
+        )
+        next_user_ids = [user_id for user_id in current_user_ids if int(user_id) not in {int(value) for value in requested_user_ids}]
+        sync_asset_assignments(asset, user_ids=next_user_ids)
+
+        log_software_asset_event(
+            asset=asset,
+            actor=request.user,
+            event_type="reclaimed",
+            message=f"{asset.name} assignments reclaimed.",
+            payload={"removed_user_ids": requested_user_ids},
+        )
+
+        asset.refresh_from_db()
+        serializer = self.get_serializer(asset)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="sync")
+    def sync_record(self, request, pk=None):
+        asset = self.get_object()
+        has_provider_mapping = asset.provider_code != "manual"
+        has_external_reference = bool(asset.external_id or asset.external_workspace_id)
+
+        if has_provider_mapping and has_external_reference:
+            status_value = "ok"
+            message = "Provider snapshot refreshed successfully."
+            sync_error = ""
+        elif has_provider_mapping:
+            status_value = "error"
+            message = "Provider mapping is incomplete. External identifiers are missing."
+            sync_error = message
+        else:
+            status_value = "pending"
+            message = "Manual records cannot run live provider sync. Baseline kept for audit."
+            sync_error = ""
+
+        asset.sync_status = status_value
+        asset.sync_error = sync_error
+        asset.last_synced_at = timezone.now()
+        asset.save(update_fields=["sync_status", "sync_error", "last_synced_at", "updated_at"])
+
+        log_software_asset_sync(
+            asset=asset,
+            actor=request.user,
+            provider_code=asset.provider_code,
+            status_value=status_value,
+            message=message,
+            payload={
+                "record_source": asset.record_source,
+                "external_id": asset.external_id,
+                "external_workspace_id": asset.external_workspace_id,
+            },
+        )
+        log_software_asset_event(
+            asset=asset,
+            actor=request.user,
+            event_type="sync_result",
+            message=f"{asset.name} sync completed with status {status_value}.",
+            payload={"status": status_value, "message": message},
+        )
+
+        serializer = self.get_serializer(asset)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class LicenseRequestViewSet(viewsets.ModelViewSet):
+    serializer_class = LicenseRequestSerializer
+    permission_classes = [LicenseRequestPermission]
+    http_method_names = ["get", "post", "patch", "head", "options"]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["status", "provider_code", "request_type"]
+    search_fields = [
+        "requested_product",
+        "preferred_plan",
+        "justification",
+        "department",
+        "cost_center",
+    ]
+    ordering_fields = ["created_at", "updated_at", "requested_product"]
+
+    def get_queryset(self):
+        queryset = LicenseRequest.objects.select_related("asset", "requester", "resolved_by").all()
+        if is_admin_user(self.request.user):
+            return queryset
+        return queryset.filter(requester=self.request.user)
+
+    def perform_create(self, serializer):
+        request_record = serializer.save(
+            requester=self.request.user,
+            status="pending",
+            resolution_note="",
+            resolved_by=None,
+        )
+        for admin_user in User.objects.filter(Q(is_staff=True) | Q(is_superuser=True)):
+            create_notification(
+                recipient=admin_user,
+                actor=self.request.user,
+                notification_type="license",
+                title="New license request",
+                body=f"{get_user_display_name(self.request.user)} requested {request_record.requested_product}.",
+                link="/software-assets",
+            )
+
+        log_software_asset_event(
+            asset=request_record.asset,
+            actor=self.request.user,
+            event_type="request_created",
+            message=f"License request created for {request_record.requested_product}.",
+            payload={
+                "request_id": request_record.id,
+                "status": request_record.status,
+                "requested_product": request_record.requested_product,
+            },
+        )
+
+    def partial_update(self, request, *args, **kwargs):
+        request_record = self.get_object()
+        serializer = self.get_serializer(
+            request_record,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        next_status = serializer.validated_data.get("status", request_record.status)
+        next_asset = serializer.validated_data.get("asset", request_record.asset)
+        if next_status == "fulfilled" and not next_asset:
+            return Response(
+                {"detail": "A target license record is required to fulfill the request."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        previous_status = request_record.status
+        try:
+            with transaction.atomic():
+                updated_request = serializer.save(resolved_by=request.user)
+                if next_status == "fulfilled" and updated_request.asset_id:
+                    assign_user_to_asset(updated_request.asset, updated_request.requester)
+                    log_software_asset_event(
+                        asset=updated_request.asset,
+                        actor=request.user,
+                        event_type="assignment_changed",
+                        message=f"{updated_request.requested_product} assigned after request fulfillment.",
+                        payload={
+                            "request_id": updated_request.id,
+                            "user_id": updated_request.requester_id,
+                            "requested_product": updated_request.requested_product,
+                        },
+                    )
+        except PermissionDenied as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        if previous_status != updated_request.status:
+            create_notification(
+                recipient=updated_request.requester,
+                actor=request.user,
+                notification_type="license",
+                title="License request updated",
+                body=f"{updated_request.requested_product} request is now {updated_request.status}.",
+                link="/software-assets",
+            )
+            log_software_asset_event(
+                asset=updated_request.asset,
+                actor=request.user,
+                event_type="request_status_changed",
+                message=f"Request status changed to {updated_request.status}.",
+                payload={
+                    "request_id": updated_request.id,
+                    "requested_product": updated_request.requested_product,
+                    "from": previous_status,
+                    "to": updated_request.status,
+                },
+            )
+
+        return Response(
+            self.get_serializer(updated_request).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 class UserNotificationViewSet(viewsets.ModelViewSet):

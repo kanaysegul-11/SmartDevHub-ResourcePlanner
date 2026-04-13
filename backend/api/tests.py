@@ -5,7 +5,21 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import Comment, EmploymentStatus, Project, Snippet, Task, TeamMessage, UserNotification, UserProfile
+from .models import (
+    Comment,
+    EmploymentStatus,
+    Project,
+    Snippet,
+    Task,
+    TeamMessage,
+    UserNotification,
+    UserProfile,
+    SoftwareAsset,
+    SoftwareAssetAssignment,
+    SoftwareAssetAuditLog,
+    SoftwareAssetSyncLog,
+    LicenseRequest,
+)
 
 
 class ApiBehaviorTests(APITestCase):
@@ -832,6 +846,77 @@ class ApiBehaviorTests(APITestCase):
         self.assertIn("Kaan Yıldız", notification.title)
         self.assertIn("Kaan Yıldız", notification.body)
 
+    def test_sending_team_message_to_admin_links_notification_to_admin_inbox(self):
+        self_status = EmploymentStatus.objects.create(
+            user=self.user,
+            employee_name="Member User",
+            position="Developer",
+            status_type="available",
+        )
+        admin_user = User.objects.create_user(
+            username="admin-inbox",
+            password="strong-pass-123",
+            email="admin-inbox@example.com",
+            is_staff=True,
+        )
+        admin_status = EmploymentStatus.objects.create(
+            user=admin_user,
+            employee_name="Inbox Admin",
+            position="Administrator",
+            status_type="available",
+        )
+
+        response = self.client.post(
+            "/api/team-messages/",
+            {"recipient": admin_status.id, "content": "Need approval"},
+            format="json",
+        )
+
+        notification = UserNotification.objects.filter(
+            recipient=admin_user,
+            actor=self.user,
+            type="message",
+        ).first()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNotNone(notification)
+        self.assertEqual(notification.link, f"/administrators?chat={self_status.id}")
+
+    def test_sending_team_message_to_member_keeps_team_chat_link(self):
+        self_status = EmploymentStatus.objects.create(
+            user=self.user,
+            employee_name="Member User",
+            position="Developer",
+            status_type="available",
+        )
+        other_user = User.objects.create_user(
+            username="other-team-link",
+            password="strong-pass-123",
+            email="other-team-link@example.com",
+        )
+        recipient_status = EmploymentStatus.objects.create(
+            user=other_user,
+            employee_name="Other Team Member",
+            position="Developer",
+            status_type="available",
+        )
+
+        response = self.client.post(
+            "/api/team-messages/",
+            {"recipient": recipient_status.id, "content": "Quick sync"},
+            format="json",
+        )
+
+        notification = UserNotification.objects.filter(
+            recipient=other_user,
+            actor=self.user,
+            type="message",
+        ).first()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNotNone(notification)
+        self.assertEqual(notification.link, f"/team?chat={self_status.id}")
+
     def test_recipient_cannot_edit_foreign_team_message(self):
         sender = User.objects.create_user(
             username="sender",
@@ -1009,6 +1094,368 @@ class ApiBehaviorTests(APITestCase):
         self.assertEqual(response.data["deleted_count"], 2)
         self.assertEqual(UserNotification.objects.filter(recipient=self.user).count(), 0)
         self.assertEqual(UserNotification.objects.filter(recipient=other_user).count(), 1)
+
+    def test_non_admin_cannot_create_software_asset(self):
+        response = self.client.post(
+            "/api/software-assets/",
+            {
+                "name": "Cursor Pro",
+                "vendor": "Cursor",
+                "license_mode": "assigned",
+                "account_email": "member@example.com",
+                "billing_email": "member@example.com",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(SoftwareAsset.objects.count(), 0)
+
+    def test_admin_can_create_shared_software_asset_with_assignments(self):
+        admin_user = User.objects.create_user(
+            username="software-admin",
+            password="strong-pass-123",
+            email="software-admin@example.com",
+            is_staff=True,
+        )
+        assigned_user = User.objects.create_user(
+            username="licensed-member",
+            password="strong-pass-123",
+            email="licensed-member@example.com",
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.post(
+            "/api/software-assets/",
+            {
+                "name": "Figma Organization",
+                "vendor": "Figma",
+                "license_mode": "shared",
+                "provider_code": "figma",
+                "seats_total": 5,
+                "purchase_price": "25.00",
+                "billing_cycle": "monthly",
+                "shared_user_ids": [assigned_user.id],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        asset = SoftwareAsset.objects.get(id=response.data["id"])
+        assignment = SoftwareAssetAssignment.objects.get(asset=asset, user=assigned_user)
+        self.assertEqual(asset.license_mode, "shared")
+        self.assertEqual(assignment.access_email, assigned_user.email)
+        self.assertEqual(response.data["monthly_cost_estimate"], 125.0)
+        self.assertEqual(response.data["annual_cost_estimate"], 1500.0)
+
+    def test_admin_can_create_assigned_software_asset_for_single_user(self):
+        admin_user = User.objects.create_user(
+            username="software-admin-assigned",
+            password="strong-pass-123",
+            email="software-admin-assigned@example.com",
+            is_staff=True,
+        )
+        assigned_user = User.objects.create_user(
+            username="assigned-designer",
+            password="strong-pass-123",
+            email="assigned-designer@example.com",
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.post(
+            "/api/software-assets/",
+            {
+                "name": "Adobe Photoshop",
+                "vendor": "Adobe",
+                "license_mode": "assigned",
+                "provider_code": "adobe",
+                "assigned_user_id": assigned_user.id,
+                "account_email": assigned_user.email,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        asset = SoftwareAsset.objects.get(id=response.data["id"])
+        assignment = SoftwareAssetAssignment.objects.get(asset=asset, user=assigned_user)
+        self.assertEqual(asset.license_mode, "assigned")
+        self.assertEqual(asset.seats_total, 1)
+        self.assertEqual(assignment.access_email, assigned_user.email)
+
+    def test_non_admin_only_sees_assets_assigned_to_them(self):
+        admin_user = User.objects.create_user(
+            username="software-admin-view",
+            password="strong-pass-123",
+            email="software-admin-view@example.com",
+            is_staff=True,
+        )
+        other_user = User.objects.create_user(
+            username="other-licensed-member",
+            password="strong-pass-123",
+            email="other-licensed-member@example.com",
+        )
+        visible_asset = SoftwareAsset.objects.create(
+            name="Notion Plus",
+            vendor="Notion",
+            license_mode="shared",
+            seats_total=3,
+            created_by=admin_user,
+        )
+        hidden_asset = SoftwareAsset.objects.create(
+            name="Adobe Illustrator",
+            vendor="Adobe",
+            license_mode="assigned",
+            provider_code="adobe",
+            seats_total=1,
+            created_by=admin_user,
+        )
+        SoftwareAssetAssignment.objects.create(asset=visible_asset, user=self.user)
+        SoftwareAssetAssignment.objects.create(asset=visible_asset, user=other_user)
+        SoftwareAssetAssignment.objects.create(asset=hidden_asset, user=other_user)
+
+        response = self.client.get("/api/software-assets/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["id"], visible_asset.id)
+        self.assertEqual(len(response.data[0]["assignments"]), 1)
+        self.assertEqual(response.data[0]["assignments"][0]["user"], self.user.id)
+
+    def test_software_asset_summary_reports_costs_alerts_and_requests(self):
+        admin_user = User.objects.create_user(
+            username="software-summary-admin",
+            password="strong-pass-123",
+            email="software-summary-admin@example.com",
+            is_staff=True,
+        )
+        expiring_asset = SoftwareAsset.objects.create(
+            name="Figma Enterprise",
+            vendor="Figma",
+            record_type="saas",
+            license_mode="shared",
+            provider_code="figma",
+            seats_total=4,
+            purchase_price="120.00",
+            billing_cycle="monthly",
+            renewal_date=timezone.localdate() + timedelta(days=5),
+            created_by=admin_user,
+        )
+        SoftwareAsset.objects.create(
+            name="Cursor Team",
+            vendor="Cursor",
+            record_type="saas",
+            license_mode="assigned",
+            provider_code="cursor",
+            seats_total=1,
+            purchase_price="45.00",
+            billing_cycle="monthly",
+            sync_status="error",
+            sync_error="Provider token expired.",
+            created_by=admin_user,
+        )
+        LicenseRequest.objects.create(
+            requester=self.user,
+            requested_product="Adobe Creative Cloud",
+            provider_code="adobe",
+            request_type="new_purchase",
+            status="pending",
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.get("/api/software-assets/summary/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["stats"]["total_records"], 2)
+        self.assertEqual(response.data["stats"]["expiring_7_days"], 1)
+        self.assertEqual(response.data["request_stats"]["pending"], 1)
+        self.assertEqual(response.data["stats"]["monthly_cost_total"], 525.0)
+        self.assertEqual(response.data["stats"]["annual_cost_total"], 6300.0)
+        alert_kinds = {alert["kind"] for alert in response.data["alerts"]}
+        self.assertIn("renewal_due", alert_kinds)
+        self.assertIn("sync_error", alert_kinds)
+        self.assertEqual(response.data["renewals"]["next_7_days"][0]["id"], expiring_asset.id)
+
+    def test_admin_can_import_software_assets_from_csv_rows(self):
+        admin_user = User.objects.create_user(
+            username="software-import-admin",
+            password="strong-pass-123",
+            email="software-import-admin@example.com",
+            is_staff=True,
+        )
+        assigned_user = User.objects.create_user(
+            username="software-import-assignee",
+            password="strong-pass-123",
+            email="software-import-assignee@example.com",
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.post(
+            "/api/software-assets/import-csv/",
+            {
+                "rows": [
+                    {
+                        "name": "GitHub Team",
+                        "vendor": "GitHub",
+                        "record_type": "team_tool",
+                        "license_mode": "shared",
+                        "provider_code": "github",
+                        "seats_total": 3,
+                        "billing_cycle": "monthly",
+                        "purchase_price": "30.00",
+                        "shared_user_ids": [assigned_user.id],
+                    },
+                    {
+                        "name": "Adobe Illustrator",
+                        "vendor": "Adobe",
+                        "record_type": "desktop_license",
+                        "license_mode": "assigned",
+                        "provider_code": "adobe",
+                        "billing_cycle": "yearly",
+                        "purchase_price": "240.00",
+                        "assigned_user_id": assigned_user.id,
+                    },
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["created_count"], 2)
+        self.assertEqual(SoftwareAsset.objects.count(), 2)
+        self.assertEqual(SoftwareAssetAuditLog.objects.filter(event_type="imported").count(), 2)
+
+    def test_admin_can_bulk_assign_shared_assets(self):
+        admin_user = User.objects.create_user(
+            username="software-bulk-admin",
+            password="strong-pass-123",
+            email="software-bulk-admin@example.com",
+            is_staff=True,
+        )
+        first_user = User.objects.create_user(
+            username="bulk-user-1",
+            password="strong-pass-123",
+            email="bulk-user-1@example.com",
+        )
+        second_user = User.objects.create_user(
+            username="bulk-user-2",
+            password="strong-pass-123",
+            email="bulk-user-2@example.com",
+        )
+        asset = SoftwareAsset.objects.create(
+            name="Notion Business",
+            vendor="Notion",
+            license_mode="shared",
+            seats_total=3,
+            created_by=admin_user,
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.post(
+            "/api/software-assets/bulk-assign/",
+            {"asset_ids": [asset.id], "user_ids": [first_user.id, second_user.id]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            asset.assignments.filter(is_active=True).count(),
+            2,
+        )
+        self.assertEqual(len(response.data["errors"]), 0)
+        self.assertTrue(
+            SoftwareAssetAuditLog.objects.filter(
+                asset=asset,
+                event_type="assignment_changed",
+            ).exists()
+        )
+
+    def test_admin_can_sync_record_and_create_sync_log(self):
+        admin_user = User.objects.create_user(
+            username="software-sync-admin",
+            password="strong-pass-123",
+            email="software-sync-admin@example.com",
+            is_staff=True,
+        )
+        asset = SoftwareAsset.objects.create(
+            name="Microsoft 365 E3",
+            vendor="Microsoft",
+            provider_code="microsoft",
+            record_type="saas",
+            license_mode="shared",
+            seats_total=10,
+            external_id="m365-e3",
+            external_workspace_id="tenant-001",
+            created_by=admin_user,
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.post(f"/api/software-assets/{asset.id}/sync/", format="json")
+
+        asset.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(asset.sync_status, "ok")
+        self.assertTrue(
+            SoftwareAssetSyncLog.objects.filter(asset=asset, status="ok").exists()
+        )
+
+    def test_user_can_create_license_request_and_admin_can_fulfill_it(self):
+        admin_user = User.objects.create_user(
+            username="software-request-admin",
+            password="strong-pass-123",
+            email="software-request-admin@example.com",
+            is_staff=True,
+        )
+        asset = SoftwareAsset.objects.create(
+            name="Adobe Creative Cloud",
+            vendor="Adobe",
+            record_type="desktop_license",
+            license_mode="shared",
+            provider_code="adobe",
+            seats_total=2,
+            created_by=admin_user,
+        )
+
+        create_response = self.client.post(
+            "/api/license-requests/",
+            {
+                "requested_product": "Adobe Creative Cloud",
+                "provider_code": "adobe",
+                "request_type": "access_request",
+                "preferred_plan": "All Apps",
+                "justification": "Design review and export workflows.",
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        request_id = create_response.data["id"]
+
+        self.client.force_authenticate(user=admin_user)
+        fulfill_response = self.client.patch(
+            f"/api/license-requests/{request_id}/",
+            {
+                "asset": asset.id,
+                "status": "fulfilled",
+                "resolution_note": "Seat assigned from shared pool.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(fulfill_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            SoftwareAssetAssignment.objects.filter(asset=asset, user=self.user).exists()
+        )
+        self.assertTrue(
+            UserNotification.objects.filter(
+                recipient=self.user,
+                type="license",
+                title="License request updated",
+            ).exists()
+        )
+        self.assertTrue(
+            SoftwareAssetAuditLog.objects.filter(
+                event_type="request_status_changed",
+            ).exists()
+        )
 
     def test_notifications_endpoint_normalizes_legacy_turkish_ascii_text(self):
         UserNotification.objects.create(
