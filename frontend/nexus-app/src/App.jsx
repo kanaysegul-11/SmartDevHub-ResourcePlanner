@@ -89,7 +89,7 @@ function App() {
           name: "software-assets",
           list: "/software-assets",
           meta: {
-            label: "Licenses & Subscriptions",
+            label: "Products & Subscriptions",
           },
         },
         {

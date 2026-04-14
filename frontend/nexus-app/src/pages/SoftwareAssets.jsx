@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCreate, useDelete, useInvalidate, useList, useUpdate } from "@refinedev/core";
-import { FeatherAlertTriangle, FeatherFileText, FeatherRefreshCw } from "@subframe/core";
+import {
+  FeatherAlertTriangle,
+  FeatherClock3,
+  FeatherFileText,
+  FeatherRefreshCw,
+  FeatherSearch,
+  FeatherSparkles,
+  FeatherTrendingUp,
+} from "@subframe/core";
 import { toast } from "sonner";
 
 import Sidebar from "../component/layout/Sidebar";
@@ -237,6 +245,26 @@ function SoftwareAssets() {
     request_stats: {},
     user_cards: [],
   });
+  const toolbarSignals = useMemo(
+    () => [
+      {
+        label: copy.totalRecords,
+        value: summary.stats?.total_records || 0,
+        icon: <FeatherSparkles size={14} />,
+      },
+      {
+        label: copy.expiringSoon,
+        value: summary.stats?.expiring_7_days || 0,
+        icon: <FeatherClock3 size={14} />,
+      },
+      {
+        label: copy.active,
+        value: summary.stats?.active_records || 0,
+        icon: <FeatherTrendingUp size={14} />,
+      },
+    ],
+    [copy.active, copy.expiringSoon, copy.totalRecords, summary.stats]
+  );
   const [activeTab, setActiveTab] = useState(() => (isAdmin ? "shared" : "assigned"));
   const [selectedAssetId, setSelectedAssetId] = useState(null);
   const [selectedRowIds, setSelectedRowIds] = useState([]);
@@ -1256,100 +1284,144 @@ function SoftwareAssets() {
           ) : null}
 
           <div className="flex w-full flex-col gap-6 px-6 md:px-8 xl:px-10">
-            <div className="rounded-[28px] border border-white/65 bg-white/75 p-5 shadow-[0_20px_50px_rgba(148,163,184,0.1)] backdrop-blur">
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.4fr)_repeat(5,minmax(0,1fr))]">
-                <input
-                  value={filters.search}
-                  onChange={(event) =>
-                    setFilters((current) => ({ ...current, search: event.target.value }))
-                  }
-                  placeholder={copy.filterSearch}
-                  className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-400/30"
-                />
-                {[
-                  { key: "provider", label: copy.filterProvider, options: { all: copy.filterAll, ...providerLabels } },
-                  {
-                    key: "lifecycle",
-                    label: copy.filterStatus,
-                    options: {
-                      all: copy.filterAll,
-                      active: copy.active,
-                      expiring_soon: copy.expiringLabel,
-                      expired: copy.expired,
-                      inactive: copy.inactive,
-                      archived: copy.archived,
-                    },
-                  },
-                  {
-                    key: "mode",
-                    label: copy.filterMode,
-                    options: { all: copy.filterAll, shared: copy.shared, assigned: copy.assigned },
-                  },
-                  {
-                    key: "source",
-                    label: copy.filterSource,
-                    options: { all: copy.filterAll, manual: copy.manualRecord, provider_sync: copy.providerSync },
-                  },
-                  {
-                    key: "renewal",
-                    label: copy.filterRenewal,
-                    options: {
-                      all: copy.filterAll,
-                      "7_days": "7",
-                      expired: copy.expired,
-                      future: copy.future,
-                    },
-                  },
-                ].map((filterItem) => (
-                  <label key={filterItem.key} className="space-y-2">
+            <div className="relative overflow-hidden rounded-[32px] border border-white/70 bg-[radial-gradient(circle_at_top_left,rgba(191,219,254,0.2),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.94),rgba(255,255,255,0.82))] p-5 shadow-[0_22px_60px_rgba(148,163,184,0.12)] backdrop-blur">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[linear-gradient(90deg,rgba(15,23,42,0.04),transparent)]" />
+              <div className="relative">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/78 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      <FeatherSparkles size={14} />
+                      {copy.workspace}
+                    </div>
+                    <p className="max-w-2xl text-sm leading-7 text-slate-600">
+                      {copy.intro}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {toolbarSignals.map((signal) => (
+                      <span
+                        key={signal.label}
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/82 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600"
+                      >
+                        {signal.icon}
+                        {signal.label}: {signal.value}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.65fr)_repeat(5,minmax(0,1fr))]">
+                  <label className="space-y-2 xl:col-span-1">
                     <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                      {filterItem.label}
+                      {copy.filterSearch}
+                    </span>
+                    <div className="relative">
+                      <FeatherSearch
+                        size={18}
+                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                      />
+                      <input
+                        value={filters.search}
+                        onChange={(event) =>
+                          setFilters((current) => ({ ...current, search: event.target.value }))
+                        }
+                        placeholder={copy.filterSearch}
+                        className="w-full rounded-[20px] border border-slate-200 bg-white/90 px-12 py-3.5 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-400/30"
+                      />
+                    </div>
+                  </label>
+                  {[
+                    { key: "provider", label: copy.filterProvider, options: { all: copy.filterAll, ...providerLabels } },
+                    {
+                      key: "lifecycle",
+                      label: copy.filterStatus,
+                      options: {
+                        all: copy.filterAll,
+                        active: copy.active,
+                        expiring_soon: copy.expiringLabel,
+                        expired: copy.expired,
+                        inactive: copy.inactive,
+                        archived: copy.archived,
+                      },
+                    },
+                    {
+                      key: "mode",
+                      label: copy.filterMode,
+                      options: { all: copy.filterAll, shared: copy.shared, assigned: copy.assigned },
+                    },
+                    {
+                      key: "source",
+                      label: copy.filterSource,
+                      options: { all: copy.filterAll, manual: copy.manualRecord, provider_sync: copy.providerSync },
+                    },
+                    {
+                      key: "renewal",
+                      label: copy.filterRenewal,
+                      options: {
+                        all: copy.filterAll,
+                        "7_days": "7",
+                        expired: copy.expired,
+                        future: copy.future,
+                      },
+                    },
+                  ].map((filterItem) => (
+                    <label key={filterItem.key} className="space-y-2">
+                      <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        {filterItem.label}
+                      </span>
+                      <select
+                        value={filters[filterItem.key]}
+                        onChange={(event) =>
+                          setFilters((current) => ({
+                            ...current,
+                            [filterItem.key]: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-[20px] border border-slate-200 bg-white/88 px-4 py-3.5 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-400/30"
+                      >
+                        {Object.entries(filterItem.options).map(([value, label]) => (
+                          <option key={`${filterItem.key}-${value}`} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="mt-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="overflow-x-auto rounded-[22px] border border-slate-200/80 bg-white/78 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                    <Tabs className="overflow-x-auto">
+                      {availableTabs.map((tabKey) => (
+                        <Tabs.Item
+                          key={tabKey}
+                          active={activeTab === tabKey}
+                          onClick={() => setActiveTab(tabKey)}
+                        >
+                          {copy.tabs[tabKey]}
+                        </Tabs.Item>
+                      ))}
+                    </Tabs>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white/82 text-slate-500">
+                      <FeatherTrendingUp size={16} />
                     </span>
                     <select
-                      value={filters[filterItem.key]}
+                      value={filters.sort}
                       onChange={(event) =>
-                        setFilters((current) => ({
-                          ...current,
-                          [filterItem.key]: event.target.value,
-                        }))
+                        setFilters((current) => ({ ...current, sort: event.target.value }))
                       }
-                      className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
+                      className="rounded-[20px] border border-slate-200 bg-white/88 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-400/30"
                     >
-                      {Object.entries(filterItem.options).map(([value, label]) => (
-                        <option key={`${filterItem.key}-${value}`} value={value}>
-                          {label}
+                      {availableSortOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
                         </option>
                       ))}
                     </select>
-                  </label>
-                ))}
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-                <Tabs className="overflow-x-auto">
-                  {availableTabs.map((tabKey) => (
-                    <Tabs.Item
-                      key={tabKey}
-                      active={activeTab === tabKey}
-                      onClick={() => setActiveTab(tabKey)}
-                    >
-                      {copy.tabs[tabKey]}
-                    </Tabs.Item>
-                  ))}
-                </Tabs>
-                <select
-                  value={filters.sort}
-                  onChange={(event) =>
-                    setFilters((current) => ({ ...current, sort: event.target.value }))
-                  }
-                  className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
-                >
-                  {availableSortOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1469,7 +1541,7 @@ function SoftwareAssets() {
               </div>
             ) : null}
 
-            <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_440px]">
               <div className="flex min-w-0 flex-col gap-6">{renderTabContent()}</div>
               <SoftwareAssetPanel
                 copy={copy}

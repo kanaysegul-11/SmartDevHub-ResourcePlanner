@@ -1,9 +1,12 @@
 import React from "react";
 import {
+  FeatherDatabase,
   FeatherExternalLink,
   FeatherRefreshCw,
   FeatherShield,
+  FeatherSparkles,
   FeatherTrash2,
+  FeatherTrendingUp,
   FeatherUndo2,
 } from "@subframe/core";
 
@@ -20,21 +23,42 @@ import {
 
 function DetailRow({ label, value }) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <span className="font-semibold text-slate-500">{label}</span>
-      <span className="max-w-[62%] break-words text-right font-semibold text-slate-900">
-        {value}
-      </span>
+    <div className="rounded-[18px] border border-slate-200/80 bg-white/86 px-4 py-3 shadow-[0_10px_24px_rgba(148,163,184,0.08)]">
+      <div className="flex items-start justify-between gap-4">
+        <span className="font-semibold text-slate-500">{label}</span>
+        <span className="max-w-[62%] break-words text-right font-semibold text-slate-900">
+          {value}
+        </span>
+      </div>
     </div>
   );
 }
 
 function Section({ title, children }) {
   return (
-    <div className="rounded-[24px] border border-slate-200/80 bg-white/85 p-5">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{title}</p>
-      <div className="mt-4 grid grid-cols-1 gap-4">{children}</div>
+    <div className="relative overflow-hidden rounded-[26px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.9))] p-5 shadow-[0_16px_36px_rgba(148,163,184,0.08)]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-14 bg-[linear-gradient(90deg,rgba(15,23,42,0.05),transparent)]" />
+      <div className="relative">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{title}</p>
+        <div className="mt-4 grid grid-cols-1 gap-4">{children}</div>
+      </div>
     </div>
+  );
+}
+
+function PanelMetaPill({ icon, children, tone = "light" }) {
+  const toneClasses =
+    tone === "dark"
+      ? "border-white/10 bg-white/10 text-white"
+      : "border-slate-200/80 bg-white/82 text-slate-700";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold tracking-[0.16em] ${toneClasses}`}
+    >
+      {icon}
+      {children}
+    </span>
   );
 }
 
@@ -135,6 +159,8 @@ function SoftwareAssetPanel(props) {
     getLifecycleVariant,
   } = props;
   const labels = copy.panel || {};
+  const selectedProviderLabel =
+    providerLabels[selectedAsset?.provider_code] || copy.noValue;
   const allSharedUsersSelected =
     userOptions.length > 0 &&
     userOptions.every((user) => (formData.shared_user_ids || []).includes(String(user.id)));
@@ -145,7 +171,7 @@ function SoftwareAssetPanel(props) {
   const setValue = (key, value) => setFormData((current) => ({ ...current, [key]: value }));
 
   const detailContent = selectedAsset ? (
-    <div className="rounded-[24px] border border-slate-200/80 bg-white/85 p-5 text-sm text-slate-600">
+    <div className="rounded-[26px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.92))] p-5 text-sm text-slate-600 shadow-[0_18px_40px_rgba(148,163,184,0.08)]">
       <div className="grid grid-cols-1 gap-3">
         <div className="flex items-center justify-between gap-4">
           <span className="font-semibold text-slate-500">{copy.tableStatus}</span>
@@ -179,43 +205,76 @@ function SoftwareAssetPanel(props) {
 
   if (!isCreateMode && !selectedAsset) {
     return (
-      <div className="rounded-[34px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,255,255,0.9))] p-7 shadow-[0_24px_70px_rgba(148,163,184,0.16)] backdrop-blur xl:self-start">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{copy.detailTitle}</p>
-        <p className="mt-3 text-2xl font-black tracking-tight text-slate-950">{copy.detailTitle}</p>
-        <p className="mt-6 text-sm leading-7 text-slate-600">{copy.noSelection}</p>
+      <div className="relative overflow-hidden rounded-[36px] border border-white/70 bg-[radial-gradient(circle_at_top_left,rgba(191,219,254,0.22),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.9))] p-7 shadow-[0_28px_80px_rgba(148,163,184,0.16)] backdrop-blur xl:sticky xl:top-6 xl:self-start">
+        <div className="pointer-events-none absolute -right-8 top-8 h-28 w-28 rounded-full bg-sky-200/30 blur-3xl" />
+        <div className="relative">
+          <div className="flex flex-wrap items-center gap-2">
+            <PanelMetaPill icon={<FeatherSparkles size={14} />}>
+              {copy.detailTitle}
+            </PanelMetaPill>
+          </div>
+          <p className="mt-4 text-2xl font-black tracking-tight text-slate-950">
+            {copy.detailTitle}
+          </p>
+          <div className="mt-6 rounded-[24px] border border-dashed border-slate-200 bg-white/70 px-5 py-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950/[0.05] text-slate-600">
+              <FeatherDatabase size={20} />
+            </div>
+            <p className="mt-4 text-sm leading-7 text-slate-600">{copy.noSelection}</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!isAdmin) {
     return (
-      <div className="rounded-[34px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,255,255,0.9))] p-7 shadow-[0_24px_70px_rgba(148,163,184,0.16)] backdrop-blur xl:self-start">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{copy.detailTitle}</p>
-        <p className="mt-3 break-words text-2xl font-black tracking-tight text-slate-950">
-          {selectedAsset?.name || copy.detailTitle}
-        </p>
-        <div className="mt-6 space-y-5">
-          <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-7 text-slate-600">
-            {copy.userHint}
+      <div className="relative overflow-hidden rounded-[36px] border border-white/70 bg-[radial-gradient(circle_at_top_left,rgba(191,219,254,0.22),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.9))] p-7 shadow-[0_28px_80px_rgba(148,163,184,0.16)] backdrop-blur xl:sticky xl:top-6 xl:self-start">
+        <div className="pointer-events-none absolute -left-10 top-10 h-28 w-28 rounded-full bg-sky-200/25 blur-3xl" />
+        <div className="relative">
+          <div className="flex flex-wrap gap-2">
+            <PanelMetaPill icon={<FeatherShield size={14} />}>
+              {selectedProviderLabel}
+            </PanelMetaPill>
+            <PanelMetaPill icon={<FeatherTrendingUp size={14} />}>
+              {getModeLabel(selectedAsset?.license_mode)}
+            </PanelMetaPill>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <ActionLink href={selectedAsset?.support_link} label={selectedAsset?.vendor_contact || labels.support} />
-            <ActionLink href={selectedAsset?.documentation_link} label={labels.documentation} />
+          <p className="mt-4 break-words text-2xl font-black tracking-tight text-slate-950">
+            {selectedAsset?.name || copy.detailTitle}
+          </p>
+          <div className="mt-6 space-y-5">
+            <div className="rounded-[24px] border border-slate-200 bg-white/78 px-4 py-4 text-sm leading-7 text-slate-600 shadow-[0_14px_30px_rgba(148,163,184,0.08)]">
+              {copy.userHint}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <ActionLink href={selectedAsset?.support_link} label={selectedAsset?.vendor_contact || labels.support} />
+              <ActionLink href={selectedAsset?.documentation_link} label={labels.documentation} />
+            </div>
+            {detailContent}
           </div>
-          {detailContent}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-[34px] border border-white/65 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,255,255,0.9))] p-7 shadow-[0_24px_70px_rgba(148,163,184,0.16)] backdrop-blur xl:self-start">
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{copy.detailTitle}</p>
-      <p className="mt-3 break-words text-2xl font-black tracking-tight text-slate-950">
-        {isCreateMode ? copy.saveCreate : selectedAsset?.name || copy.detailTitle}
-      </p>
+    <div className="relative overflow-hidden rounded-[36px] border border-white/70 bg-[radial-gradient(circle_at_top_left,rgba(191,219,254,0.22),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.9))] p-7 shadow-[0_28px_80px_rgba(148,163,184,0.16)] backdrop-blur xl:sticky xl:top-6 xl:self-start">
+      <div className="pointer-events-none absolute -right-10 top-6 h-32 w-32 rounded-full bg-sky-200/28 blur-3xl" />
+      <div className="relative">
+        <div className="flex flex-wrap gap-2">
+          <PanelMetaPill icon={<FeatherShield size={14} />}>
+            {isCreateMode ? copy.saveCreate : selectedProviderLabel}
+          </PanelMetaPill>
+          <PanelMetaPill icon={<FeatherTrendingUp size={14} />}>
+            {formData.license_mode === "assigned" ? copy.assigned : copy.shared}
+          </PanelMetaPill>
+        </div>
+        <p className="mt-4 break-words text-2xl font-black tracking-tight text-slate-950">
+          {isCreateMode ? copy.saveCreate : selectedAsset?.name || copy.detailTitle}
+        </p>
 
-      <form onSubmit={onSubmit} className="mt-6 space-y-5">
+        <form onSubmit={onSubmit} className="mt-6 space-y-5">
         <Section title={labels.identity}>
           <div className="grid grid-cols-2 gap-3">
             {[
@@ -391,6 +450,7 @@ function SoftwareAssetPanel(props) {
           ) : null}
         </div>
       </form>
+      </div>
     </div>
   );
 }

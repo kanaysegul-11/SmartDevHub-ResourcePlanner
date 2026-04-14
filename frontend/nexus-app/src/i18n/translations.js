@@ -1282,7 +1282,7 @@ export const translations = {
       createMember: "Üye Oluştur",
       projects: "Projeler",
       tasks: "Görevler",
-      softwareAssets: "Lisans ve Abonelikler",
+      softwareAssets: "Ürünler ve Abonelikler",
       codeLibrary: "Kod Kütüphanesi",
       mySnippets: "Eklediğin Kodlar",
       createSnippet: "Snippet Oluştur",
