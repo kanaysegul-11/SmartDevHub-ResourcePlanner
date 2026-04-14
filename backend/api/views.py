@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from rest_framework import viewsets, filters, status
 from django.db.models import Count, Q
@@ -49,6 +50,7 @@ from django.utils import timezone
 from urllib import request as urllib_request
 from urllib.parse import urlencode
 from .runtime_i18n import format_team_member_count, runtime_text
+from .software_asset_live_csv import export_live_license_csvs_for_users
 from .text_utils import normalize_legacy_turkish_text
 import json
 
@@ -336,6 +338,21 @@ def get_user_display_name(user):
 
     full_name = f"{user.first_name} {user.last_name}".strip()
     return full_name or user.username
+
+
+def get_active_asset_user_ids(asset):
+    if not asset:
+        return []
+    return list(
+        asset.assignments.filter(is_active=True).values_list("user_id", flat=True)
+    )
+
+
+def sync_live_csv_exports_for_users(*, user_ids):
+    normalized_user_ids = sorted({int(user_id) for user_id in (user_ids or []) if user_id})
+    if not normalized_user_ids:
+        return
+    export_live_license_csvs_for_users(user_ids=normalized_user_ids)
 
 
 def ensure_member_project_membership(*, user, project):
@@ -855,7 +872,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 assignments__user=self.request.user,
                 assignments__is_active=True,
-            ).distinct()
+            ).exclude(operational_status="archived").distinct()
 
         renewal_bucket = self.request.query_params.get("renewal_bucket")
         today = timezone.localdate()
@@ -907,6 +924,82 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             ),
         }
 
+    def _normalize_asset_identity_value(self, value):
+        if value is None:
+            return ""
+        if isinstance(value, Decimal):
+            return format(value, "f")
+        if isinstance(value, str):
+            return " ".join(value.strip().lower().split())
+        return str(value).strip().lower()
+
+    def _build_asset_identity_signature(self, *, asset=None, data=None):
+        if asset is None and data is None:
+            return None
+
+        source = data or {}
+        license_mode = source.get("license_mode") if data is not None else asset.license_mode
+        provider_code = source.get("provider_code") if data is not None else asset.provider_code
+        external_id = self._normalize_asset_identity_value(
+            source.get("external_id") if data is not None else asset.external_id
+        )
+        external_workspace_id = self._normalize_asset_identity_value(
+            source.get("external_workspace_id")
+            if data is not None
+            else asset.external_workspace_id
+        )
+
+        if license_mode == "assigned":
+            assigned_user_id = (
+                int(source.get("assigned_user_id"))
+                if data is not None and source.get("assigned_user_id") not in (None, "")
+                else (
+                    asset.assignments.filter(is_active=True)
+                    .values_list("user_id", flat=True)
+                    .first()
+                    if asset is not None
+                    else None
+                )
+            )
+            assignment_scope = ("assigned", int(assigned_user_id or 0))
+        else:
+            if data is not None:
+                shared_user_ids = sorted(
+                    int(user_id) for user_id in (source.get("shared_user_ids") or [])
+                )
+            else:
+                shared_user_ids = sorted(
+                    asset.assignments.filter(is_active=True).values_list("user_id", flat=True)
+                )
+            assignment_scope = ("shared", tuple(shared_user_ids))
+
+        if external_id or external_workspace_id:
+            return (
+                "external",
+                self._normalize_asset_identity_value(provider_code),
+                self._normalize_asset_identity_value(license_mode),
+                external_workspace_id,
+                external_id,
+                assignment_scope,
+            )
+
+        return (
+            "product",
+            self._normalize_asset_identity_value(source.get("name") if data is not None else asset.name),
+            self._normalize_asset_identity_value(
+                source.get("vendor") if data is not None else asset.vendor
+            ),
+            self._normalize_asset_identity_value(
+                source.get("plan_name") if data is not None else asset.plan_name
+            ),
+            self._normalize_asset_identity_value(
+                source.get("record_type") if data is not None else asset.record_type
+            ),
+            self._normalize_asset_identity_value(license_mode),
+            self._normalize_asset_identity_value(provider_code),
+            assignment_scope,
+        )
+
     def _serialize_asset_brief(self, asset):
         visible_assignments = get_asset_visible_assignments(asset, user=self.request.user)
         primary_assignment = visible_assignments.first()
@@ -946,7 +1039,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             else None,
         }
 
-    def _build_alerts(self, assets):
+    def _build_alerts(self, assets, include_cost_insights=True):
         alerts = []
         overlap_groups = {}
 
@@ -981,7 +1074,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
                     }
                 )
 
-            if annual_cost > 0 and seats_used == 0:
+            if include_cost_insights and annual_cost > 0 and seats_used == 0:
                 alerts.append(
                     {
                         "kind": "paid_unused",
@@ -1033,7 +1126,12 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
                     }
                 )
 
-            if renewal_window == "7_days" and utilization_rate <= 40 and annual_cost > 0:
+            if (
+                include_cost_insights
+                and renewal_window == "7_days"
+                and utilization_rate <= 40
+                and annual_cost > 0
+            ):
                 alerts.append(
                     {
                         "kind": "low_usage_before_renewal",
@@ -1100,6 +1198,10 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
         assets = list(self.get_queryset())
+        visible_assets = [
+            asset for asset in assets if asset.operational_status != "archived"
+        ]
+        can_view_costs = is_admin_user(request.user)
         requests_queryset = LicenseRequest.objects.select_related(
             "asset",
             "requester",
@@ -1121,7 +1223,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             "next_7_days": [],
         }
         stats = {
-            "total_records": len(assets),
+            "total_records": len(visible_assets),
             "active_records": 0,
             "inactive_records": 0,
             "shared_records": 0,
@@ -1136,7 +1238,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             "paid_unused_records": 0,
         }
 
-        for asset in assets:
+        for asset in visible_assets:
             seats_used = asset.assignments.filter(is_active=True).count()
             seats_available = max(int(asset.seats_total or 0) - seats_used, 0)
             monthly_cost = get_asset_monthly_cost(asset)
@@ -1192,6 +1294,29 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             else 0
         )
 
+        provider_spend = sorted(
+            [
+                {
+                    **bucket,
+                    "monthly_cost": round(bucket["monthly_cost"], 2),
+                    "annual_cost": round(bucket["annual_cost"], 2),
+                }
+                for bucket in provider_rollup.values()
+            ],
+            key=lambda item: item["annual_cost"],
+            reverse=True,
+        )
+
+        if not can_view_costs:
+            for key in (
+                "monthly_cost_total",
+                "annual_cost_total",
+                "cost_per_used_seat",
+                "paid_unused_records",
+            ):
+                stats.pop(key, None)
+            provider_spend = []
+
         sync_logs = SoftwareAssetSyncLog.objects.select_related("asset", "triggered_by")
         audit_logs = SoftwareAssetAuditLog.objects.select_related("asset", "actor")
         if not is_admin_user(request.user):
@@ -1207,23 +1332,14 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "stats": stats,
-                "provider_spend": sorted(
-                    [
-                        {
-                            **bucket,
-                            "monthly_cost": round(bucket["monthly_cost"], 2),
-                            "annual_cost": round(bucket["annual_cost"], 2),
-                        }
-                        for bucket in provider_rollup.values()
-                    ],
-                    key=lambda item: item["annual_cost"],
-                    reverse=True,
-                ),
                 "renewals": {
                     "expired": renewals["expired"][:8],
                     "next_7_days": renewals["next_7_days"][:8],
                 },
-                "alerts": self._build_alerts(assets)[:24],
+                "alerts": self._build_alerts(
+                    visible_assets,
+                    include_cost_insights=can_view_costs,
+                )[:24],
                 "sync_logs": SoftwareAssetSyncLogSerializer(sync_logs[:20], many=True).data,
                 "audit_logs": SoftwareAssetAuditLogSerializer(audit_logs[:20], many=True).data,
                 "requests": LicenseRequestSerializer(
@@ -1232,12 +1348,16 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
                     context={"request": request},
                 ).data,
                 "request_stats": request_stats,
-                "user_cards": [self._serialize_asset_brief(asset) for asset in assets[:12]],
+                "user_cards": [
+                    self._serialize_asset_brief(asset) for asset in visible_assets[:12]
+                ],
+                "provider_spend": provider_spend,
             }
         )
 
     def perform_create(self, serializer):
         asset = serializer.save(created_by=self.request.user)
+        sync_live_csv_exports_for_users(user_ids=get_active_asset_user_ids(asset))
         log_software_asset_event(
             asset=asset,
             actor=self.request.user,
@@ -1248,8 +1368,11 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         current_asset = self.get_object()
+        before_user_ids = get_active_asset_user_ids(current_asset)
         before_snapshot = self._capture_asset_snapshot(current_asset)
         asset = serializer.save()
+        after_user_ids = get_active_asset_user_ids(asset)
+        sync_live_csv_exports_for_users(user_ids=before_user_ids + after_user_ids)
         after_snapshot = self._capture_asset_snapshot(asset)
         changed_fields = sorted(
             [key for key in after_snapshot if before_snapshot.get(key) != after_snapshot.get(key)]
@@ -1263,6 +1386,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
         )
 
     def perform_destroy(self, instance):
+        user_ids = get_active_asset_user_ids(instance)
         snapshot = self._capture_asset_snapshot(instance)
         log_software_asset_event(
             actor=self.request.user,
@@ -1271,6 +1395,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             payload=snapshot,
         )
         super().perform_destroy(instance)
+        sync_live_csv_exports_for_users(user_ids=user_ids)
 
     @action(detail=False, methods=["post"], url_path="import-csv")
     def import_csv(self, request):
@@ -1282,7 +1407,15 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             )
 
         created_records = []
+        skipped_duplicates = []
         errors = []
+        existing_assets = SoftwareAsset.objects.prefetch_related("assignments").all()
+        seen_signatures = {}
+
+        for existing_asset in existing_assets:
+            signature = self._build_asset_identity_signature(asset=existing_asset)
+            if signature is not None and signature not in seen_signatures:
+                seen_signatures[signature] = existing_asset.id
 
         for index, row in enumerate(rows, start=1):
             serializer = self.get_serializer(data=row)
@@ -1290,8 +1423,22 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
                 errors.append({"row": index, "errors": serializer.errors})
                 continue
 
+            signature = self._build_asset_identity_signature(data=serializer.validated_data)
+            if signature in seen_signatures:
+                skipped_duplicates.append(
+                    {
+                        "row": index,
+                        "asset_id": seen_signatures[signature],
+                        "name": serializer.validated_data.get("name"),
+                        "reason": "duplicate_asset",
+                    }
+                )
+                continue
+
             asset = serializer.save(created_by=request.user)
             created_records.append(asset.id)
+            if signature is not None:
+                seen_signatures[signature] = asset.id
             log_software_asset_event(
                 asset=asset,
                 actor=request.user,
@@ -1300,10 +1447,20 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
                 payload={"row": index},
             )
 
+        sync_live_csv_exports_for_users(
+            user_ids=[
+                user_id
+                for asset in SoftwareAsset.objects.filter(id__in=created_records)
+                for user_id in get_active_asset_user_ids(asset)
+            ]
+        )
+
         return Response(
             {
                 "created_count": len(created_records),
                 "created_ids": created_records,
+                "skipped_count": len(skipped_duplicates),
+                "skipped_duplicates": skipped_duplicates,
                 "errors": errors,
             },
             status=status.HTTP_200_OK,
@@ -1351,6 +1508,11 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
                 continue
 
             sync_asset_assignments(asset, user_ids=next_user_ids)
+            sync_live_csv_exports_for_users(
+                user_ids=existing_user_ids + next_user_ids
+                if asset.license_mode == "assigned"
+                else []
+            )
             updated_ids.append(asset.id)
             log_software_asset_event(
                 asset=asset,
@@ -1365,6 +1527,58 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request):
+        asset_ids = request.data.get("asset_ids") or []
+        if not isinstance(asset_ids, list) or not asset_ids:
+            return Response(
+                {"detail": "Provide a non-empty `asset_ids` array."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            normalized_asset_ids = list(dict.fromkeys(int(asset_id) for asset_id in asset_ids))
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "`asset_ids` must contain integer ids."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        assets = list(self.get_queryset().filter(id__in=normalized_asset_ids))
+        found_ids = {asset.id for asset in assets}
+        missing_ids = [asset_id for asset_id in normalized_asset_ids if asset_id not in found_ids]
+        if missing_ids:
+            return Response(
+                {
+                    "detail": "Some software asset records could not be found.",
+                    "missing_ids": missing_ids,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        with transaction.atomic():
+            affected_user_ids = []
+            for asset in assets:
+                affected_user_ids.extend(get_active_asset_user_ids(asset))
+                snapshot = self._capture_asset_snapshot(asset)
+                log_software_asset_event(
+                    actor=request.user,
+                    event_type="deleted",
+                    message=f"{asset.name} record deleted.",
+                    payload=snapshot,
+                )
+                asset.delete()
+
+        sync_live_csv_exports_for_users(user_ids=affected_user_ids)
+
+        return Response(
+            {
+                "deleted_ids": normalized_asset_ids,
+                "deleted_count": len(normalized_asset_ids),
+            },
+            status=status.HTTP_200_OK,
+        )
+
     @action(detail=True, methods=["post"], url_path="reclaim")
     def reclaim(self, request, pk=None):
         asset = self.get_object()
@@ -1376,6 +1590,8 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
         )
         next_user_ids = [user_id for user_id in current_user_ids if int(user_id) not in {int(value) for value in requested_user_ids}]
         sync_asset_assignments(asset, user_ids=next_user_ids)
+        if asset.license_mode == "assigned":
+            sync_live_csv_exports_for_users(user_ids=current_user_ids + next_user_ids)
 
         log_software_asset_event(
             asset=asset,
@@ -1509,7 +1725,12 @@ class LicenseRequestViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 updated_request = serializer.save(resolved_by=request.user)
                 if next_status == "fulfilled" and updated_request.asset_id:
+                    previous_user_ids = get_active_asset_user_ids(updated_request.asset)
                     assign_user_to_asset(updated_request.asset, updated_request.requester)
+                    sync_live_csv_exports_for_users(
+                        user_ids=previous_user_ids
+                        + get_active_asset_user_ids(updated_request.asset)
+                    )
                     log_software_asset_event(
                         asset=updated_request.asset,
                         actor=request.user,

@@ -78,6 +78,8 @@ function SoftwareAssetsTableCard({
                   const isSelected = !isCreateMode && String(selectedAssetId) === String(asset.id);
                   const primaryAssignment = asset.primary_assignment || asset.assignments?.[0];
                   const activeAssignments = asset.assignments || [];
+                  const billingLabel =
+                    billingCycleLabels[asset.billing_cycle] || asset.billing_cycle || copy.noValue;
                   const coverageValue =
                     asset.license_mode === "shared"
                       ? activeAssignments.length
@@ -129,12 +131,14 @@ function SoftwareAssetsTableCard({
                         </div>
                       </td>
                       <td className="px-4 py-4 align-top text-slate-600">
-                        <div className="flex flex-col gap-1">
-                          <span>{formatMoney(asset.monthly_cost_estimate || 0, asset.currency)}</span>
-                          <span className="text-xs text-slate-400">
-                            {billingCycleLabels[asset.billing_cycle] || asset.billing_cycle || copy.noValue}
-                          </span>
-                        </div>
+                        {isAdmin ? (
+                          <div className="flex flex-col gap-1">
+                            <span>{formatMoney(asset.monthly_cost_estimate || 0, asset.currency)}</span>
+                            <span className="text-xs text-slate-400">{billingLabel}</span>
+                          </div>
+                        ) : (
+                          billingLabel
+                        )}
                       </td>
                       <td className="px-4 py-4 align-top text-slate-600">{formatDate(asset.renewal_date)}</td>
                       <td className="px-4 py-4 align-top text-slate-600">

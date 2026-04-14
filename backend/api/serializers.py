@@ -459,6 +459,11 @@ class SoftwareAssetSyncLogSerializer(serializers.ModelSerializer):
 
 
 class SoftwareAssetSerializer(serializers.ModelSerializer):
+    COST_FIELD_NAMES = (
+        "purchase_price",
+        "monthly_cost_estimate",
+        "annual_cost_estimate",
+    )
     assignments = serializers.SerializerMethodField()
     primary_assignment = serializers.SerializerMethodField()
     shared_user_ids = serializers.ListField(
@@ -544,6 +549,21 @@ class SoftwareAssetSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["created_by", "created_at", "updated_at"]
+
+    def _request_can_view_costs(self):
+        request = self.context.get("request")
+        if not request or not getattr(request, "user", None):
+            return True
+        if not request.user.is_authenticated:
+            return False
+        return request.user.is_staff or request.user.is_superuser
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not self._request_can_view_costs():
+            for field_name in self.COST_FIELD_NAMES:
+                data.pop(field_name, None)
+        return data
 
     def _get_visible_assignments(self, obj):
         request = self.context.get("request")

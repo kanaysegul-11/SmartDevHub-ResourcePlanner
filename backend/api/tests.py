@@ -1,6 +1,10 @@
+import csv
+import tempfile
 from datetime import timedelta
+from pathlib import Path
 
 from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -19,6 +23,10 @@ from .models import (
     SoftwareAssetAuditLog,
     SoftwareAssetSyncLog,
     LicenseRequest,
+)
+from .software_asset_live_csv import (
+    export_live_license_csvs_for_users,
+    sync_live_license_csv_directory,
 )
 
 
@@ -1275,6 +1283,145 @@ class ApiBehaviorTests(APITestCase):
         self.assertIn("sync_error", alert_kinds)
         self.assertEqual(response.data["renewals"]["next_7_days"][0]["id"], expiring_asset.id)
 
+    def test_software_asset_summary_excludes_archived_records_from_totals(self):
+        admin_user = User.objects.create_user(
+            username="software-summary-archive-admin",
+            password="strong-pass-123",
+            email="software-summary-archive-admin@example.com",
+            is_staff=True,
+        )
+        visible_asset = SoftwareAsset.objects.create(
+            name="Visible License",
+            vendor="Adobe",
+            record_type="desktop_license",
+            license_mode="assigned",
+            provider_code="adobe",
+            purchase_price="20.00",
+            billing_cycle="monthly",
+            created_by=admin_user,
+        )
+        archived_asset = SoftwareAsset.objects.create(
+            name="Archived License",
+            vendor="Adobe",
+            record_type="desktop_license",
+            license_mode="assigned",
+            provider_code="adobe",
+            purchase_price="12.00",
+            billing_cycle="monthly",
+            operational_status="archived",
+            created_by=admin_user,
+        )
+        SoftwareAssetAssignment.objects.create(asset=visible_asset, user=self.user)
+        SoftwareAssetAssignment.objects.create(asset=archived_asset, user=self.user)
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.get("/api/software-assets/summary/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["stats"]["total_records"], 1)
+        self.assertEqual(response.data["stats"]["assigned_records"], 1)
+        self.assertEqual(response.data["stats"]["monthly_cost_total"], 20.0)
+        self.assertEqual(response.data["stats"]["annual_cost_total"], 240.0)
+        self.assertEqual(len(response.data["user_cards"]), 1)
+        self.assertEqual(response.data["user_cards"][0]["id"], visible_asset.id)
+        self.assertEqual(response.data["provider_spend"][0]["record_count"], 1)
+
+    def test_member_software_asset_list_hides_cost_fields(self):
+        admin_user = User.objects.create_user(
+            username="software-cost-hidden-admin",
+            password="strong-pass-123",
+            email="software-cost-hidden-admin@example.com",
+            is_staff=True,
+        )
+        asset = SoftwareAsset.objects.create(
+            name="Linear",
+            vendor="Linear",
+            record_type="saas",
+            license_mode="assigned",
+            provider_code="manual",
+            billing_cycle="monthly",
+            purchase_price="18.00",
+            created_by=admin_user,
+        )
+        SoftwareAssetAssignment.objects.create(
+            asset=asset,
+            user=self.user,
+            access_email=self.user.email,
+        )
+
+        response = self.client.get("/api/software-assets/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        payload = response.data[0]
+        self.assertNotIn("purchase_price", payload)
+        self.assertNotIn("monthly_cost_estimate", payload)
+        self.assertNotIn("annual_cost_estimate", payload)
+        self.assertEqual(payload["billing_cycle"], "monthly")
+
+    def test_member_software_asset_summary_hides_cost_metrics(self):
+        admin_user = User.objects.create_user(
+            username="software-summary-member-admin",
+            password="strong-pass-123",
+            email="software-summary-member-admin@example.com",
+            is_staff=True,
+        )
+        asset = SoftwareAsset.objects.create(
+            name="Notion Plus",
+            vendor="Notion",
+            record_type="saas",
+            license_mode="assigned",
+            provider_code="manual",
+            seats_total=4,
+            purchase_price="24.00",
+            billing_cycle="monthly",
+            renewal_date=timezone.localdate() + timedelta(days=4),
+            created_by=admin_user,
+        )
+        SoftwareAssetAssignment.objects.create(
+            asset=asset,
+            user=self.user,
+            access_email=self.user.email,
+        )
+
+        response = self.client.get("/api/software-assets/summary/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("monthly_cost_total", response.data["stats"])
+        self.assertNotIn("annual_cost_total", response.data["stats"])
+        self.assertNotIn("cost_per_used_seat", response.data["stats"])
+        self.assertNotIn("paid_unused_records", response.data["stats"])
+        self.assertEqual(response.data["provider_spend"], [])
+        alert_kinds = {alert["kind"] for alert in response.data["alerts"]}
+        self.assertNotIn("paid_unused", alert_kinds)
+        self.assertNotIn("low_usage_before_renewal", alert_kinds)
+
+    def test_member_software_asset_list_excludes_archived_records(self):
+        admin_user = User.objects.create_user(
+            username="software-archived-hidden-admin",
+            password="strong-pass-123",
+            email="software-archived-hidden-admin@example.com",
+            is_staff=True,
+        )
+        asset = SoftwareAsset.objects.create(
+            name="Removed Personal License",
+            vendor="Adobe",
+            record_type="desktop_license",
+            license_mode="assigned",
+            provider_code="adobe",
+            operational_status="archived",
+            created_by=admin_user,
+        )
+        SoftwareAssetAssignment.objects.create(
+            asset=asset,
+            user=self.user,
+            access_email=self.user.email,
+        )
+
+        response = self.client.get("/api/software-assets/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
     def test_admin_can_import_software_assets_from_csv_rows(self):
         admin_user = User.objects.create_user(
             username="software-import-admin",
@@ -1321,8 +1468,92 @@ class ApiBehaviorTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["created_count"], 2)
+        self.assertEqual(response.data["skipped_count"], 0)
         self.assertEqual(SoftwareAsset.objects.count(), 2)
         self.assertEqual(SoftwareAssetAuditLog.objects.filter(event_type="imported").count(), 2)
+
+    def test_admin_import_csv_skips_duplicate_software_assets(self):
+        admin_user = User.objects.create_user(
+            username="software-import-dedupe-admin",
+            password="strong-pass-123",
+            email="software-import-dedupe-admin@example.com",
+            is_staff=True,
+        )
+        assigned_user = User.objects.create_user(
+            username="software-import-dedupe-user",
+            password="strong-pass-123",
+            email="software-import-dedupe-user@example.com",
+        )
+        existing_asset = SoftwareAsset.objects.create(
+            name="ChatGPT Plus",
+            vendor="OpenAI",
+            plan_name="Plus",
+            record_type="saas",
+            license_mode="assigned",
+            provider_code="openai",
+            created_by=admin_user,
+        )
+        SoftwareAssetAssignment.objects.create(
+            asset=existing_asset,
+            user=assigned_user,
+            access_email=assigned_user.email,
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.post(
+            "/api/software-assets/import-csv/",
+            {
+                "rows": [
+                    {
+                        "name": "ChatGPT Plus",
+                        "vendor": "OpenAI",
+                        "plan_name": "Plus",
+                        "record_type": "saas",
+                        "license_mode": "assigned",
+                        "provider_code": "openai",
+                        "billing_cycle": "monthly",
+                        "purchase_price": "20.00",
+                        "assigned_user_id": assigned_user.id,
+                    },
+                    {
+                        "name": "Cursor Pro",
+                        "vendor": "Cursor",
+                        "plan_name": "Pro",
+                        "record_type": "saas",
+                        "license_mode": "assigned",
+                        "provider_code": "cursor",
+                        "billing_cycle": "monthly",
+                        "purchase_price": "20.00",
+                        "assigned_user_id": assigned_user.id,
+                    },
+                    {
+                        "name": "Cursor Pro",
+                        "vendor": "Cursor",
+                        "plan_name": "Pro",
+                        "record_type": "saas",
+                        "license_mode": "assigned",
+                        "provider_code": "cursor",
+                        "billing_cycle": "monthly",
+                        "purchase_price": "20.00",
+                        "assigned_user_id": assigned_user.id,
+                    },
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["created_count"], 1)
+        self.assertEqual(response.data["skipped_count"], 2)
+        self.assertEqual(len(response.data["errors"]), 0)
+        self.assertEqual(
+            SoftwareAsset.objects.filter(name="Cursor Pro", license_mode="assigned").count(),
+            1,
+        )
+        self.assertEqual(
+            SoftwareAssetAuditLog.objects.filter(event_type="imported").count(),
+            1,
+        )
 
     def test_admin_can_bulk_assign_shared_assets(self):
         admin_user = User.objects.create_user(
@@ -1368,6 +1599,375 @@ class ApiBehaviorTests(APITestCase):
                 event_type="assignment_changed",
             ).exists()
         )
+
+    def test_admin_can_bulk_delete_software_assets(self):
+        admin_user = User.objects.create_user(
+            username="software-bulk-delete-admin",
+            password="strong-pass-123",
+            email="software-bulk-delete-admin@example.com",
+            is_staff=True,
+        )
+        first_asset = SoftwareAsset.objects.create(
+            name="Confluence Standard",
+            vendor="Atlassian",
+            license_mode="shared",
+            seats_total=6,
+            created_by=admin_user,
+        )
+        second_asset = SoftwareAsset.objects.create(
+            name="GitHub Copilot",
+            vendor="GitHub",
+            license_mode="shared",
+            seats_total=10,
+            created_by=admin_user,
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.post(
+            "/api/software-assets/bulk-delete/",
+            {"asset_ids": [first_asset.id, second_asset.id]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["deleted_count"], 2)
+        self.assertFalse(
+            SoftwareAsset.objects.filter(id__in=[first_asset.id, second_asset.id]).exists()
+        )
+        self.assertEqual(
+            SoftwareAssetAuditLog.objects.filter(event_type="deleted").count(),
+            2,
+        )
+
+    def test_seed_personal_software_assets_assigns_each_user_one_personal_record(self):
+        admin_user = User.objects.create_user(
+            username="software-seed-admin",
+            password="strong-pass-123",
+            email="software-seed-admin@example.com",
+            is_staff=True,
+        )
+        other_user = User.objects.create_user(
+            username="software-seed-user",
+            password="strong-pass-123",
+            email="software-seed-user@example.com",
+        )
+
+        call_command("seed_personal_software_assets", verbosity=0)
+
+        for user in [self.user, admin_user, other_user]:
+            self.assertTrue(
+                SoftwareAsset.objects.filter(
+                    license_mode="assigned",
+                    assignments__user=user,
+                    assignments__is_active=True,
+                ).exists()
+            )
+
+        created_count = SoftwareAsset.objects.filter(
+            license_mode="assigned",
+            extra_metadata__seed="personal_software_assets",
+        ).count()
+
+        call_command("seed_personal_software_assets", verbosity=0)
+
+        self.assertEqual(
+            SoftwareAsset.objects.filter(
+                license_mode="assigned",
+                extra_metadata__seed="personal_software_assets",
+            ).count(),
+            created_count,
+        )
+
+    def test_export_user_license_csvs_creates_one_csv_per_user(self):
+        admin_user = User.objects.create_user(
+            username="software-export-admin",
+            password="strong-pass-123",
+            email="software-export-admin@example.com",
+            is_staff=True,
+        )
+        other_user = User.objects.create_user(
+            username="software-export-user",
+            password="strong-pass-123",
+            email="software-export-user@example.com",
+        )
+        member_asset = SoftwareAsset.objects.create(
+            name="Cursor Pro",
+            vendor="Cursor",
+            plan_name="Pro",
+            record_type="saas",
+            license_mode="assigned",
+            provider_code="cursor",
+            created_by=admin_user,
+        )
+        other_asset = SoftwareAsset.objects.create(
+            name="ChatGPT Plus",
+            vendor="OpenAI",
+            plan_name="Plus",
+            record_type="saas",
+            license_mode="assigned",
+            provider_code="openai",
+            created_by=admin_user,
+        )
+        SoftwareAssetAssignment.objects.create(asset=member_asset, user=self.user)
+        SoftwareAssetAssignment.objects.create(asset=other_asset, user=other_user)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            call_command("export_user_license_csvs", directory=temp_dir, verbosity=0)
+
+            member_file = Path(temp_dir) / "member.csv"
+            other_file = Path(temp_dir) / "software-export-user.csv"
+            self.assertTrue(member_file.exists())
+            self.assertTrue(other_file.exists())
+
+            with member_file.open("r", encoding="utf-8", newline="") as file_handle:
+                rows = list(csv.DictReader(file_handle))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["name"], "Cursor Pro")
+
+            with other_file.open("r", encoding="utf-8", newline="") as file_handle:
+                rows = list(csv.DictReader(file_handle))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["name"], "ChatGPT Plus")
+
+    def test_exported_manual_assigned_asset_is_managed_by_live_csv(self):
+        admin_user = User.objects.create_user(
+            username="software-export-live-admin",
+            password="strong-pass-123",
+            email="software-export-live-admin@example.com",
+            is_staff=True,
+        )
+        asset = SoftwareAsset.objects.create(
+            name="Manual Personal License",
+            vendor="OpenAI",
+            plan_name="Plus",
+            record_type="saas",
+            license_mode="assigned",
+            provider_code="openai",
+            created_by=admin_user,
+        )
+        SoftwareAssetAssignment.objects.create(asset=asset, user=self.user)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export_live_license_csvs_for_users(user_ids=[self.user.id], directory=temp_dir)
+
+            csv_path = Path(temp_dir) / "member.csv"
+            self.assertTrue(csv_path.exists())
+
+            with csv_path.open("r", encoding="utf-8", newline="") as file_handle:
+                rows = list(csv.DictReader(file_handle))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["name"], "Manual Personal License")
+            self.assertTrue(rows[0]["asset_id"])
+
+            asset.refresh_from_db()
+            self.assertEqual(
+                (asset.extra_metadata or {}).get("live_csv", {}).get("source_file"),
+                "member.csv",
+            )
+
+            with csv_path.open("w", encoding="utf-8", newline="") as file_handle:
+                writer = csv.DictWriter(file_handle, fieldnames=rows[0].keys())
+                writer.writeheader()
+
+            sync_live_license_csv_directory(temp_dir)
+
+            asset.refresh_from_db()
+            self.assertEqual(asset.operational_status, "archived")
+
+    def test_sync_live_license_csvs_creates_updates_and_archives_assets(self):
+        User.objects.create_user(
+            username="software-sync-live-admin",
+            password="strong-pass-123",
+            email="software-sync-live-admin@example.com",
+            is_staff=True,
+        )
+        live_user = User.objects.create_user(
+            username="live-sync-user",
+            password="strong-pass-123",
+            email="live-sync-user@example.com",
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "live-sync-user.csv"
+            with csv_path.open("w", encoding="utf-8", newline="") as file_handle:
+                writer = csv.DictWriter(
+                    file_handle,
+                    fieldnames=[
+                        "asset_id",
+                        "name",
+                        "vendor",
+                        "plan_name",
+                        "record_type",
+                        "provider_code",
+                        "operational_status",
+                        "billing_cycle",
+                        "purchase_price",
+                        "currency",
+                        "purchase_date",
+                        "renewal_date",
+                        "auto_renew",
+                        "assigned_user",
+                        "account_email",
+                        "billing_email",
+                        "department",
+                        "cost_center",
+                        "notes",
+                        "external_id",
+                        "external_workspace_id",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "name": "Figma Professional",
+                        "vendor": "Figma",
+                        "plan_name": "Professional",
+                        "record_type": "saas",
+                        "provider_code": "figma",
+                        "billing_cycle": "monthly",
+                        "purchase_price": "15.00",
+                        "currency": "USD",
+                        "auto_renew": "true",
+                        "assigned_user": live_user.username,
+                        "notes": "Initial row",
+                    }
+                )
+
+            call_command("sync_live_license_csvs", directory=temp_dir, verbosity=0)
+
+            asset = SoftwareAsset.objects.get(name="Figma Professional")
+            self.assertEqual(asset.license_mode, "assigned")
+            self.assertEqual(asset.assignments.filter(user=live_user, is_active=True).count(), 1)
+
+            with csv_path.open("r", encoding="utf-8", newline="") as file_handle:
+                rows = list(csv.DictReader(file_handle))
+            self.assertEqual(len(rows), 1)
+            self.assertTrue(rows[0]["asset_id"])
+
+            with csv_path.open("w", encoding="utf-8", newline="") as file_handle:
+                writer = csv.DictWriter(file_handle, fieldnames=rows[0].keys())
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        **rows[0],
+                        "purchase_price": "18.50",
+                        "notes": "Updated row",
+                    }
+                )
+
+            call_command("sync_live_license_csvs", directory=temp_dir, verbosity=0)
+
+            asset.refresh_from_db()
+            self.assertEqual(str(asset.purchase_price), "18.50")
+            self.assertEqual(asset.notes, "Updated row")
+            self.assertEqual(
+                SoftwareAsset.objects.filter(name="Figma Professional", license_mode="assigned").count(),
+                1,
+            )
+
+            with csv_path.open("w", encoding="utf-8", newline="") as file_handle:
+                writer = csv.DictWriter(file_handle, fieldnames=rows[0].keys())
+                writer.writeheader()
+
+            call_command("sync_live_license_csvs", directory=temp_dir, verbosity=0)
+
+            asset.refresh_from_db()
+            self.assertEqual(asset.operational_status, "archived")
+
+    def test_sync_live_license_csvs_rejects_asset_id_from_other_user_file(self):
+        User.objects.create_user(
+            username="software-sync-cross-file-admin",
+            password="strong-pass-123",
+            email="software-sync-cross-file-admin@example.com",
+            is_staff=True,
+        )
+        first_user = User.objects.create_user(
+            username="live-scope-a",
+            password="strong-pass-123",
+            email="live-scope-a@example.com",
+        )
+        second_user = User.objects.create_user(
+            username="live-scope-b",
+            password="strong-pass-123",
+            email="live-scope-b@example.com",
+        )
+        protected_asset = SoftwareAsset.objects.create(
+            name="Protected Asset",
+            vendor="Adobe",
+            plan_name="Single App",
+            record_type="desktop_license",
+            license_mode="assigned",
+            provider_code="adobe",
+        )
+        SoftwareAssetAssignment.objects.create(asset=protected_asset, user=second_user)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "live-scope-a.csv"
+            with csv_path.open("w", encoding="utf-8", newline="") as file_handle:
+                writer = csv.DictWriter(
+                    file_handle,
+                    fieldnames=[
+                        "asset_id",
+                        "name",
+                        "vendor",
+                        "plan_name",
+                        "record_type",
+                        "provider_code",
+                        "operational_status",
+                        "billing_cycle",
+                        "purchase_price",
+                        "currency",
+                        "purchase_date",
+                        "renewal_date",
+                        "auto_renew",
+                        "assigned_user",
+                        "account_email",
+                        "billing_email",
+                        "department",
+                        "cost_center",
+                        "notes",
+                        "external_id",
+                        "external_workspace_id",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "asset_id": str(protected_asset.id),
+                        "name": "Adobe After Effects",
+                        "vendor": "Adobe",
+                        "plan_name": "Single App",
+                        "record_type": "desktop_license",
+                        "provider_code": "adobe",
+                        "billing_cycle": "monthly",
+                        "purchase_price": "12.29",
+                        "currency": "USD",
+                        "auto_renew": "true",
+                        "assigned_user": first_user.username,
+                    }
+                )
+
+            summary = sync_live_license_csv_directory(temp_dir)
+
+            protected_asset.refresh_from_db()
+            self.assertEqual(protected_asset.name, "Protected Asset")
+            self.assertEqual(
+                protected_asset.assignments.filter(user=second_user, is_active=True).count(),
+                1,
+            )
+            self.assertFalse(
+                SoftwareAsset.objects.filter(
+                    name="Adobe After Effects",
+                    assignments__user=first_user,
+                    assignments__is_active=True,
+                ).exists()
+            )
+            result = summary.results[0]
+            self.assertEqual(result.created_count, 0)
+            self.assertEqual(result.updated_count, 0)
+            self.assertEqual(result.archived_count, 0)
+            self.assertEqual(len(result.errors), 1)
+            self.assertIn("Leave asset_id empty", result.errors[0])
 
     def test_admin_can_sync_record_and_create_sync_log(self):
         admin_user = User.objects.create_user(

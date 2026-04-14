@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCreate, useDelete, useInvalidate, useList, useUpdate } from "@refinedev/core";
 import { FeatherAlertTriangle, FeatherFileText, FeatherRefreshCw } from "@subframe/core";
 import { toast } from "sonner";
@@ -29,6 +29,157 @@ import {
 
 const TAB_ITEMS = ["shared", "assigned", "renewals", "cost", "sync", "alerts"];
 
+const normalizeImportToken = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/ı/g, "i")
+    .replace(/İ/g, "i")
+    .replace(/ş/g, "s")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+
+const normalizeRecordType = (value) => {
+  const token = normalizeImportToken(value);
+  if (!token) return "";
+  if (["saas", "software", "cloudsoftware"].includes(token)) return "saas";
+  if (["desktoplicense", "desktop", "masaustu", "masaustulisans"].includes(token)) {
+    return "desktop_license";
+  }
+  if (["teamtool", "teamlicense", "sharedtool", "ortaklisans", "ekiparaci", "takimaraci"].includes(token)) {
+    return "team_tool";
+  }
+  if (["singleuserlicense", "singleuser", "assignedlicense", "personal", "kisisel", "bireysel", "tekkullanici"].includes(token)) {
+    return "single_user_license";
+  }
+  if (["apisubscription", "api", "apiaboneligi"].includes(token)) return "api_subscription";
+  if (["supportservice", "support", "destek", "destekhizmeti"].includes(token)) {
+    return "support_service";
+  }
+  return token;
+};
+
+const normalizeLicenseMode = (value) => {
+  const token = normalizeImportToken(value);
+  if (!token) return "";
+  if (["shared", "team", "pool", "ortak", "paylasimli"].includes(token)) return "shared";
+  if (["assigned", "personal", "singleuser", "user", "kisisel", "bireysel", "tekkullanici"].includes(token)) {
+    return "assigned";
+  }
+  return token;
+};
+
+const normalizeOperationalStatus = (value) => {
+  const token = normalizeImportToken(value);
+  if (!token) return "";
+  if (["active", "aktif"].includes(token)) return "active";
+  if (["inactive", "pasif", "disabled"].includes(token)) return "inactive";
+  if (["archived", "arsiv", "arsivli", "archive"].includes(token)) return "archived";
+  return token;
+};
+
+const normalizeBillingCycle = (value) => {
+  const token = normalizeImportToken(value);
+  if (!token) return "";
+  if (
+    ["monthly", "month", "mo", "ay", "aylik", "heray"].includes(token) ||
+    /^ayl[i]?k$/.test(token)
+  ) {
+    return "monthly";
+  }
+  if (
+    ["quarterly", "quarter", "ceyreklik", "ucaylik", "3aylik"].includes(token)
+  ) {
+    return "quarterly";
+  }
+  if (
+    ["yearly", "annual", "annually", "year", "yillik", "senelik"].includes(token) ||
+    /^y[i]?ll[i]?k$/.test(token)
+  ) {
+    return "yearly";
+  }
+  if (
+    ["onetime", "oneoff", "teksefer", "tekseferlik", "birkerelik"].includes(token)
+  ) {
+    return "one_time";
+  }
+  return token;
+};
+
+const normalizeCurrency = (value) => {
+  const raw = String(value || "").trim().toUpperCase();
+  const token = normalizeImportToken(value);
+  if (!token) return "";
+  if (["usd", "dolar", "usdollar"].includes(token) || raw === "$") return "USD";
+  if (["eur", "euro"].includes(token)) return "EUR";
+  if (["try", "tl", "lira"].includes(token) || raw === "₺") return "TRY";
+  if (["gbp", "sterlin", "pound"].includes(token) || raw === "£") return "GBP";
+  return raw || token.toUpperCase();
+};
+
+const normalizeProviderCode = (value, vendor) => {
+  const token = normalizeImportToken(value || vendor);
+  if (!token) return "";
+  if (token.includes("github")) return "github";
+  if (token.includes("microsoft")) return "microsoft";
+  if (token.includes("adobe")) return "adobe";
+  if (token.includes("figma")) return "figma";
+  if (token.includes("openai")) return "openai";
+  if (token.includes("cursor")) return "cursor";
+  return ["manual", "other"].includes(token) ? token : "manual";
+};
+
+const normalizeRecordSource = (value) => {
+  const token = normalizeImportToken(value);
+  if (!token) return "";
+  if (["manual", "manuel", "handmade"].includes(token)) return "manual";
+  if (["providersync", "sync", "senkron", "entegrasyon"].includes(token)) {
+    return "provider_sync";
+  }
+  return token;
+};
+
+const normalizePurchasePrice = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const compact = raw.replace(/\s+/g, "");
+  if (/^\d{1,3}(\.\d{3})+,\d+$/.test(compact)) {
+    return compact.replace(/\./g, "").replace(",", ".");
+  }
+  if (/^\d{1,3}(,\d{3})+\.\d+$/.test(compact)) {
+    return compact.replace(/,/g, "");
+  }
+  if (/^\d+,\d+$/.test(compact)) {
+    return compact.replace(",", ".");
+  }
+  return compact;
+};
+
+const normalizeBoolean = (value, fallback = false) => {
+  if (typeof value === "boolean") return value;
+  const token = normalizeImportToken(value);
+  if (!token) return fallback;
+  if (["true", "yes", "evet", "1", "on"].includes(token)) return true;
+  if (["false", "no", "hayir", "hayr", "0", "off"].includes(token)) return false;
+  return fallback;
+};
+
+const parseImportMetadata = (value) => {
+  const parsed = safeParseMetadataText(value);
+  return parsed.ok ? parsed.value : {};
+};
+
+const flattenImportErrorMessages = (errors) =>
+  Object.entries(errors || {}).flatMap(([field, value]) => {
+    const entries = Array.isArray(value) ? value : [value];
+    return entries.map((entry) => `${field}: ${String(entry)}`);
+  });
+
 function SoftwareAssets() {
   const { userData } = useUser();
   const { language } = useI18n();
@@ -55,6 +206,21 @@ function SoftwareAssets() {
   const requestTypeLabels = copy.requestTypes || {};
   const requestStatusLabels = copy.requestStatuses || {};
   const sortOptions = copy.sortOptions || {};
+  const availableTabs = useMemo(
+    () => TAB_ITEMS.filter((tabKey) => isAdmin || tabKey !== "cost"),
+    [isAdmin]
+  );
+  const availableSortOptions = useMemo(
+    () =>
+      [
+        { value: "renewal_asc", label: sortOptions.renewal_asc },
+        isAdmin ? { value: "cost_desc", label: sortOptions.cost_desc } : null,
+        { value: "vendor_asc", label: sortOptions.vendor_asc },
+        { value: "updated_desc", label: sortOptions.updated_desc },
+        { value: "utilization_desc", label: sortOptions.utilization_desc },
+      ].filter(Boolean),
+    [isAdmin, sortOptions]
+  );
   const statusLabels = useMemo(
     () => ({ active: copy.active, inactive: copy.inactive, archived: copy.archived }),
     [copy]
@@ -81,9 +247,12 @@ function SoftwareAssets() {
   const [requestForm, setRequestForm] = useState(() => buildEmptyLicenseRequestForm());
   const [requestDrafts, setRequestDrafts] = useState({});
   const [csvText, setCsvText] = useState("");
+  const [selectedCsvFileName, setSelectedCsvFileName] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isBulkAssigning, setIsBulkAssigning] = useState(false);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isReclaiming, setIsReclaiming] = useState(false);
   const [processingRequestId, setProcessingRequestId] = useState(null);
@@ -96,6 +265,7 @@ function SoftwareAssets() {
     renewal: "all",
     sort: "renewal_asc",
   });
+  const csvFileInputRef = useRef(null);
 
   const selectedAsset = useMemo(
     () =>
@@ -103,6 +273,10 @@ function SoftwareAssets() {
         ? null
         : assets.find((asset) => String(asset.id) === String(selectedAssetId)) || null,
     [assets, isCreateMode, selectedAssetId]
+  );
+  const selectedAssets = useMemo(
+    () => assets.filter((asset) => selectedRowIds.includes(String(asset.id))),
+    [assets, selectedRowIds]
   );
 
   const formatDate = useCallback(
@@ -217,13 +391,27 @@ function SoftwareAssets() {
 
   useEffect(() => {
     setActiveTab((current) => {
-      if (TAB_ITEMS.includes(current)) return current;
+      if (availableTabs.includes(current)) return current;
       return isAdmin ? "shared" : "assigned";
     });
-  }, [isAdmin]);
+  }, [availableTabs, isAdmin]);
+
+  useEffect(() => {
+    setFilters((current) => {
+      if (availableSortOptions.some((option) => option.value === current.sort)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        sort: "renewal_asc",
+      };
+    });
+  }, [availableSortOptions]);
 
   const filteredAssets = useMemo(() => {
     const search = filters.search.trim().toLowerCase();
+    const effectiveSort = isAdmin || filters.sort !== "cost_desc" ? filters.sort : "renewal_asc";
     const items = assets.filter((asset) => {
       const searchable = [
         asset.name,
@@ -243,27 +431,28 @@ function SoftwareAssets() {
       if (filters.provider !== "all" && asset.provider_code !== filters.provider) return false;
       if (filters.mode !== "all" && asset.license_mode !== filters.mode) return false;
       if (filters.source !== "all" && asset.record_source !== filters.source) return false;
+      if (filters.lifecycle === "all" && asset.lifecycle_status === "archived") return false;
       if (filters.lifecycle !== "all" && asset.lifecycle_status !== filters.lifecycle) return false;
       if (filters.renewal !== "all" && asset.renewal_window !== filters.renewal) return false;
       return true;
     });
 
     return items.sort((left, right) => {
-      if (filters.sort === "cost_desc") {
+      if (effectiveSort === "cost_desc") {
         return Number(right.annual_cost_estimate || 0) - Number(left.annual_cost_estimate || 0);
       }
-      if (filters.sort === "vendor_asc") {
+      if (effectiveSort === "vendor_asc") {
         return String(left.vendor || "").localeCompare(String(right.vendor || ""));
       }
-      if (filters.sort === "updated_desc") {
+      if (effectiveSort === "updated_desc") {
         return String(right.updated_at || "").localeCompare(String(left.updated_at || ""));
       }
-      if (filters.sort === "utilization_desc") {
+      if (effectiveSort === "utilization_desc") {
         return Number(right.utilization_rate || 0) - Number(left.utilization_rate || 0);
       }
       return String(left.renewal_date || "9999").localeCompare(String(right.renewal_date || "9999"));
     });
-  }, [assets, filters]);
+  }, [assets, filters, isAdmin]);
 
   const sharedAssets = useMemo(
     () => filteredAssets.filter((asset) => asset.license_mode === "shared"),
@@ -287,12 +476,34 @@ function SoftwareAssets() {
   };
 
   const toggleSharedUser = (userId) =>
-    setFormData((current) => ({
-      ...current,
-      shared_user_ids: (current.shared_user_ids || []).includes(String(userId))
+    setFormData((current) => {
+      const nextSharedUserIds = (current.shared_user_ids || []).includes(String(userId))
         ? current.shared_user_ids.filter((id) => id !== String(userId))
-        : [...(current.shared_user_ids || []), String(userId)],
-    }));
+        : [...(current.shared_user_ids || []), String(userId)];
+
+      return {
+        ...current,
+        shared_user_ids: nextSharedUserIds,
+        seats_total: Math.max(Number(current.seats_total || 1), nextSharedUserIds.length || 1),
+      };
+    });
+
+  const toggleAllSharedUsers = () =>
+    setFormData((current) => {
+      const allUserIds = userOptions.map((user) => String(user.id));
+      const allSelected =
+        allUserIds.length > 0 &&
+        allUserIds.every((userId) => (current.shared_user_ids || []).includes(userId));
+      const nextSharedUserIds = allSelected ? [] : allUserIds;
+
+      return {
+        ...current,
+        shared_user_ids: nextSharedUserIds,
+        seats_total: allSelected
+          ? Math.max(Number(current.seats_total || 1), 1)
+          : Math.max(Number(current.seats_total || 1), nextSharedUserIds.length || 1),
+      };
+    });
 
   const toggleRowSelection = (assetId, checked) =>
     setSelectedRowIds((current) =>
@@ -444,18 +655,52 @@ function SoftwareAssets() {
   };
 
   const mapCsvRowToPayload = (row) => ({
-    name: row.name || row.product || "",
-    vendor: row.vendor || providerLabels[row.provider_code] || "",
-    record_type: row.record_type || "saas",
-    license_mode: row.license_mode || "shared",
-    provider_code: row.provider_code || "manual",
-    billing_cycle: row.billing_cycle || "monthly",
-    purchase_price: row.purchase_price || null,
-    currency: row.currency || "USD",
-    seats_total: Number(row.seats_total || 1),
+    name: row.name || row.product || row.urun || "",
+    vendor: row.vendor || row.provider || row.saglayici || "",
+    plan_name: row.plan_name || row.plan || "",
+    record_type: normalizeRecordType(row.record_type || row.type || row.tip) || "saas",
+    license_mode:
+      normalizeLicenseMode(row.license_mode || row.user_scope || row.kimlik || row.kapsam) ||
+      "shared",
+    operational_status:
+      normalizeOperationalStatus(row.operational_status || row.status || row.durum) ||
+      "active",
+    provider_code:
+      normalizeProviderCode(row.provider_code, row.vendor || row.provider || row.saglayici) ||
+      "manual",
+    record_source:
+      normalizeRecordSource(row.record_source || row.source || row.kayit_kaynagi) || "manual",
+    account_email: String(row.account_email || row.hesap_epostasi || "").trim(),
+    billing_email: String(row.billing_email || row.fatura_epostasi || "").trim(),
+    billing_cycle:
+      normalizeBillingCycle(row.billing_cycle || row.faturalama || row.billing) || "monthly",
+    purchase_price:
+      normalizePurchasePrice(row.purchase_price || row.price || row.fiyat) || null,
+    currency: normalizeCurrency(row.currency || row.para_birimi) || "USD",
+    seats_total: Number(row.seats_total || row.total_seats || row.seats || row.koltuk || 1),
+    invoice_number: String(row.invoice_number || row.fatura_numarasi || "").trim(),
+    contract_reference: String(row.contract_reference || row.sozlesme_referansi || "").trim(),
+    purchase_date: row.purchase_date || row.satin_alma_tarihi || null,
     renewal_date: row.renewal_date || null,
+    auto_renew: normalizeBoolean(row.auto_renew || row.otomatik_yenileme, false),
     department: row.department || "",
     cost_center: row.cost_center || "",
+    approved_by: resolveUserId(row.approved_by || row.onaylayan),
+    purchased_by: resolveUserId(row.purchased_by || row.satin_alan),
+    renewal_owner: resolveUserId(row.renewal_owner || row.yenileme_sorumlusu),
+    vendor_contact: String(row.vendor_contact || row.satici_iletisimi || "").trim(),
+    support_link: String(row.support_link || row.destek_linki || "").trim(),
+    documentation_link: String(row.documentation_link || row.dokumantasyon_linki || "").trim(),
+    external_id: String(row.external_id || row.harici_kimlik || "").trim(),
+    external_workspace_id: String(
+      row.external_workspace_id || row.harici_calisma_alani || ""
+    ).trim(),
+    is_scim_managed: normalizeBoolean(row.is_scim_managed || row.scim_yonetimli, false),
+    is_sso_managed: normalizeBoolean(row.is_sso_managed || row.sso_yonetimli, false),
+    notes: row.notes || row.note || row.aciklama || "",
+    extra_metadata: parseImportMetadata(
+      row.extra_metadata || row.extra_metadata_text || row.metadata || row.ek_metadata
+    ),
     assigned_user_id: resolveUserId(row.assigned_user || row.assigned_user_id),
     shared_user_ids: String(row.shared_users || row.shared_user_ids || "")
       .split(/[|;]+/)
@@ -463,19 +708,83 @@ function SoftwareAssets() {
       .filter(Boolean),
   });
 
+  const clearImportDraft = useCallback(() => {
+    setCsvText("");
+    setSelectedCsvFileName("");
+    if (csvFileInputRef.current) {
+      csvFileInputRef.current.value = "";
+    }
+  }, []);
+
+  const handleCsvFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      setCsvText(text);
+      setSelectedCsvFileName(file.name || "");
+    } catch {
+      clearImportDraft();
+      toast.error(copy.importReadError);
+    }
+  };
+
   const handleImport = async () => {
+    const trimmedCsvText = String(csvText || "").trim();
+
+    if (!trimmedCsvText) {
+      toast.error(copy.errorImport, {
+        description: copy.importEmpty,
+      });
+      return;
+    }
+
     try {
       setIsImporting(true);
-      const rows = parseCsvText(csvText)
+      const rows = parseCsvText(trimmedCsvText)
         .map(mapCsvRowToPayload)
         .filter((row) => row.name && row.vendor);
       const response = await apiClient.post("/software-assets/import-csv/", { rows });
+      const createdCount = response.data.created_count || 0;
+      const skippedCount = response.data.skipped_count || 0;
+      const importErrors = Array.isArray(response.data.errors) ? response.data.errors : [];
+
+      if (!createdCount && importErrors.length) {
+        const firstError = importErrors[0] || {};
+        toast.error(copy.errorImport, {
+          description: interpolateTemplate(copy.importRowError, {
+            row: firstError.row || 1,
+            message: flattenImportErrorMessages(firstError.errors).join(", "),
+          }),
+        });
+        return;
+      }
+
+      const importDescription = skippedCount
+        ? interpolateTemplate(
+            createdCount ? copy.importCreatedAndSkippedDescription : copy.importSkippedOnlyDescription,
+            { created: createdCount, skipped: skippedCount }
+          )
+        : interpolateTemplate(copy.importCreatedDescription, {
+            count: createdCount,
+          });
+
       toast.success(copy.successImport, {
-        description: interpolateTemplate(copy.importCreatedDescription, {
-          count: response.data.created_count || 0,
-        }),
+        description: importDescription,
       });
-      setCsvText("");
+      if (importErrors.length) {
+        const firstError = importErrors[0] || {};
+        toast.error(copy.importPartialError, {
+          description: interpolateTemplate(copy.importRowError, {
+            row: firstError.row || 1,
+            message: flattenImportErrorMessages(firstError.errors).join(", "),
+          }),
+        });
+      }
+      clearImportDraft();
       setIsImportOpen(false);
       await refreshAll();
     } catch {
@@ -500,6 +809,32 @@ function SoftwareAssets() {
       toast.error(copy.errorBulkAssign);
     } finally {
       setIsBulkAssigning(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const assetIds = selectedRowIds.map(Number);
+    if (!assetIds.length) return;
+
+    try {
+      setIsBulkDeleting(true);
+      const response = await apiClient.post("/software-assets/bulk-delete/", {
+        asset_ids: assetIds,
+      });
+      const deletedIds = (response.data?.deleted_ids || assetIds).map(Number);
+
+      toast.success(copy.successBulkDelete);
+      setBulkDeleteConfirmOpen(false);
+      setBulkUserIds([]);
+      setSelectedRowIds([]);
+      if (deletedIds.includes(Number(selectedAssetId || 0))) {
+        setSelectedAssetId(null);
+      }
+      await refreshAll();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || copy.errorBulkDelete);
+    } finally {
+      setIsBulkDeleting(false);
     }
   };
 
@@ -799,29 +1134,29 @@ function SoftwareAssets() {
     if (activeTab === "assigned") return renderTable(copy.tabs.assigned, assignedAssets);
     if (activeTab === "renewals") return renderTable(copy.tabs.renewals, renewalAssets);
 
-    if (activeTab === "cost") {
+    if (activeTab === "cost" && isAdmin) {
       return (
         <div className="space-y-6">
           <div className="rounded-[28px] border border-slate-200/80 bg-white/85 p-5 shadow-[0_18px_50px_rgba(148,163,184,0.1)]">
             <h3 className="font-['Newsreader'] text-2xl tracking-tight text-slate-950">
               {copy.tabs.cost}
             </h3>
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="rounded-[20px] border border-slate-200 bg-white p-4">
+            <div className="mt-4 flex flex-col gap-4 md:flex-row md:flex-wrap">
+              <div className="w-full rounded-[20px] border border-slate-200 bg-white p-4 md:min-w-[14rem] md:flex-[1_1_14rem]">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">{copy.monthlyCost}</p>
-                <p className="mt-2 text-3xl font-black text-slate-950">
+                <p className="mt-2 whitespace-nowrap text-[clamp(2rem,1.4rem+1vw,3rem)] font-black leading-none tracking-tight tabular-nums text-slate-950">
                   {formatMoney(summary.stats?.monthly_cost_total || 0)}
                 </p>
               </div>
-              <div className="rounded-[20px] border border-slate-200 bg-white p-4">
+              <div className="w-full rounded-[20px] border border-slate-200 bg-white p-4 md:min-w-[14rem] md:flex-[1_1_14rem]">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">{copy.annualCost}</p>
-                <p className="mt-2 text-3xl font-black text-slate-950">
+                <p className="mt-2 whitespace-nowrap text-[clamp(2rem,1.4rem+1vw,3rem)] font-black leading-none tracking-tight tabular-nums text-slate-950">
                   {formatMoney(summary.stats?.annual_cost_total || 0)}
                 </p>
               </div>
-              <div className="rounded-[20px] border border-slate-200 bg-white p-4">
+              <div className="w-full rounded-[20px] border border-slate-200 bg-white p-4 md:min-w-[14rem] md:flex-[1_1_14rem]">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">{copy.costPerSeat}</p>
-                <p className="mt-2 text-3xl font-black text-slate-950">
+                <p className="mt-2 whitespace-nowrap text-[clamp(2rem,1.4rem+1vw,3rem)] font-black leading-none tracking-tight tabular-nums text-slate-950">
                   {formatMoney(summary.stats?.cost_per_used_seat || 0)}
                 </p>
               </div>
@@ -992,7 +1327,7 @@ function SoftwareAssets() {
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
                 <Tabs className="overflow-x-auto">
-                  {TAB_ITEMS.map((tabKey) => (
+                  {availableTabs.map((tabKey) => (
                     <Tabs.Item
                       key={tabKey}
                       active={activeTab === tabKey}
@@ -1009,11 +1344,11 @@ function SoftwareAssets() {
                   }
                   className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
                 >
-                  <option value="renewal_asc">{sortOptions.renewal_asc}</option>
-                  <option value="cost_desc">{sortOptions.cost_desc}</option>
-                  <option value="vendor_asc">{sortOptions.vendor_asc}</option>
-                  <option value="updated_desc">{sortOptions.updated_desc}</option>
-                  <option value="utilization_desc">{sortOptions.utilization_desc}</option>
+                  {availableSortOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1024,24 +1359,49 @@ function SoftwareAssets() {
                   {copy.importTitle}
                 </h3>
                 <p className="mt-2 text-sm leading-7 text-slate-600">{copy.importHint}</p>
-                <textarea
-                  value={csvText}
-                  onChange={(event) => setCsvText(event.target.value)}
-                  placeholder={copy.importPlaceholder}
-                  className="mt-4 min-h-[180px] w-full rounded-[20px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-400/30"
-                />
+                <div className="mt-4 rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 p-4">
+                  <input
+                    ref={csvFileInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={handleCsvFileChange}
+                    className="hidden"
+                    id="software-assets-csv-file-input"
+                  />
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label
+                      htmlFor="software-assets-csv-file-input"
+                      className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      {copy.importChooseFile}
+                    </label>
+                    {csvText ? (
+                      <button
+                        type="button"
+                        onClick={clearImportDraft}
+                        className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                      >
+                        {copy.importClear}
+                      </button>
+                    ) : null}
+                    <span className="text-sm text-slate-500">
+                      {selectedCsvFileName
+                        ? interpolateTemplate(copy.importFileSelected, {
+                            fileName: selectedCsvFileName,
+                          })
+                        : copy.importFileHint}
+                    </span>
+                  </div>
+                </div>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button
                     type="button"
                     onClick={handleImport}
-                    disabled={isImporting}
+                    disabled={isImporting || !csvText}
                     className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"
                   >
                     {copy.runImport}
                   </button>
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    {copy.importPlaceholder}
-                  </span>
                 </div>
               </div>
             ) : null}
@@ -1081,14 +1441,23 @@ function SoftwareAssets() {
                   <button
                     type="button"
                     onClick={handleBulkAssign}
-                    disabled={isBulkAssigning}
+                    disabled={isBulkAssigning || isBulkDeleting}
                     className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"
                   >
                     {copy.bulkApply}
                   </button>
                   <button
                     type="button"
+                    onClick={() => setBulkDeleteConfirmOpen(true)}
+                    disabled={isBulkAssigning || isBulkDeleting}
+                    className="rounded-full border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+                  >
+                    {copy.bulkDelete}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setSelectedRowIds([])}
+                    disabled={isBulkDeleting}
                     className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
                   >
                     {copy.clearSelection}
@@ -1127,11 +1496,12 @@ function SoftwareAssets() {
                     ...current,
                     license_mode: licenseMode,
                     seats_total: licenseMode === "shared" ? Math.max(Number(current.seats_total || 1), 1) : 1,
-                    shared_user_ids: licenseMode === "shared" ? current.shared_user_ids || [] : [],
+                    shared_user_ids: licenseMode === "shared" ? [] : [],
                     assigned_user_id: licenseMode === "assigned" ? current.assigned_user_id || "" : "",
                   }))
                 }
                 onToggleSharedUser={toggleSharedUser}
+                onToggleAllSharedUsers={toggleAllSharedUsers}
                 onSyncRecord={handleSyncRecord}
                 onReclaimRecord={handleReclaimRecord}
                 setFormData={setFormData}
@@ -1146,6 +1516,19 @@ function SoftwareAssets() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={bulkDeleteConfirmOpen}
+        title={copy.bulkDeleteTitle}
+        description={interpolateTemplate(copy.bulkDeleteDescription, {
+          count: selectedAssets.length,
+        })}
+        confirmLabel={copy.bulkDelete}
+        cancelLabel={copy.no}
+        onClose={() => setBulkDeleteConfirmOpen(false)}
+        onConfirm={handleBulkDelete}
+        isProcessing={isBulkDeleting}
+      />
 
       <ConfirmDialog
         open={deleteConfirmOpen}

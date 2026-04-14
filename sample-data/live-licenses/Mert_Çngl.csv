@@ -1,0 +1,2 @@
+asset_id,name,vendor,plan_name,record_type,provider_code,operational_status,billing_cycle,purchase_price,currency,purchase_date,renewal_date,auto_renew,assigned_user,account_email,billing_email,department,cost_center,notes,external_id,external_workspace_id
+38,JetBrains All Products Pack,JetBrains,Individual Pack,desktop_license,other,active,yearly,289.00,USD,2025-12-14,2027-04-14,true,Mert_Çngl,mert07@gmail.com,mert07@gmail.com,Engineering,PERSONAL-SW,Personal software purchase seeded for Mert_Çngl.,,

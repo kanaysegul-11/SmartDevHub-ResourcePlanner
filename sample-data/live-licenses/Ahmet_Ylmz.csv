@@ -1,0 +1,2 @@
+asset_id,name,vendor,plan_name,record_type,provider_code,operational_status,billing_cycle,purchase_price,currency,purchase_date,renewal_date,auto_renew,assigned_user,account_email,billing_email,department,cost_center,notes,external_id,external_workspace_id
+37,ChatGPT Plus,OpenAI,Plus,saas,openai,active,monthly,20.00,USD,2026-04-04,2026-05-14,true,Ahmet_Ylmz,ahmetylmz6@gmail.com,ahmetylmz6@gmail.com,Engineering,PERSONAL-SW,Personal software purchase seeded for Ahmet_Ylmz.,,

@@ -123,6 +123,7 @@ function SoftwareAssetPanel(props) {
     onCancelCreate,
     onSetLicenseMode,
     onToggleSharedUser,
+    onToggleAllSharedUsers,
     onSyncRecord,
     onReclaimRecord,
     setFormData,
@@ -134,6 +135,9 @@ function SoftwareAssetPanel(props) {
     getLifecycleVariant,
   } = props;
   const labels = copy.panel || {};
+  const allSharedUsersSelected =
+    userOptions.length > 0 &&
+    userOptions.every((user) => (formData.shared_user_ids || []).includes(String(user.id)));
 
   const userFieldOptions = [{ value: "", label: copy.noValue }].concat(
     userOptions.map((user) => ({ value: String(user.id), label: user.username }))
@@ -155,9 +159,13 @@ function SoftwareAssetPanel(props) {
         <DetailRow label={copy.filterSource} value={getRecordSourceLabel(selectedAsset.record_source)} />
         <DetailRow label={copy.filterStatus} value={statusLabels[selectedAsset.operational_status] || copy.noValue} />
         <DetailRow label={labels.billingCycle} value={billingCycleLabels[selectedAsset.billing_cycle] || copy.noValue} />
-        <DetailRow label={labels.purchasePrice} value={formatMoney(selectedAsset.purchase_price || 0, selectedAsset.currency)} />
-        <DetailRow label={copy.monthlyCost} value={formatMoney(selectedAsset.monthly_cost_estimate || 0, selectedAsset.currency)} />
-        <DetailRow label={copy.annualCost} value={formatMoney(selectedAsset.annual_cost_estimate || 0, selectedAsset.currency)} />
+        {isAdmin ? (
+          <>
+            <DetailRow label={labels.purchasePrice} value={formatMoney(selectedAsset.purchase_price || 0, selectedAsset.currency)} />
+            <DetailRow label={copy.monthlyCost} value={formatMoney(selectedAsset.monthly_cost_estimate || 0, selectedAsset.currency)} />
+            <DetailRow label={copy.annualCost} value={formatMoney(selectedAsset.annual_cost_estimate || 0, selectedAsset.currency)} />
+          </>
+        ) : null}
         <DetailRow label={labels.department} value={selectedAsset.department || copy.noValue} />
         <DetailRow label={labels.costCenter} value={selectedAsset.cost_center || copy.noValue} />
         <DetailRow label={labels.invoiceContract} value={[selectedAsset.invoice_number, selectedAsset.contract_reference].filter(Boolean).join(" / ") || copy.noValue} />
@@ -250,7 +258,17 @@ function SoftwareAssetPanel(props) {
             <>
               <TextField label={labels.totalSeats} type="number" value={formData.seats_total} onChange={(event) => setValue("seats_total", event.target.value)} disabled={!canEditSelectedAsset} />
               <div className="space-y-2">
-                <span className="block text-sm font-medium text-slate-700">{labels.assignedUsers}</span>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="block text-sm font-medium text-slate-700">{labels.assignedUsers}</span>
+                  <button
+                    type="button"
+                    onClick={onToggleAllSharedUsers}
+                    disabled={!canEditSelectedAsset || !userOptions.length}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {allSharedUsersSelected ? copy.clearSelection : copy.selectAll}
+                  </button>
+                </div>
                 <div className="rounded-[18px] border border-slate-200 bg-white p-3">
                   <div className="flex flex-wrap gap-2">
                     {userOptions.map((user) => {
@@ -273,6 +291,9 @@ function SoftwareAssetPanel(props) {
                     })}
                   </div>
                 </div>
+              </div>
+              <div className="rounded-[18px] border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm leading-7 text-slate-600">
+                {labels.sharedAccessHint}
               </div>
             </>
           )}

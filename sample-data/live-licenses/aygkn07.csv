@@ -1,0 +1,2 @@
+asset_id,name,vendor,plan_name,record_type,provider_code,operational_status,billing_cycle,purchase_price,currency,purchase_date,renewal_date,auto_renew,assigned_user,account_email,billing_email,department,cost_center,notes,external_id,external_workspace_id
+39,Notion Plus,Notion,Plus,saas,other,active,monthly,10.00,USD,2026-04-04,2026-05-14,true,aygkn07,aylakanDMR@gmail.com,aylakanDMR@gmail.com,Engineering,PERSONAL-SW,Personal software purchase seeded for aygkn07.,,

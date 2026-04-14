@@ -164,7 +164,7 @@ export function safeParseMetadataText(text) {
   }
 }
 
-function parseCsvLine(line) {
+function parseCsvLine(line, delimiter = ",") {
   const values = [];
   let current = "";
   let insideQuotes = false;
@@ -184,7 +184,7 @@ function parseCsvLine(line) {
       continue;
     }
 
-    if (character === "," && !insideQuotes) {
+    if (character === delimiter && !insideQuotes) {
       values.push(current.trim());
       current = "";
       continue;
@@ -197,6 +197,21 @@ function parseCsvLine(line) {
   return values;
 }
 
+function detectCsvDelimiter(line) {
+  return parseCsvLine(line, ";").length > parseCsvLine(line, ",").length ? ";" : ",";
+}
+
+function normalizeCsvHeader(header) {
+  return String(header || "")
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+    .replace(/[^\w]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 export function parseCsvText(text) {
   const rows = String(text || "")
     .split(/\r?\n/)
@@ -207,12 +222,11 @@ export function parseCsvText(text) {
     return [];
   }
 
-  const headers = parseCsvLine(rows[0]).map((header) =>
-    String(header || "").trim().toLowerCase()
-  );
+  const delimiter = detectCsvDelimiter(rows[0]);
+  const headers = parseCsvLine(rows[0], delimiter).map(normalizeCsvHeader);
 
   return rows.slice(1).map((line) => {
-    const columns = parseCsvLine(line);
+    const columns = parseCsvLine(line, delimiter);
     return headers.reduce((result, header, index) => {
       result[header] = columns[index] ?? "";
       return result;

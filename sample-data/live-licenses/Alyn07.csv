@@ -1,0 +1,2 @@
+asset_id,name,vendor,plan_name,record_type,provider_code,operational_status,billing_cycle,purchase_price,currency,purchase_date,renewal_date,auto_renew,assigned_user,account_email,billing_email,department,cost_center,notes,external_id,external_workspace_id
+34,Adobe After Effects,Adobe,Single App,desktop_license,adobe,active,monthly,12.29,USD,2026-04-14,2026-05-14,true,Alyn07,kanaysegul740@gmail.com,kanaysegul740@gmail.com,Engineering,PERSONAL-SW,Personal software purchase seeded for Alyn07.,,
