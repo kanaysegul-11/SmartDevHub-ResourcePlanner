@@ -1,3 +1,3 @@
 asset_id,name,vendor,plan_name,record_type,provider_code,operational_status,billing_cycle,purchase_price,currency,purchase_date,renewal_date,auto_renew,assigned_user,account_email,billing_email,department,cost_center,notes,external_id,external_workspace_id
 36,Microsoft 365 Personal,Microsoft,Personal,single_user_license,microsoft,active,yearly,99.99,USD,2025-12-14,2027-04-14,true,Kaan_Yldz,kaanyıldız@gmil.com,kaanyıldız@gmil.com,Engineering,PERSONAL-SW,Personal software purchase seeded for Kaan_Yldz.,,
-33,Adobe Photoshop,Adobe,Single App,desktop_license,adobe,active,monthly,22.99,USD,2026-04-04,2026-05-14,true,Alyn07,kanaysegul740@gmail.com,kanaysegul740@gmail.com,Engineering,PERSONAL-SW,Personal software purchase seeded for Alyn07.,,
+33,Adobe Photoshop,Adobe,Single App,desktop_license,adobe,active,monthly,22.99,USD,2026-04-04,2026-05-14,true,Kaan_Yldz,kaanyıldız@gmil.com,kaanyıldız@gmil.com,Engineering,PERSONAL-SW,Personal software purchase seeded for Kaan_Yldz.,,
