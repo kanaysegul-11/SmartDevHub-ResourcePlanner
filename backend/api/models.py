@@ -635,3 +635,18 @@ class LicenseRequest(models.Model):
 
     def __str__(self):
         return f"{self.requested_product} - {self.requester.username}"
+
+
+from .governance_models import (  # noqa: E402
+    AICodeRequest,
+    AICodeValidationResult,
+    CodeViolation,
+    DeveloperRepositoryScore,
+    GithubAccount,
+    GithubCommitActivity,
+    GithubPullRequestActivity,
+    GithubRepository,
+    RepositoryScan,
+    StandardProfile,
+    StandardRule,
+)

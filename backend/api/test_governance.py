@@ -1,0 +1,577 @@
+from unittest.mock import patch
+
+from django.contrib.auth.models import User
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from .governance_services import ensure_default_standard_profile, scan_github_repository
+from .models import (
+    AICodeRequest,
+    CodeViolation,
+    DeveloperRepositoryScore,
+    GithubAccount,
+    GithubCommitActivity,
+    GithubPullRequestActivity,
+    GithubRepository,
+    RepositoryScan,
+    StandardProfile,
+    StandardRule,
+)
+
+
+class GovernanceApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="member",
+            password="strong-pass-123",
+            email="member@example.com",
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_admin_can_create_starter_standard_profile(self):
+        admin_user = User.objects.create_user(
+            username="governance-admin",
+            password="strong-pass-123",
+            email="governance-admin@example.com",
+            is_staff=True,
+        )
+        self.client.force_authenticate(user=admin_user)
+
+        response = self.client.post("/api/standard-profiles/create-starter-profile/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(StandardProfile.objects.filter(is_default=True).exists())
+        self.assertGreaterEqual(
+            StandardRule.objects.filter(profile__is_default=True).count(),
+            5,
+        )
+        self.assertEqual(response.data["name"], "Default Engineering Standard")
+
+    @patch("api.governance_views.connect_github_account")
+    def test_github_account_connect_endpoint_returns_masked_token(self, mock_connect):
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        mock_connect.return_value = account
+
+        response = self.client.post(
+            "/api/github-accounts/",
+            {"access_token": "ghp_exampletoken1234"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["github_username"], "member-github")
+        self.assertEqual(response.data["masked_token"], "***1234")
+        self.assertNotIn("access_token", response.data)
+
+    def test_ai_validate_endpoint_creates_request_and_flags_var_usage(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+
+        response = self.client.post(
+            "/api/ai-code-requests/validate/",
+            {
+                "standard_profile_id": profile.id,
+                "provider_name": "openai",
+                "model_name": "gpt-4",
+                "task_summary": "Create a utility function",
+                "prompt": "Write a small JS helper.",
+                "output_files": [
+                    {
+                        "path": "src/utils/helper.js",
+                        "content": "var total = 1;\nfunction helper() {\n  return total;\n}\n",
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["validation_result"]["status"], "needs_changes")
+        self.assertGreaterEqual(
+            response.data["validation_result"]["violation_count"],
+            2,
+        )
+        self.assertEqual(AICodeRequest.objects.count(), 1)
+        self.assertEqual(AICodeRequest.objects.first().provider_name, "openai")
+
+    def test_ai_prepare_endpoint_returns_standard_prompt_bundle(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+
+        response = self.client.post(
+            "/api/ai-code-requests/prepare/",
+            {
+                "standard_profile_id": profile.id,
+                "task_summary": "Generate a repository-ready service function.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["profile_id"], profile.id)
+        self.assertEqual(response.data["profile_name"], profile.name)
+        self.assertIn("system_prompt", response.data)
+        self.assertIn("output_contract", response.data)
+
+    @patch("api.governance_services.fetch_recent_pull_request_items")
+    @patch("api.governance_services.fetch_recent_commit_items")
+    @patch("api.governance_services.fetch_latest_author_for_path")
+    @patch("api.governance_services.fetch_recent_commit_activity")
+    @patch("api.governance_services.fetch_repository_source_bundle")
+    def test_repository_scan_service_records_violations_and_developer_scores(
+        self,
+        mock_source_bundle,
+        mock_commit_activity,
+        mock_latest_author,
+        mock_commit_items,
+        mock_pull_request_items,
+    ):
+        profile = ensure_default_standard_profile(created_by=self.user)
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        repository = GithubRepository.objects.create(
+            account=account,
+            standard_profile=profile,
+            name="smart-hub",
+            full_name="member-github/smart-hub",
+            owner_login="member-github",
+            default_branch="main",
+            primary_language="Python",
+        )
+
+        mock_source_bundle.return_value = {
+            "commit_sha": "abc123",
+            "tree_items": [
+                {"path": "README.md"},
+                {"path": "src/main.py"},
+            ],
+            "files": [
+                {
+                    "path": "src/main.py",
+                    "content": (
+                        "badName = 1\n\n"
+                        "def oversized_function():\n"
+                        "    line_1 = 1\n"
+                        "    line_2 = 2\n"
+                        "    line_3 = 3\n"
+                        "    line_4 = 4\n"
+                        "    line_5 = 5\n"
+                        "    line_6 = 6\n"
+                        "    line_7 = 7\n"
+                        "    line_8 = 8\n"
+                        "    line_9 = 9\n"
+                        "    line_10 = 10\n"
+                        "    line_11 = 11\n"
+                        "    line_12 = 12\n"
+                        "    line_13 = 13\n"
+                        "    line_14 = 14\n"
+                        "    line_15 = 15\n"
+                        "    line_16 = 16\n"
+                        "    line_17 = 17\n"
+                        "    line_18 = 18\n"
+                        "    line_19 = 19\n"
+                        "    line_20 = 20\n"
+                        "    return badName\n"
+                    ),
+                }
+            ],
+        }
+        mock_commit_activity.return_value = {
+            "member-github": {"display_name": "member-github", "commit_count": 3}
+        }
+        mock_latest_author.return_value = {
+            "login": "member-github",
+            "commit_sha": "abc123",
+            "display_name": "member-github",
+        }
+        mock_commit_items.return_value = [
+            {
+                "sha": "abc123",
+                "author_login": "member-github",
+                "author_name": "member-github",
+                "message_title": "feat: add smart governance flow",
+                "message_body": "Adds the core dashboard metrics.",
+                "additions": 120,
+                "deletions": 10,
+                "changed_files_count": 4,
+                "commit_url": "https://example.com/commit/abc123",
+                "committed_at": timezone.now(),
+                "is_merge_commit": False,
+                "metadata": {"verification": True},
+            }
+        ]
+        mock_pull_request_items.return_value = [
+            {
+                "pull_number": 12,
+                "author_login": "member-github",
+                "author_name": "member-github",
+                "title": "Improve governance dashboard",
+                "body": "This pull request expands the governance dashboard with activity data.",
+                "state": "closed",
+                "is_draft": False,
+                "is_merged": True,
+                "additions": 120,
+                "deletions": 10,
+                "changed_files_count": 4,
+                "comments_count": 2,
+                "review_comments_count": 1,
+                "commit_count": 3,
+                "html_url": "https://example.com/pull/12",
+                "opened_at": timezone.now(),
+                "closed_at": timezone.now(),
+                "merged_at": timezone.now(),
+                "metadata": {"requested_reviewers": 1},
+            }
+        ]
+
+        scan = scan_github_repository(repository=repository, triggered_by=self.user)
+        repository.refresh_from_db()
+
+        self.assertEqual(scan.status, "completed")
+        self.assertEqual(scan.commit_sha, "abc123")
+        self.assertGreaterEqual(scan.violation_count, 2)
+        self.assertEqual(RepositoryScan.objects.count(), 1)
+        self.assertGreaterEqual(CodeViolation.objects.filter(scan=scan).count(), 2)
+        self.assertEqual(
+            DeveloperRepositoryScore.objects.filter(
+                scan=scan,
+                github_login="member-github",
+            ).count(),
+            1,
+        )
+        self.assertEqual(GithubCommitActivity.objects.filter(repository=repository).count(), 1)
+        self.assertEqual(
+            GithubPullRequestActivity.objects.filter(repository=repository).count(),
+            1,
+        )
+        self.assertIsNotNone(repository.latest_score)
+
+    def test_developer_overview_endpoint_returns_leaderboard_and_activity(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        repository = GithubRepository.objects.create(
+            account=account,
+            standard_profile=profile,
+            name="smart-hub",
+            full_name="member-github/smart-hub",
+            owner_login="member-github",
+            default_branch="main",
+            primary_language="Python",
+        )
+        scan = RepositoryScan.objects.create(
+            repository=repository,
+            standard_profile=profile,
+            triggered_by=self.user,
+            scan_type="manual",
+            status="completed",
+            score=92,
+            summary={"score": 92},
+            file_count=10,
+            violation_count=1,
+            developer_count=1,
+        )
+        DeveloperRepositoryScore.objects.create(
+            scan=scan,
+            repository=repository,
+            github_login="member-github",
+            display_name="member-github",
+            commit_count=3,
+            files_touched=5,
+            violation_count=1,
+            score=92,
+            summary={
+                "pull_request_count": 1,
+                "merged_pull_request_count": 1,
+                "average_commit_score": 95,
+                "average_pull_request_score": 96,
+            },
+        )
+        GithubCommitActivity.objects.create(
+            repository=repository,
+            scan=scan,
+            sha="abc123",
+            author_login="member-github",
+            author_name="member-github",
+            message_title="feat: add governance insights",
+            quality_score=95,
+            additions=40,
+            deletions=5,
+            changed_files_count=2,
+            committed_at=timezone.now(),
+        )
+        GithubPullRequestActivity.objects.create(
+            repository=repository,
+            author_login="member-github",
+            author_name="member-github",
+            pull_number=7,
+            title="Add governance insights",
+            body="This PR adds leaderboard and activity cards to the governance page.",
+            state="closed",
+            is_merged=True,
+            quality_score=96,
+            additions=40,
+            deletions=5,
+            changed_files_count=2,
+            comments_count=1,
+            review_comments_count=1,
+            commit_count=2,
+            opened_at=timezone.now(),
+            merged_at=timezone.now(),
+        )
+
+        response = self.client.get("/api/github-repositories/developer-overview/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["leaderboard"]), 1)
+        self.assertEqual(response.data["leaderboard"][0]["github_login"], "member-github")
+        self.assertEqual(len(response.data["recent_commits"]), 1)
+        self.assertEqual(len(response.data["recent_pull_requests"]), 1)
+
+    def test_developer_overview_hides_other_contributors_for_non_admin(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        repository = GithubRepository.objects.create(
+            account=account,
+            standard_profile=profile,
+            name="smart-hub",
+            full_name="member-github/smart-hub",
+            owner_login="member-github",
+            default_branch="main",
+            primary_language="Python",
+        )
+        scan = RepositoryScan.objects.create(
+            repository=repository,
+            standard_profile=profile,
+            triggered_by=self.user,
+            scan_type="manual",
+            status="completed",
+            score=88,
+            summary={"score": 88},
+            file_count=12,
+            violation_count=3,
+            developer_count=2,
+        )
+        DeveloperRepositoryScore.objects.create(
+            scan=scan,
+            repository=repository,
+            github_login="member-github",
+            display_name="member-github",
+            commit_count=3,
+            files_touched=5,
+            violation_count=1,
+            score=90,
+            summary={"pull_request_count": 1},
+        )
+        DeveloperRepositoryScore.objects.create(
+            scan=scan,
+            repository=repository,
+            github_login="teammate-github",
+            display_name="teammate-github",
+            commit_count=5,
+            files_touched=8,
+            violation_count=2,
+            score=70,
+            summary={"pull_request_count": 2},
+        )
+        GithubCommitActivity.objects.create(
+            repository=repository,
+            scan=scan,
+            sha="abc123",
+            author_login="member-github",
+            author_name="member-github",
+            message_title="feat: add personal governance insights",
+            quality_score=94,
+            additions=30,
+            deletions=4,
+            changed_files_count=2,
+            committed_at=timezone.now(),
+        )
+        GithubCommitActivity.objects.create(
+            repository=repository,
+            scan=scan,
+            sha="def456",
+            author_login="teammate-github",
+            author_name="teammate-github",
+            message_title="feat: add teammate insights",
+            quality_score=71,
+            additions=45,
+            deletions=9,
+            changed_files_count=3,
+            committed_at=timezone.now(),
+        )
+        GithubPullRequestActivity.objects.create(
+            repository=repository,
+            author_login="member-github",
+            author_name="member-github",
+            pull_number=7,
+            title="Add personal governance insights",
+            body="This PR adds my governance widgets and keeps the dashboard aligned.",
+            state="closed",
+            is_merged=True,
+            quality_score=96,
+            additions=40,
+            deletions=5,
+            changed_files_count=2,
+            comments_count=1,
+            review_comments_count=1,
+            commit_count=2,
+            opened_at=timezone.now(),
+            merged_at=timezone.now(),
+        )
+        GithubPullRequestActivity.objects.create(
+            repository=repository,
+            author_login="teammate-github",
+            author_name="teammate-github",
+            pull_number=8,
+            title="Add teammate governance insights",
+            body="This PR adds governance details for another contributor in the same repo.",
+            state="closed",
+            is_merged=True,
+            quality_score=73,
+            additions=50,
+            deletions=8,
+            changed_files_count=4,
+            comments_count=2,
+            review_comments_count=2,
+            commit_count=3,
+            opened_at=timezone.now(),
+            merged_at=timezone.now(),
+        )
+
+        response = self.client.get("/api/github-repositories/developer-overview/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["scope"], "self")
+        self.assertEqual(len(response.data["leaderboard"]), 1)
+        self.assertEqual(response.data["leaderboard"][0]["github_login"], "member-github")
+        self.assertEqual(len(response.data["recent_commits"]), 1)
+        self.assertEqual(response.data["recent_commits"][0]["author_login"], "member-github")
+        self.assertEqual(len(response.data["recent_pull_requests"]), 1)
+        self.assertEqual(
+            response.data["recent_pull_requests"][0]["author_login"],
+            "member-github",
+        )
+
+    def test_repository_scan_detail_hides_other_developer_breakdown_for_non_admin(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+        rule = profile.rules.first()
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        repository = GithubRepository.objects.create(
+            account=account,
+            standard_profile=profile,
+            name="smart-hub",
+            full_name="member-github/smart-hub",
+            owner_login="member-github",
+            default_branch="main",
+            primary_language="Python",
+        )
+        scan = RepositoryScan.objects.create(
+            repository=repository,
+            standard_profile=profile,
+            triggered_by=self.user,
+            scan_type="manual",
+            status="completed",
+            score=84,
+            summary={"score": 84},
+            file_count=14,
+            violation_count=3,
+            developer_count=2,
+        )
+        DeveloperRepositoryScore.objects.create(
+            scan=scan,
+            repository=repository,
+            github_login="member-github",
+            display_name="member-github",
+            commit_count=2,
+            files_touched=3,
+            violation_count=1,
+            score=88,
+            summary={},
+        )
+        DeveloperRepositoryScore.objects.create(
+            scan=scan,
+            repository=repository,
+            github_login="teammate-github",
+            display_name="teammate-github",
+            commit_count=4,
+            files_touched=6,
+            violation_count=2,
+            score=72,
+            summary={},
+        )
+        CodeViolation.objects.create(
+            scan=scan,
+            repository=repository,
+            rule=rule,
+            severity="medium",
+            code="member_violation",
+            title="Member issue",
+            file_path="src/member.py",
+            line_number=12,
+            message="Visible to the member.",
+            author_login="member-github",
+            commit_sha="abc123",
+        )
+        CodeViolation.objects.create(
+            scan=scan,
+            repository=repository,
+            rule=rule,
+            severity="high",
+            code="team_violation",
+            title="Teammate issue",
+            file_path="src/teammate.py",
+            line_number=8,
+            message="Should stay hidden from a non-admin viewer.",
+            author_login="teammate-github",
+            commit_sha="def456",
+        )
+        CodeViolation.objects.create(
+            scan=scan,
+            repository=repository,
+            rule=rule,
+            severity="medium",
+            code="repo_violation",
+            title="Repository issue",
+            file_path="README.md",
+            line_number=None,
+            message="Repository-level findings remain visible.",
+            author_login="",
+            commit_sha="",
+        )
+
+        response = self.client.get(f"/api/repository-scans/{scan.id}/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["developer_count"], 1)
+        self.assertEqual(len(response.data["developer_scores"]), 1)
+        self.assertEqual(
+            response.data["developer_scores"][0]["github_login"],
+            "member-github",
+        )
+        visible_authors = {violation["author_login"] for violation in response.data["violations"]}
+        self.assertIn("member-github", visible_authors)
+        self.assertIn("", visible_authors)
+        self.assertNotIn("teammate-github", visible_authors)

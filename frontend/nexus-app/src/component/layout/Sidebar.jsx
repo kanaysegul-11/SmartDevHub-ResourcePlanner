@@ -13,6 +13,7 @@ import {
   FeatherLogOut,
   FeatherMessageCircle,
   FeatherPlus,
+  FeatherShield,
   FeatherSettings,
   FeatherTarget,
   FeatherTrendingUp,
@@ -79,6 +80,8 @@ function Sidebar({
           ? "projects"
           : pathname === "/tasks"
             ? "tasks"
+            : pathname === "/github-governance"
+              ? "governance"
             : pathname === "/software-assets"
               ? "software-assets"
             : pathname === "/notifications"
@@ -117,7 +120,15 @@ function Sidebar({
     const nextItems = ["dashboard"];
 
     if (menuPreset === "full") {
-      nextItems.push("team", "projects", "tasks", "software-assets", "snippets", "analytics");
+      nextItems.push(
+        "team",
+        "projects",
+        "tasks",
+        "governance",
+        "software-assets",
+        "snippets",
+        "analytics"
+      );
     }
 
     return nextItems;
@@ -418,6 +429,21 @@ function Sidebar({
           onClick={() => navigate("/software-assets")}
         >
           {t("sidebar.softwareAssets", "Software Assets")}
+        </SidebarWithSections.NavItem>
+      );
+    }
+
+    if (itemId === "governance") {
+      return renderDraggableItem(
+        GENERAL_SECTION_KEY,
+        itemId,
+        <SidebarWithSections.NavItem
+          className="rounded-2xl text-slate-300  [&_.text-neutral-600]:text-slate-400"
+          selected={resolvedActive === "governance"}
+          icon={<FeatherShield />}
+          onClick={() => navigate("/github-governance")}
+        >
+          {t("sidebar.governance", "Code Governance")}
         </SidebarWithSections.NavItem>
       );
     }

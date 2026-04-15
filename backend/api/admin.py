@@ -1,7 +1,18 @@
 from django.contrib import admin
 from .models import (
+    AICodeRequest,
+    AICodeValidationResult,
+    CodeViolation,
+    DeveloperRepositoryScore,
     EmploymentStatus,
+    GithubAccount,
+    GithubCommitActivity,
+    GithubPullRequestActivity,
+    GithubRepository,
     UserProfile,
+    RepositoryScan,
+    StandardProfile,
+    StandardRule,
     TeamMessage,
     Project,
     Task,
@@ -121,3 +132,106 @@ class LicenseRequestAdmin(admin.ModelAdmin):
     list_display = ('requested_product', 'requester', 'status', 'provider_code', 'created_at')
     list_filter = ('status', 'provider_code', 'request_type', 'created_at')
     search_fields = ('requested_product', 'requester__username', 'preferred_plan', 'justification')
+
+
+class StandardRuleInline(admin.TabularInline):
+    model = StandardRule
+    extra = 0
+
+
+@admin.register(StandardProfile)
+class StandardProfileAdmin(admin.ModelAdmin):
+    list_display = ("name", "target_stack", "is_default", "is_active", "updated_at")
+    list_filter = ("target_stack", "is_default", "is_active")
+    search_fields = ("name", "description")
+    inlines = [StandardRuleInline]
+
+
+@admin.register(StandardRule)
+class StandardRuleAdmin(admin.ModelAdmin):
+    list_display = ("title", "profile", "category", "severity", "weight", "is_enabled")
+    list_filter = ("category", "severity", "is_enabled", "profile")
+    search_fields = ("title", "code", "description")
+
+
+@admin.register(GithubAccount)
+class GithubAccountAdmin(admin.ModelAdmin):
+    list_display = ("github_username", "user", "account_type", "last_synced_at", "is_active")
+    list_filter = ("account_type", "is_active", "last_synced_at")
+    search_fields = ("github_username", "user__username", "user__email")
+
+
+@admin.register(GithubRepository)
+class GithubRepositoryAdmin(admin.ModelAdmin):
+    list_display = (
+        "full_name",
+        "account",
+        "standard_profile",
+        "primary_language",
+        "latest_score",
+        "latest_scan_at",
+        "is_active",
+    )
+    list_filter = ("primary_language", "visibility", "is_active", "standard_profile")
+    search_fields = ("name", "full_name", "owner_login", "description")
+
+
+@admin.register(RepositoryScan)
+class RepositoryScanAdmin(admin.ModelAdmin):
+    list_display = ("repository", "scan_type", "status", "score", "violation_count", "created_at")
+    list_filter = ("scan_type", "status", "standard_profile")
+    search_fields = ("repository__full_name", "commit_sha")
+
+
+@admin.register(CodeViolation)
+class CodeViolationAdmin(admin.ModelAdmin):
+    list_display = ("code", "repository", "severity", "author_login", "file_path", "line_number")
+    list_filter = ("severity", "code")
+    search_fields = ("code", "title", "message", "file_path", "author_login")
+
+
+@admin.register(DeveloperRepositoryScore)
+class DeveloperRepositoryScoreAdmin(admin.ModelAdmin):
+    list_display = ("repository", "github_login", "score", "commit_count", "violation_count")
+    list_filter = ("repository",)
+    search_fields = ("github_login", "display_name", "repository__full_name")
+
+
+@admin.register(GithubCommitActivity)
+class GithubCommitActivityAdmin(admin.ModelAdmin):
+    list_display = (
+        "repository",
+        "author_login",
+        "message_title",
+        "quality_score",
+        "committed_at",
+    )
+    list_filter = ("repository", "is_merge_commit")
+    search_fields = ("author_login", "author_name", "message_title", "sha")
+
+
+@admin.register(GithubPullRequestActivity)
+class GithubPullRequestActivityAdmin(admin.ModelAdmin):
+    list_display = (
+        "repository",
+        "pull_number",
+        "author_login",
+        "state",
+        "quality_score",
+        "opened_at",
+    )
+    list_filter = ("repository", "state", "is_draft", "is_merged")
+    search_fields = ("author_login", "author_name", "title")
+
+
+@admin.register(AICodeRequest)
+class AICodeRequestAdmin(admin.ModelAdmin):
+    list_display = ("provider_name", "model_name", "repository", "validation_status", "validation_score", "updated_at")
+    list_filter = ("provider_name", "validation_status", "standard_profile")
+    search_fields = ("provider_name", "model_name", "task_summary", "repository__full_name")
+
+
+@admin.register(AICodeValidationResult)
+class AICodeValidationResultAdmin(admin.ModelAdmin):
+    list_display = ("request", "status", "score", "violation_count", "created_at")
+    list_filter = ("status",)

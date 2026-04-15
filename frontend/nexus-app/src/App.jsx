@@ -25,6 +25,7 @@ import Tasks from "./pages/Tasks";
 import SoftwareAssets from "./pages/SoftwareAssets";
 import NotificationsPage from "./pages/NotificationsPage";
 import ContactAdmin from "./pages/ContactAdmin";
+import GithubGovernance from "./pages/GithubGovernance";
 import MessageNotificationWatcher from "./component/notifications/MessageNotificationWatcher.jsx";
 import { useUser } from "./UserContext.jsx";
 import { Toaster } from "sonner";
@@ -118,6 +119,13 @@ function App() {
           },
         },
         {
+          name: "github-governance",
+          list: "/github-governance",
+          meta: {
+            label: "Code Governance",
+          },
+        },
+        {
           name: "settings",
           list: "/settings",
           meta: {
@@ -162,6 +170,7 @@ function App() {
           <Route path="/projects" element={<Projects />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/software-assets" element={<SoftwareAssets />} />
+          <Route path="/github-governance" element={<GithubGovernance />} />
           <Route
             path="/add-member"
             element={
