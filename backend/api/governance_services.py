@@ -17,6 +17,7 @@ from django.conf import settings
 from django.core import signing
 from django.db import close_old_connections, transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from .models import (
     AICodeRequest,
@@ -56,6 +57,10 @@ AUTO_SYNC_EXECUTOR = ThreadPoolExecutor(
     max_workers=2,
     thread_name_prefix="governance-sync",
 )
+ACCOUNT_SYNC_EXECUTOR = ThreadPoolExecutor(
+    max_workers=2,
+    thread_name_prefix="governance-account-sync",
+)
 MAX_REPOSITORY_FILES = 80
 MAX_BLOB_SIZE = 40000
 SEVERITY_PENALTIES = {
@@ -68,6 +73,10 @@ DEFAULT_COMMIT_MESSAGE_PATTERN = (
     r"^(feat|fix|docs|refactor|test|chore|style|perf|build|ci)"
     r"(\([a-z0-9_\-/]+\))?: .{3,}$"
 )
+STALE_SCAN_TIMEOUT_MINUTES = 10
+STALE_AUTO_SYNC_TIMEOUT_MINUTES = 10
+POLLING_FALLBACK_SYNC_INTERVAL_MINUTES = 5
+POLLING_FALLBACK_HEARTBEAT_MINUTES = 30
 
 def github_session():
     session = requests.Session()
@@ -111,6 +120,113 @@ def get_user_github_logins(user):
 
 def _normalize_github_login(value):
     return (value or "").strip().lower()
+
+
+def _parse_iso_datetime(value):
+    if not value:
+        return None
+    if isinstance(value, str):
+        return parse_datetime(value)
+    return value
+
+
+def finalize_stale_governance_runs(
+    *,
+    scan_timeout_minutes=STALE_SCAN_TIMEOUT_MINUTES,
+    auto_sync_timeout_minutes=STALE_AUTO_SYNC_TIMEOUT_MINUTES,
+):
+    now = timezone.now()
+    scan_cutoff = now - timezone.timedelta(minutes=scan_timeout_minutes)
+    stale_scans = RepositoryScan.objects.filter(
+        status="running",
+        started_at__lt=scan_cutoff,
+        completed_at__isnull=True,
+    )
+    stale_scan_count = stale_scans.update(
+        status="failed",
+        summary={
+            "error": "Scan interrupted or timed out before completion.",
+            "reason": "stale_running_scan",
+        },
+        completed_at=now,
+    )
+
+    stale_auto_sync_count = 0
+    repositories = GithubRepository.objects.filter(is_active=True).only(
+        "id",
+        "metadata",
+        "updated_at",
+    )
+    for repository in repositories:
+        metadata = dict(repository.metadata or {})
+        auto_sync = dict(metadata.get("auto_sync") or {})
+        status_value = (auto_sync.get("status") or "").strip().lower()
+        if status_value not in {"queued", "running"}:
+            continue
+        reference_time = (
+            _parse_iso_datetime(auto_sync.get("last_run_at"))
+            or _parse_iso_datetime(auto_sync.get("queued_at"))
+            or repository.updated_at
+        )
+        if not reference_time or reference_time >= now - timezone.timedelta(
+            minutes=auto_sync_timeout_minutes
+        ):
+            continue
+        auto_sync.update(
+            {
+                "status": "failed",
+                "error": "Auto-sync interrupted or timed out before completion.",
+                "last_run_at": now.isoformat(),
+                "reason": "stale_auto_sync_job",
+            }
+        )
+        metadata["auto_sync"] = auto_sync
+        repository.metadata = metadata
+        repository.save(update_fields=["metadata", "updated_at"])
+        stale_auto_sync_count += 1
+
+    return {
+        "stale_scan_count": stale_scan_count,
+        "stale_auto_sync_count": stale_auto_sync_count,
+    }
+
+
+def queue_governance_login_sync(*, user):
+    finalize_stale_governance_runs()
+    account_queryset = GithubAccount.objects.filter(is_active=True)
+    if not is_governance_admin(user):
+        account_queryset = account_queryset.filter(user=user)
+    account_ids = list(account_queryset.values_list("id", flat=True))
+    if not account_ids:
+        return {
+            "status": "skipped",
+            "account_count": 0,
+        }
+
+    ACCOUNT_SYNC_EXECUTOR.submit(
+        _run_governance_login_sync_job,
+        account_ids=account_ids,
+    )
+    return {
+        "status": "queued",
+        "account_count": len(account_ids),
+    }
+
+
+def _run_governance_login_sync_job(*, account_ids):
+    close_old_connections()
+    try:
+        account_queryset = GithubAccount.objects.filter(
+            id__in=account_ids,
+            is_active=True,
+        ).select_related("user")
+        for account in account_queryset:
+            try:
+                sync_github_repositories(account=account)
+            except Exception:
+                continue
+    finally:
+        close_old_connections()
 
 
 def github_api_request(
@@ -217,7 +333,7 @@ def build_github_integration_status():
         "webhook_target_url": webhook_target_url,
         "webhook_events": list(GITHUB_WEBHOOK_EVENTS),
         "webhook_requires_public_url": _is_local_url(webhook_target_url),
-        "auto_sync_mode": "background_thread",
+        "auto_sync_mode": "webhook_or_background_sync",
         "personal_access_token_fallback": True,
     }
 
@@ -367,6 +483,16 @@ def ensure_repository_webhook(repository):
             "reason": "webhook_not_configured",
             "target_url": callback_url,
         }
+    if integration_status["webhook_requires_public_url"]:
+        webhook_summary = {
+            "status": "polling_fallback",
+            "reason": "public_url_required",
+            "target_url": callback_url,
+            "events": list(GITHUB_WEBHOOK_EVENTS),
+            "checked_at": timezone.now().isoformat(),
+        }
+        _update_repository_metadata(repository, webhook=webhook_summary)
+        return webhook_summary
 
     try:
         hook_payloads = github_api_request(
@@ -444,6 +570,24 @@ def ensure_repository_webhook(repository):
         return webhook_summary
 
 
+def _should_queue_auto_sync_for_repository(repository, *, webhook_summary=None):
+    webhook_summary = webhook_summary or {}
+    webhook_status = (webhook_summary.get("status") or "").strip().lower()
+    auto_sync_status = (
+        ((repository.metadata or {}).get("auto_sync") or {}).get("status") or ""
+    ).strip().lower()
+
+    if auto_sync_status in {"queued", "running"}:
+        return False
+    if repository.latest_scan_at is None:
+        return True
+    if repository.last_pushed_at and repository.latest_scan_at < repository.last_pushed_at:
+        return True
+    if webhook_status == "polling_fallback":
+        return True
+    return False
+
+
 def queue_repository_auto_sync(*, repository, event_name="", payload=None):
     queued_at = timezone.now().isoformat()
     _update_repository_metadata(
@@ -466,6 +610,74 @@ def queue_repository_auto_sync(*, repository, event_name="", payload=None):
         "event_name": event_name,
         "queued_at": queued_at,
     }
+
+
+def queue_due_polling_refreshes(
+    *,
+    repositories,
+    event_name="polling_refresh",
+    refresh_interval_minutes=POLLING_FALLBACK_SYNC_INTERVAL_MINUTES,
+    heartbeat_minutes=POLLING_FALLBACK_HEARTBEAT_MINUTES,
+    limit=5,
+):
+    finalize_stale_governance_runs()
+    now = timezone.now()
+    queued_jobs = []
+
+    for repository in repositories:
+        if len(queued_jobs) >= limit:
+            break
+
+        metadata = dict(repository.metadata or {})
+        webhook_summary = dict(metadata.get("webhook") or {})
+        auto_sync = dict(metadata.get("auto_sync") or {})
+        webhook_status = (webhook_summary.get("status") or "").strip().lower()
+        auto_sync_status = (auto_sync.get("status") or "").strip().lower()
+
+        if webhook_status != "polling_fallback":
+            continue
+        if auto_sync_status in {"queued", "running"}:
+            continue
+
+        last_auto_sync_at = (
+            _parse_iso_datetime(auto_sync.get("last_run_at"))
+            or _parse_iso_datetime(auto_sync.get("queued_at"))
+            or repository.latest_scan_at
+            or repository.last_synced_at
+        )
+        refresh_cutoff = now - timezone.timedelta(minutes=refresh_interval_minutes)
+        heartbeat_cutoff = now - timezone.timedelta(minutes=heartbeat_minutes)
+
+        has_new_push = bool(
+            repository.last_pushed_at
+            and (repository.latest_scan_at is None or repository.latest_scan_at < repository.last_pushed_at)
+        )
+        missing_first_scan = repository.latest_scan_at is None
+        heartbeat_due = not last_auto_sync_at or last_auto_sync_at <= heartbeat_cutoff
+
+        if not has_new_push and not missing_first_scan and not heartbeat_due:
+            continue
+        if last_auto_sync_at and last_auto_sync_at > refresh_cutoff and not heartbeat_due:
+            continue
+
+        queued_jobs.append(
+            queue_repository_auto_sync(
+                repository=repository,
+                event_name=event_name,
+                payload={
+                    "reason": (
+                        "push_detected"
+                        if has_new_push
+                        else "first_scan"
+                        if missing_first_scan
+                        else "heartbeat_refresh"
+                    ),
+                    "webhook_status": webhook_status,
+                },
+            )
+        )
+
+    return queued_jobs
 
 
 def _run_repository_auto_sync_job(*, repository_id, event_name="", payload=None):
@@ -809,7 +1021,19 @@ def sync_github_repositories(*, account):
             },
         )
         synced_repository_ids.append(repository.id)
-        ensure_repository_webhook(repository)
+        webhook_summary = ensure_repository_webhook(repository)
+        if _should_queue_auto_sync_for_repository(
+            repository,
+            webhook_summary=webhook_summary,
+        ):
+            queue_repository_auto_sync(
+                repository=repository,
+                event_name="repository_sync",
+                payload={
+                    "reason": "initial_or_stale_scan",
+                    "webhook_status": webhook_summary.get("status") or "",
+                },
+            )
 
     if synced_repository_ids:
         GithubRepository.objects.filter(account=account).exclude(
@@ -953,6 +1177,7 @@ def fetch_recent_commit_items(repository, *, max_commits=20):
             repository.account.access_token,
             f"/repos/{repository.full_name}/commits/{sha}",
         )
+        check_signals = fetch_commit_check_signals(repository, sha)
         commit_author = (commit_payload.get("commit") or {}).get("author") or {}
         author_payload = commit_payload.get("author") or {}
         message = (commit_payload.get("commit") or {}).get("message") or ""
@@ -983,6 +1208,7 @@ def fetch_recent_commit_items(repository, *, max_commits=20):
                     "verification": (detail_payload.get("commit") or {})
                     .get("verification", {})
                     .get("verified", False),
+                    "check_signals": check_signals,
                 },
             }
         )
@@ -1006,6 +1232,9 @@ def fetch_recent_pull_request_items(repository, *, max_pull_requests=20):
             repository.account.access_token,
             f"/repos/{repository.full_name}/pulls/{pull_number}",
         )
+        head_sha = ((detail_payload.get("head") or {}).get("sha") or "").strip()
+        review_signals = fetch_pull_request_review_signals(repository, pull_number)
+        check_signals = fetch_commit_check_signals(repository, head_sha) if head_sha else {}
         author_payload = pull_payload.get("user") or {}
         pull_request_items.append(
             {
@@ -1035,6 +1264,9 @@ def fetch_recent_pull_request_items(repository, *, max_pull_requests=20):
                 ),
                 "metadata": {
                     "requested_reviewers": len(detail_payload.get("requested_reviewers") or []),
+                    "head_sha": head_sha,
+                    "review_signals": review_signals,
+                    "check_signals": check_signals,
                 },
             }
         )
@@ -1111,14 +1343,34 @@ def sync_repository_activity(*, repository, scan=None, max_commits=20, max_pull_
         )
         pull_request_records.append(pull_request_record)
 
+    activity_health = summarize_repository_activity_health(
+        commit_records=commit_records,
+        pull_request_records=pull_request_records,
+    )
+    repository_metadata = dict(repository.metadata or {})
+    repository_metadata["activity_health"] = activity_health
+    repository.metadata = repository_metadata
     repository.last_synced_at = timezone.now()
-    repository.save(update_fields=["last_synced_at", "updated_at"])
+    repository.save(update_fields=["metadata", "last_synced_at", "updated_at"])
     return build_developer_activity_summary(commit_records, pull_request_records)
 
 
 def scan_github_repository(*, repository, triggered_by=None, scan_type="manual"):
+    finalize_stale_governance_runs()
     standard_profile = repository.standard_profile or ensure_default_standard_profile(
         created_by=triggered_by or repository.account.user
+    )
+    RepositoryScan.objects.filter(
+        repository=repository,
+        status="running",
+        completed_at__isnull=True,
+    ).update(
+        status="failed",
+        summary={
+            "error": "A newer scan was started before this run completed.",
+            "reason": "superseded_by_new_scan",
+        },
+        completed_at=timezone.now(),
     )
     scan = RepositoryScan.objects.create(
         repository=repository,
@@ -1204,6 +1456,108 @@ def prepare_ai_prompt_bundle(*, repository=None, standard_profile=None, task_sum
         "ai_manifest": profile.ai_manifest,
         "output_contract": output_contract,
         "task_summary": task_summary,
+    }
+
+
+def prepare_ai_remediation_bundle(
+    *,
+    repository,
+    standard_profile=None,
+    scan=None,
+    violation_ids=None,
+    max_violations=8,
+):
+    profile = standard_profile or repository.standard_profile or ensure_default_standard_profile(
+        created_by=repository.account.user
+    )
+    selected_scan = scan
+    if selected_scan is None:
+        selected_scan = repository.scans.filter(status="completed").order_by("-created_at").first()
+    if selected_scan is None:
+        raise ValueError("There is no completed scan to prepare an AI remediation draft from.")
+
+    violations_queryset = selected_scan.violations.all().order_by("-created_at")
+    if violation_ids:
+        violations_queryset = violations_queryset.filter(id__in=violation_ids)
+    violations = list(violations_queryset[:max_violations])
+    if not violations:
+        raise ValueError("No visible violations were found for the selected remediation draft.")
+
+    base_bundle = prepare_ai_prompt_bundle(
+        repository=repository,
+        standard_profile=profile,
+        task_summary=(
+            f"Fix the latest governance violations in {repository.full_name} "
+            f"without changing unrelated behavior."
+        ),
+    )
+    remediation_items = []
+    for violation in violations:
+        remediation_items.append(
+            {
+                "violation_id": violation.id,
+                "code": violation.code,
+                "title": violation.title,
+                "severity": violation.severity,
+                "file_path": violation.file_path,
+                "line_number": violation.line_number,
+                "message": violation.message,
+                "author_login": violation.author_login,
+            }
+        )
+
+    affected_paths = [
+        violation.file_path
+        for violation in violations
+        if violation.file_path
+    ]
+    suggested_branch = "ai/remediation-" + re.sub(r"[^a-z0-9-]+", "-", repository.name.lower()).strip("-")
+    user_prompt = "\n".join(
+        [
+            f"Repository: {repository.full_name}",
+            f"Base branch: {repository.default_branch}",
+            "Goal: Fix the listed governance violations only.",
+            "Guardrails:",
+            "- Keep unrelated files untouched.",
+            "- Preserve existing behavior unless a rule requires a behavioral fix.",
+            "- Add or update tests when behavior changes.",
+            "- Return a patch-ready JSON response matching the output contract.",
+            "Violations to fix:",
+            *[
+                (
+                    f"- [{item['severity']}] {item['title']} :: "
+                    f"{item['file_path'] or 'repository'}"
+                    + (
+                        f":{item['line_number']}"
+                        if item.get("line_number")
+                        else ""
+                    )
+                    + f" -> {item['message']}"
+                )
+                for item in remediation_items
+            ],
+        ]
+    )
+
+    output_contract = {
+        **base_bundle["output_contract"],
+        "summary": "Short remediation summary.",
+        "branch_name": suggested_branch,
+        "pull_request": {
+            "title": "fix: align repository with governance standard",
+            "body": "Short pull request summary describing which violations were fixed.",
+        },
+    }
+    return {
+        **base_bundle,
+        "scan_id": selected_scan.id,
+        "scan_created_at": selected_scan.created_at.isoformat() if selected_scan.created_at else None,
+        "scan_score": float(selected_scan.score or 0),
+        "suggested_branch_name": suggested_branch,
+        "remediation_scope": remediation_items,
+        "affected_paths": affected_paths,
+        "user_prompt": user_prompt,
+        "output_contract": output_contract,
     }
 
 
@@ -1329,6 +1683,36 @@ def evaluate_commit_quality(profile, commit_item):
         )
         score -= 8
 
+    if not (commit_item.get("metadata") or {}).get("verification", True):
+        flags.append(
+            {
+                "code": "unverified_signature",
+                "message": "Commit signature is not verified.",
+                "severity": "low",
+            }
+        )
+        score -= 5
+
+    check_signals = ((commit_item.get("metadata") or {}).get("check_signals") or {})
+    if int(check_signals.get("failed_checks") or 0) > 0:
+        flags.append(
+            {
+                "code": "failed_ci_checks",
+                "message": "One or more CI or status checks failed on this commit.",
+                "severity": "high",
+            }
+        )
+        score -= 25
+    elif int(check_signals.get("pending_checks") or 0) > 0:
+        flags.append(
+            {
+                "code": "pending_ci_checks",
+                "message": "CI or status checks are still pending for this commit.",
+                "severity": "low",
+            }
+        )
+        score -= 6
+
     return max(score, 0), flags
 
 
@@ -1381,7 +1765,218 @@ def evaluate_pull_request_quality(profile, pull_request_item):
         )
         score -= 6
 
+    review_signals = ((pull_request_item.get("metadata") or {}).get("review_signals") or {})
+    approved_reviews = int(review_signals.get("approved_reviews") or 0)
+    change_requests = int(review_signals.get("change_requests") or 0)
+    if pull_request_item.get("is_merged") and approved_reviews == 0:
+        flags.append(
+            {
+                "code": "missing_review_approval",
+                "message": "Merged pull request does not show an approval review yet.",
+                "severity": "medium",
+            }
+        )
+        score -= 12
+    if change_requests > 0:
+        flags.append(
+            {
+                "code": "changes_requested",
+                "message": "Review history includes requested changes that should be checked carefully.",
+                "severity": "medium",
+            }
+        )
+        score -= 10
+
+    check_signals = ((pull_request_item.get("metadata") or {}).get("check_signals") or {})
+    if int(check_signals.get("failed_checks") or 0) > 0:
+        flags.append(
+            {
+                "code": "failed_pr_checks",
+                "message": "Pull request head commit has failing CI or status checks.",
+                "severity": "high",
+            }
+        )
+        score -= 20
+    elif int(check_signals.get("pending_checks") or 0) > 0:
+        flags.append(
+            {
+                "code": "pending_pr_checks",
+                "message": "Pull request checks are still pending.",
+                "severity": "low",
+            }
+        )
+        score -= 5
+
     return max(score, 0), flags
+
+
+def fetch_commit_check_signals(repository, commit_sha):
+    if not commit_sha:
+        return {}
+
+    signals = {
+        "status_state": "",
+        "status_failed": 0,
+        "status_pending": 0,
+        "check_runs_total": 0,
+        "failed_check_runs": 0,
+        "pending_check_runs": 0,
+        "workflow_runs_total": 0,
+        "failed_workflow_runs": 0,
+        "pending_workflow_runs": 0,
+        "failed_checks": 0,
+        "pending_checks": 0,
+    }
+
+    try:
+        status_payload = github_api_request(
+            repository.account.access_token,
+            f"/repos/{repository.full_name}/commits/{commit_sha}/status",
+        )
+    except ValueError:
+        status_payload = {}
+    state = (status_payload.get("state") or "").strip().lower()
+    statuses = status_payload.get("statuses") or []
+    signals["status_state"] = state
+    signals["status_failed"] = sum(
+        1 for item in statuses if (item.get("state") or "").strip().lower() == "failure"
+    )
+    signals["status_pending"] = sum(
+        1
+        for item in statuses
+        if (item.get("state") or "").strip().lower() in {"pending", "expected"}
+    )
+
+    try:
+        check_payload = github_api_request(
+            repository.account.access_token,
+            f"/repos/{repository.full_name}/commits/{commit_sha}/check-runs",
+        )
+    except ValueError:
+        check_payload = {}
+    check_runs = check_payload.get("check_runs") or []
+    signals["check_runs_total"] = len(check_runs)
+    signals["failed_check_runs"] = sum(
+        1
+        for item in check_runs
+        if (item.get("conclusion") or "").strip().lower() in {"failure", "cancelled", "timed_out", "startup_failure"}
+    )
+    signals["pending_check_runs"] = sum(
+        1
+        for item in check_runs
+        if (item.get("status") or "").strip().lower() in {"queued", "in_progress", "waiting", "requested", "pending"}
+        or (
+            not (item.get("conclusion") or "").strip()
+            and (item.get("status") or "").strip().lower() != "completed"
+        )
+    )
+
+    try:
+        workflow_payload = github_api_request(
+            repository.account.access_token,
+            f"/repos/{repository.full_name}/actions/runs",
+            params={"head_sha": commit_sha, "per_page": 10},
+        )
+    except ValueError:
+        workflow_payload = {}
+    workflow_runs = workflow_payload.get("workflow_runs") or []
+    signals["workflow_runs_total"] = len(workflow_runs)
+    signals["failed_workflow_runs"] = sum(
+        1
+        for item in workflow_runs
+        if (item.get("conclusion") or "").strip().lower() in {"failure", "cancelled", "timed_out", "startup_failure"}
+    )
+    signals["pending_workflow_runs"] = sum(
+        1
+        for item in workflow_runs
+        if (item.get("status") or "").strip().lower() in {"queued", "in_progress", "waiting", "requested", "pending"}
+        or (
+            not (item.get("conclusion") or "").strip()
+            and (item.get("status") or "").strip().lower() != "completed"
+        )
+    )
+
+    signals["failed_checks"] = (
+        signals["status_failed"]
+        + signals["failed_check_runs"]
+        + signals["failed_workflow_runs"]
+    )
+    signals["pending_checks"] = (
+        signals["status_pending"]
+        + signals["pending_check_runs"]
+        + signals["pending_workflow_runs"]
+    )
+    return signals
+
+
+def fetch_pull_request_review_signals(repository, pull_number):
+    if not pull_number:
+        return {}
+
+    try:
+        reviews = github_api_request(
+            repository.account.access_token,
+            f"/repos/{repository.full_name}/pulls/{pull_number}/reviews",
+        )
+    except ValueError:
+        reviews = []
+
+    normalized_states = [
+        (item.get("state") or "").strip().upper()
+        for item in reviews
+    ]
+    return {
+        "total_reviews": len(reviews),
+        "approved_reviews": sum(1 for state in normalized_states if state == "APPROVED"),
+        "change_requests": sum(1 for state in normalized_states if state == "CHANGES_REQUESTED"),
+        "comment_reviews": sum(1 for state in normalized_states if state == "COMMENTED"),
+        "dismissed_reviews": sum(1 for state in normalized_states if state == "DISMISSED"),
+    }
+
+
+def summarize_repository_activity_health(*, commit_records, pull_request_records):
+    recent_commits = sorted(
+        commit_records,
+        key=lambda item: item.committed_at or item.created_at,
+        reverse=True,
+    )[:10]
+    recent_pull_requests = sorted(
+        pull_request_records,
+        key=lambda item: item.opened_at or item.last_synced_at,
+        reverse=True,
+    )[:10]
+    failing_checks = 0
+    pending_checks = 0
+    review_gaps = 0
+
+    for commit in recent_commits:
+        check_signals = ((commit.metadata or {}).get("check_signals") or {})
+        failing_checks += int(check_signals.get("failed_checks") or 0)
+        pending_checks += int(check_signals.get("pending_checks") or 0)
+
+    for pull_request in recent_pull_requests:
+        review_signals = ((pull_request.metadata or {}).get("review_signals") or {})
+        check_signals = ((pull_request.metadata or {}).get("check_signals") or {})
+        failing_checks += int(check_signals.get("failed_checks") or 0)
+        pending_checks += int(check_signals.get("pending_checks") or 0)
+        if pull_request.is_merged and int(review_signals.get("approved_reviews") or 0) == 0:
+            review_gaps += 1
+        if int(review_signals.get("change_requests") or 0) > 0:
+            review_gaps += 1
+
+    status_value = "healthy"
+    if failing_checks > 0:
+        status_value = "attention"
+    elif pending_checks > 0 or review_gaps > 0:
+        status_value = "watch"
+
+    return {
+        "status": status_value,
+        "failing_checks": failing_checks,
+        "pending_checks": pending_checks,
+        "review_gaps": review_gaps,
+        "last_activity_sync_at": timezone.now().isoformat(),
+    }
 
 
 def build_developer_activity_summary(commit_records, pull_request_records):

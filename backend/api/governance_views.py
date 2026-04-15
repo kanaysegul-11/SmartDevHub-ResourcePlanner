@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .governance_serializers import (
+    AIRemediationPrepareSerializer,
     AICodeRequestSerializer,
     AIPromptPrepareSerializer,
     AIValidateSerializer,
@@ -28,14 +29,18 @@ from .governance_services import (
     connect_github_account,
     connect_github_account_from_oauth_code,
     ensure_default_standard_profile,
+    finalize_stale_governance_runs,
     get_user_github_logins,
     is_governance_admin,
+    prepare_ai_remediation_bundle,
     prepare_ai_prompt_bundle,
     process_github_webhook_event,
+    queue_due_polling_refreshes,
     scan_github_repository,
     serialize_evaluation,
     sync_repository_activity,
     sync_github_repositories,
+    queue_governance_login_sync,
     validate_ai_output,
     verify_github_webhook_signature,
 )
@@ -107,7 +112,10 @@ class GithubAccountViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = GithubAccount.objects.select_related("user")
-        if is_governance_admin(self.request.user):
+        if (
+            is_governance_admin(self.request.user)
+            and self.request.query_params.get("scope") == "team"
+        ):
             return queryset
         return queryset.filter(user=self.request.user)
 
@@ -236,13 +244,20 @@ class GithubRepositoryViewSet(viewsets.ModelViewSet):
     ordering_fields = ["name", "latest_scan_at", "latest_score", "last_pushed_at"]
 
     def get_queryset(self):
+        finalize_stale_governance_runs()
         queryset = GithubRepository.objects.select_related(
             "account",
             "standard_profile",
         )
+        visible_queryset = queryset
         if is_governance_admin(self.request.user):
-            return queryset
-        return queryset.filter(account__user=self.request.user)
+            repository_list = list(visible_queryset.filter(is_active=True)[:25])
+            queue_due_polling_refreshes(repositories=repository_list)
+            return visible_queryset
+        visible_queryset = queryset.filter(account__user=self.request.user)
+        repository_list = list(visible_queryset.filter(is_active=True)[:25])
+        queue_due_polling_refreshes(repositories=repository_list)
+        return visible_queryset
 
     @action(detail=True, methods=["post"], url_path="scan")
     def scan(self, request, pk=None):
@@ -325,6 +340,7 @@ class RepositoryScanViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ["created_at", "score", "completed_at"]
 
     def get_queryset(self):
+        finalize_stale_governance_runs()
         queryset = RepositoryScan.objects.select_related(
             "repository",
             "standard_profile",
@@ -480,3 +496,40 @@ class AICodeRequestViewSet(viewsets.ReadOnlyModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=False, methods=["post"], url_path="prepare-remediation")
+    def prepare_remediation(self, request):
+        serializer = AIRemediationPrepareSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        repository = self._get_accessible_repository(
+            serializer.validated_data.get("repository_id")
+        )
+        if not repository:
+            return Response(
+                {"detail": "Repository could not be found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        scan = None
+        scan_id = serializer.validated_data.get("scan_id")
+        if scan_id:
+            scan_queryset = repository.scans.all()
+            if not is_governance_admin(self.request.user):
+                scan_queryset = scan_queryset.filter(repository__account__user=self.request.user)
+            scan = scan_queryset.filter(id=scan_id).first()
+            if not scan:
+                return Response(
+                    {"detail": "Scan could not be found for remediation."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        try:
+            bundle = prepare_ai_remediation_bundle(
+                repository=repository,
+                scan=scan,
+                violation_ids=serializer.validated_data.get("violation_ids") or [],
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(bundle, status=status.HTTP_200_OK)

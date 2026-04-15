@@ -52,6 +52,7 @@ from urllib.parse import urlencode
 from .runtime_i18n import format_team_member_count, runtime_text
 from .software_asset_live_csv import export_live_license_csvs_for_users
 from .text_utils import normalize_legacy_turkish_text
+from .governance_services import queue_governance_login_sync
 import json
 
 SUPPORTED_LANGUAGES = {"en", "tr", "de", "fr", "es", "ar"}
@@ -1994,12 +1995,14 @@ class CustomLoginView(ObtainAuthToken):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
         token, created = Token.objects.get_or_create(user=user)
+        governance_sync = queue_governance_login_sync(user=user)
         return Response({
             'token': token.key,
             'user_id': user.pk,
             'username': user.username,
             'is_admin': user.is_staff or user.is_superuser,
             'language': getattr(getattr(user, 'profile', None), 'language', 'en'),
+            'governance_sync': governance_sync,
         })
 
 

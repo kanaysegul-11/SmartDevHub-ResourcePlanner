@@ -451,3 +451,13 @@ class AIValidateSerializer(serializers.Serializer):
         child=serializers.DictField(),
         allow_empty=False,
     )
+
+
+class AIRemediationPrepareSerializer(serializers.Serializer):
+    repository_id = serializers.IntegerField()
+    scan_id = serializers.IntegerField(required=False)
+    violation_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True,
+    )

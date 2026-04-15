@@ -9,7 +9,17 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .governance_services import ensure_default_standard_profile, scan_github_repository
+from .governance_services import (
+    evaluate_commit_quality,
+    evaluate_pull_request_quality,
+    ensure_default_standard_profile,
+    ensure_repository_webhook,
+    finalize_stale_governance_runs,
+    prepare_ai_remediation_bundle,
+    queue_due_polling_refreshes,
+    scan_github_repository,
+    sync_github_repositories,
+)
 from .models import (
     AICodeRequest,
     CodeViolation,
@@ -72,6 +82,46 @@ class GovernanceApiTests(APITestCase):
         self.assertEqual(response.data["github_username"], "member-github")
         self.assertEqual(response.data["masked_token"], "***1234")
         self.assertNotIn("access_token", response.data)
+
+    def test_admin_github_account_list_defaults_to_own_accounts_only(self):
+        admin_user = User.objects.create_user(
+            username="governance-admin",
+            password="strong-pass-123",
+            email="governance-admin@example.com",
+            is_staff=True,
+        )
+        GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        self.client.force_authenticate(user=admin_user)
+
+        response = self.client.get("/api/github-accounts/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+    @patch("api.views.queue_governance_login_sync")
+    def test_login_response_queues_governance_sync(self, mock_queue_governance_login_sync):
+        mock_queue_governance_login_sync.return_value = {
+            "status": "queued",
+            "account_count": 0,
+        }
+
+        response = self.client.post(
+            "/api/login/",
+            {
+                "username": "member",
+                "password": "strong-pass-123",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["governance_sync"]["status"], "queued")
+        mock_queue_governance_login_sync.assert_called_once()
 
     def test_ai_validate_endpoint_creates_request_and_flags_var_usage(self):
         profile = ensure_default_standard_profile(created_by=self.user)
@@ -648,3 +698,314 @@ class GovernanceApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(response.data["status"], "accepted")
         mock_process_event.assert_called_once()
+
+    @override_settings(
+        GITHUB_WEBHOOK_SECRET="webhook-secret",
+        BACKEND_PUBLIC_URL="http://localhost:8000",
+    )
+    def test_repository_webhook_uses_polling_fallback_for_local_backend_url(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        repository = GithubRepository.objects.create(
+            account=account,
+            standard_profile=profile,
+            name="smart-hub",
+            full_name="member-github/smart-hub",
+            owner_login="member-github",
+            default_branch="main",
+            primary_language="JavaScript",
+        )
+
+        summary = ensure_repository_webhook(repository)
+        repository.refresh_from_db()
+
+        self.assertEqual(summary["status"], "polling_fallback")
+        self.assertEqual(repository.metadata["webhook"]["status"], "polling_fallback")
+        self.assertEqual(
+            repository.metadata["webhook"]["reason"],
+            "public_url_required",
+        )
+
+    @patch("api.governance_services.queue_repository_auto_sync")
+    @patch("api.governance_services.ensure_repository_webhook")
+    @patch("api.governance_services.github_api_request")
+    def test_sync_github_repositories_queues_initial_auto_scan(
+        self,
+        mock_github_api_request,
+        mock_ensure_repository_webhook,
+        mock_queue_repository_auto_sync,
+    ):
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        mock_github_api_request.return_value = [
+            {
+                "id": 101,
+                "name": "smart-hub",
+                "full_name": "member-github/smart-hub",
+                "default_branch": "main",
+                "language": "JavaScript",
+                "html_url": "https://github.com/member-github/smart-hub",
+                "description": "Repository for governance automation",
+                "homepage": "",
+                "visibility": "public",
+                "private": False,
+                "fork": False,
+                "owner": {"login": "member-github", "type": "User"},
+                "open_issues_count": 0,
+                "watchers_count": 1,
+                "forks_count": 0,
+                "pushed_at": "2026-04-15T10:00:00Z",
+            }
+        ]
+        mock_ensure_repository_webhook.return_value = {"status": "polling_fallback"}
+
+        synced_count = sync_github_repositories(account=account)
+
+        self.assertEqual(synced_count, 1)
+        mock_queue_repository_auto_sync.assert_called_once()
+        _, queue_kwargs = mock_queue_repository_auto_sync.call_args
+        self.assertEqual(queue_kwargs["event_name"], "repository_sync")
+        self.assertEqual(
+            queue_kwargs["payload"]["reason"],
+            "initial_or_stale_scan",
+        )
+
+    def test_finalize_stale_governance_runs_marks_old_running_scan_as_failed(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        repository = GithubRepository.objects.create(
+            account=account,
+            standard_profile=profile,
+            name="smart-hub",
+            full_name="member-github/smart-hub",
+            owner_login="member-github",
+            default_branch="main",
+            primary_language="Python",
+        )
+        scan = RepositoryScan.objects.create(
+            repository=repository,
+            standard_profile=profile,
+            triggered_by=self.user,
+            scan_type="manual",
+            status="running",
+            started_at=timezone.now() - timezone.timedelta(minutes=20),
+            branch_name="main",
+        )
+
+        result = finalize_stale_governance_runs(scan_timeout_minutes=10)
+        scan.refresh_from_db()
+
+        self.assertEqual(result["stale_scan_count"], 1)
+        self.assertEqual(scan.status, "failed")
+        self.assertEqual(scan.summary["reason"], "stale_running_scan")
+        self.assertIsNotNone(scan.completed_at)
+
+    @patch("api.governance_services.queue_repository_auto_sync")
+    def test_queue_due_polling_refreshes_queues_stale_polling_repository(self, mock_queue_repository_auto_sync):
+        profile = ensure_default_standard_profile(created_by=self.user)
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        repository = GithubRepository.objects.create(
+            account=account,
+            standard_profile=profile,
+            name="smart-hub",
+            full_name="member-github/smart-hub",
+            owner_login="member-github",
+            default_branch="main",
+            primary_language="Python",
+            metadata={
+                "webhook": {
+                    "status": "polling_fallback",
+                },
+                "auto_sync": {
+                    "status": "completed",
+                    "last_run_at": (
+                        timezone.now() - timezone.timedelta(minutes=40)
+                    ).isoformat(),
+                },
+            },
+            latest_scan_at=timezone.now() - timezone.timedelta(minutes=30),
+            last_pushed_at=timezone.now() - timezone.timedelta(minutes=10),
+        )
+        mock_queue_repository_auto_sync.return_value = {"status": "queued"}
+
+        jobs = queue_due_polling_refreshes(repositories=[repository])
+
+        self.assertEqual(len(jobs), 1)
+        mock_queue_repository_auto_sync.assert_called_once()
+
+    def test_commit_quality_uses_check_signals(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+
+        score, flags = evaluate_commit_quality(
+            profile,
+            {
+                "message_title": "feat: add monitoring",
+                "additions": 10,
+                "deletions": 2,
+                "changed_files_count": 1,
+                "metadata": {
+                    "verification": False,
+                    "check_signals": {
+                        "failed_checks": 2,
+                        "pending_checks": 0,
+                    },
+                },
+            },
+        )
+
+        self.assertLess(score, 100)
+        self.assertIn("unverified_signature", {flag["code"] for flag in flags})
+        self.assertIn("failed_ci_checks", {flag["code"] for flag in flags})
+
+    def test_pull_request_quality_uses_reviews_and_checks(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+
+        score, flags = evaluate_pull_request_quality(
+            profile,
+            {
+                "body": "Short body",
+                "additions": 300,
+                "deletions": 20,
+                "changed_files_count": 5,
+                "review_comments_count": 0,
+                "is_draft": False,
+                "is_merged": True,
+                "metadata": {
+                    "review_signals": {
+                        "approved_reviews": 0,
+                        "change_requests": 1,
+                    },
+                    "check_signals": {
+                        "failed_checks": 1,
+                        "pending_checks": 0,
+                    },
+                },
+            },
+        )
+
+        self.assertLess(score, 100)
+        codes = {flag["code"] for flag in flags}
+        self.assertIn("missing_review_approval", codes)
+        self.assertIn("changes_requested", codes)
+        self.assertIn("failed_pr_checks", codes)
+
+    def test_prepare_ai_remediation_bundle_returns_latest_scan_scope(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        repository = GithubRepository.objects.create(
+            account=account,
+            standard_profile=profile,
+            name="smart-hub",
+            full_name="member-github/smart-hub",
+            owner_login="member-github",
+            default_branch="main",
+            primary_language="Python",
+        )
+        scan = RepositoryScan.objects.create(
+            repository=repository,
+            standard_profile=profile,
+            triggered_by=self.user,
+            scan_type="manual",
+            status="completed",
+            score=84,
+            summary={"score": 84},
+            file_count=4,
+            violation_count=1,
+            developer_count=1,
+        )
+        rule = profile.rules.first()
+        violation = CodeViolation.objects.create(
+            scan=scan,
+            repository=repository,
+            rule=rule,
+            severity="medium",
+            code="naming_issue",
+            title="Naming issue",
+            file_path="src/service.py",
+            line_number=12,
+            message="Function name should follow the team convention.",
+            author_login="member-github",
+            commit_sha="abc123",
+        )
+
+        bundle = prepare_ai_remediation_bundle(repository=repository)
+
+        self.assertEqual(bundle["scan_id"], scan.id)
+        self.assertEqual(bundle["remediation_scope"][0]["violation_id"], violation.id)
+        self.assertIn("src/service.py", bundle["affected_paths"])
+        self.assertTrue(bundle["suggested_branch_name"].startswith("ai/remediation-"))
+
+    def test_prepare_remediation_endpoint_returns_bundle(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        repository = GithubRepository.objects.create(
+            account=account,
+            standard_profile=profile,
+            name="smart-hub",
+            full_name="member-github/smart-hub",
+            owner_login="member-github",
+            default_branch="main",
+            primary_language="Python",
+        )
+        scan = RepositoryScan.objects.create(
+            repository=repository,
+            standard_profile=profile,
+            triggered_by=self.user,
+            scan_type="manual",
+            status="completed",
+            score=82,
+            summary={"score": 82},
+            file_count=5,
+            violation_count=1,
+            developer_count=1,
+        )
+        CodeViolation.objects.create(
+            scan=scan,
+            repository=repository,
+            rule=profile.rules.first(),
+            severity="medium",
+            code="tests_required",
+            title="Tests missing",
+            file_path="README.md",
+            line_number=None,
+            message="Repository should expose tests for behavioral changes.",
+        )
+
+        response = self.client.post(
+            "/api/ai-code-requests/prepare-remediation/",
+            {"repository_id": repository.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["scan_id"], scan.id)
+        self.assertEqual(len(response.data["remediation_scope"]), 1)
