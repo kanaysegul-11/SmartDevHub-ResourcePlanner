@@ -8,6 +8,7 @@ from .governance_views import (
     GithubCommitActivityViewSet,
     GithubPullRequestActivityViewSet,
     GithubRepositoryViewSet,
+    GithubWebhookReceiveView,
     RepositoryScanViewSet,
     StandardProfileViewSet,
     StandardRuleViewSet,
@@ -39,6 +40,7 @@ router.register(r'ai-code-requests', AICodeRequestViewSet, basename='ai-code-req
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('github-webhooks/receive/', GithubWebhookReceiveView.as_view(), name='github-webhook-receive'),
     path('status/', EmployeeStatusViewSet.as_view({'get': 'list'}), name='status-list'),
     path('login/', CustomLoginView.as_view(), name='login'),
     path('register/', register_user, name='register'),

@@ -13,9 +13,41 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import os
 from corsheaders.defaults import default_headers
+from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+
+# Simple .env loader (no external deps) - loads key=value pairs from a .env
+# placed in the project root (BASE_DIR). Lines starting with '#' are ignored.
+def _load_local_dotenv(base_dir):
+    env_path = base_dir / '.env'
+    if not env_path.exists():
+        return
+    try:
+        with env_path.open('r', encoding='utf-8') as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line or line.startswith('#'):
+                    continue
+                if '=' not in line:
+                    continue
+                key, val = line.split('=', 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                # Do not overwrite existing env vars
+                if key and key not in os.environ:
+                    os.environ[key] = val
+    except Exception:
+        # Silently ignore parsing problems - fallback to environment
+        pass
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
+
+# Load local .env early so settings that follow can use those values.
+_load_local_dotenv(BASE_DIR)
 
 
 # Quick-start development settings - unsuitable for production
@@ -27,7 +59,14 @@ SECRET_KEY = 'django-insecure-c#+m^n@rriq%%*@+57hbukt7)v#esfdz472#dpepr5ycy7*-d0
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,[::1]')
+    .split(',')
+    if host.strip()
+]
+if DEBUG and '*' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('*')
 
 
 # Application definition
@@ -151,3 +190,14 @@ REST_FRAMEWORK = {
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+FRONTEND_APP_URL = os.environ.get('FRONTEND_APP_URL', 'http://localhost:5173').rstrip('/')
+BACKEND_PUBLIC_URL = os.environ.get('BACKEND_PUBLIC_URL', 'http://localhost:8000').rstrip('/')
+GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID', '')
+GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET', '')
+GITHUB_OAUTH_SCOPES = os.environ.get(
+    'GITHUB_OAUTH_SCOPES',
+    'read:user repo read:org admin:repo_hook',
+)
+GITHUB_OAUTH_REDIRECT_URI = os.environ.get('GITHUB_OAUTH_REDIRECT_URI', '').strip()
+GITHUB_WEBHOOK_SECRET = os.environ.get('GITHUB_WEBHOOK_SECRET', '')
+GITHUB_WEBHOOK_TARGET_URL = os.environ.get('GITHUB_WEBHOOK_TARGET_URL', '').strip()

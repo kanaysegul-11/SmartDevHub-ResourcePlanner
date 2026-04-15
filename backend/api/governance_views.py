@@ -1,7 +1,10 @@
+import json
+
 from django.db.models import Avg, Count, Q
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .governance_serializers import (
@@ -9,6 +12,7 @@ from .governance_serializers import (
     AIPromptPrepareSerializer,
     AIValidateSerializer,
     GithubAccountConnectSerializer,
+    GithubOAuthConnectSerializer,
     GithubAccountSerializer,
     GithubCommitActivitySerializer,
     GithubPullRequestActivitySerializer,
@@ -19,16 +23,21 @@ from .governance_serializers import (
 )
 from .governance_services import (
     build_developer_governance_overview,
+    build_github_integration_status,
+    build_github_oauth_authorize_url,
     connect_github_account,
+    connect_github_account_from_oauth_code,
     ensure_default_standard_profile,
     get_user_github_logins,
     is_governance_admin,
     prepare_ai_prompt_bundle,
+    process_github_webhook_event,
     scan_github_repository,
     serialize_evaluation,
     sync_repository_activity,
     sync_github_repositories,
     validate_ai_output,
+    verify_github_webhook_signature,
 )
 from .models import (
     AICodeRequest,
@@ -118,6 +127,45 @@ class GithubAccountViewSet(viewsets.ModelViewSet):
         )
         return Response(serializer.data, status=response_status)
 
+    @action(detail=False, methods=["get"], url_path="integration-status")
+    def integration_status(self, request):
+        return Response(build_github_integration_status(), status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="oauth-authorize")
+    def oauth_authorize(self, request):
+        try:
+            payload = build_github_oauth_authorize_url(user=request.user)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="oauth-connect")
+    def oauth_connect(self, request):
+        serializer = GithubOAuthConnectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        existing_usernames = set(
+            self.get_queryset().values_list("github_username", flat=True)
+        )
+        try:
+            account = connect_github_account_from_oauth_code(
+                user=request.user,
+                code=serializer.validated_data["code"],
+                state=serializer.validated_data["state"],
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        response_status = (
+            status.HTTP_200_OK
+            if account.github_username in existing_usernames
+            else status.HTTP_201_CREATED
+        )
+        return Response(
+            self.get_serializer(account).data,
+            status=response_status,
+        )
+
     @action(detail=True, methods=["post"], url_path="sync-repositories")
     def sync_repositories(self, request, pk=None):
         account = self.get_object()
@@ -130,6 +178,52 @@ class GithubAccountViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class GithubWebhookReceiveView(APIView):
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        signature_header = request.headers.get("X-Hub-Signature-256", "")
+        event_name = request.headers.get("X-GitHub-Event", "")
+        raw_body = request.body or b"{}"
+
+        try:
+            verify_github_webhook_signature(
+                raw_body=raw_body,
+                signature_header=signature_header,
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            payload = json.loads(raw_body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            return Response(
+                {"detail": "Invalid GitHub webhook payload."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if event_name == "ping":
+            return Response(
+                {
+                    "status": "ok",
+                    "detail": "GitHub webhook handshake received.",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        result = process_github_webhook_event(
+            event_name=event_name,
+            payload=payload,
+        )
+        response_status = (
+            status.HTTP_202_ACCEPTED
+            if result.get("status") == "accepted"
+            else status.HTTP_200_OK
+        )
+        return Response(result, status=response_status)
 
 
 class GithubRepositoryViewSet(viewsets.ModelViewSet):

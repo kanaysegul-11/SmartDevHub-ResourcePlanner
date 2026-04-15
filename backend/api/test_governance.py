@@ -1,6 +1,10 @@
+import hashlib
+import hmac
+import json
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -575,3 +579,72 @@ class GovernanceApiTests(APITestCase):
         self.assertIn("member-github", visible_authors)
         self.assertIn("", visible_authors)
         self.assertNotIn("teammate-github", visible_authors)
+
+    @override_settings(
+        GITHUB_CLIENT_ID="client-id",
+        GITHUB_CLIENT_SECRET="client-secret",
+        FRONTEND_APP_URL="http://localhost:5173",
+    )
+    def test_github_oauth_authorize_endpoint_returns_signed_redirect_url(self):
+        response = self.client.get("/api/github-accounts/oauth-authorize/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("authorize_url", response.data)
+        self.assertIn("client_id=client-id", response.data["authorize_url"])
+        self.assertEqual(
+            response.data["redirect_uri"],
+            "http://localhost:5173/github-governance",
+        )
+        self.assertTrue(response.data["state"])
+
+    @patch("api.governance_views.connect_github_account_from_oauth_code")
+    def test_github_oauth_connect_endpoint_returns_account_payload(self, mock_oauth_connect):
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        mock_oauth_connect.return_value = account
+
+        response = self.client.post(
+            "/api/github-accounts/oauth-connect/",
+            {"code": "oauth-code", "state": "signed-state"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["github_username"], "member-github")
+        self.assertEqual(response.data["masked_token"], "***1234")
+        self.assertNotIn("access_token", response.data)
+
+    @override_settings(GITHUB_WEBHOOK_SECRET="webhook-secret")
+    @patch("api.governance_views.process_github_webhook_event")
+    def test_github_webhook_endpoint_accepts_verified_events(self, mock_process_event):
+        mock_process_event.return_value = {
+            "status": "accepted",
+            "repository": "member-github/smart-hub",
+            "event_name": "push",
+        }
+        payload = {
+            "ref": "refs/heads/main",
+            "repository": {"full_name": "member-github/smart-hub"},
+        }
+        raw_payload = json.dumps(payload).encode("utf-8")
+        signature = "sha256=" + hmac.new(
+            b"webhook-secret",
+            raw_payload,
+            hashlib.sha256,
+        ).hexdigest()
+
+        response = self.client.post(
+            "/api/github-webhooks/receive/",
+            data=raw_payload,
+            content_type="application/json",
+            HTTP_X_GITHUB_EVENT="push",
+            HTTP_X_HUB_SIGNATURE_256=signature,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(response.data["status"], "accepted")
+        mock_process_event.assert_called_once()

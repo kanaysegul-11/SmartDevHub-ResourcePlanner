@@ -1,13 +1,21 @@
 import base64
+import hashlib
+import hmac
 import json
 import re
+import secrets
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from concurrent.futures import ThreadPoolExecutor
 from collections import Counter, defaultdict
 from decimal import Decimal
 from urllib import error as urllib_error
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
-
-from django.db import transaction
+import requests
+from django.conf import settings
+from django.core import signing
+from django.db import close_old_connections, transaction
 from django.utils import timezone
 
 from .models import (
@@ -26,6 +34,9 @@ from .models import (
 
 
 GITHUB_API_ROOT = "https://api.github.com"
+GITHUB_OAUTH_AUTHORIZE_ROOT = "https://github.com/login/oauth/authorize"
+GITHUB_OAUTH_TOKEN_ROOT = "https://github.com/login/oauth/access_token"
+GITHUB_WEBHOOK_EVENTS = ("push", "pull_request")
 TEXT_FILE_EXTENSIONS = {
     ".py",
     ".js",
@@ -41,6 +52,10 @@ TEXT_FILE_EXTENSIONS = {
     ".java",
     ".cs",
 }
+AUTO_SYNC_EXECUTOR = ThreadPoolExecutor(
+    max_workers=2,
+    thread_name_prefix="governance-sync",
+)
 MAX_REPOSITORY_FILES = 80
 MAX_BLOB_SIZE = 40000
 SEVERITY_PENALTIES = {
@@ -54,6 +69,23 @@ DEFAULT_COMMIT_MESSAGE_PATTERN = (
     r"(\([a-z0-9_\-/]+\))?: .{3,}$"
 )
 
+def github_session():
+    session = requests.Session()
+
+    retries = Retry(
+        total=5,
+        connect=5,
+        read=5,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    )
+
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
+    return session
 
 def is_governance_admin(user):
     return bool(
@@ -81,15 +113,172 @@ def _normalize_github_login(value):
     return (value or "").strip().lower()
 
 
-def github_api_request(access_token, path, *, params=None):
-    query_string = f"?{urllib_parse.urlencode(params)}" if params else ""
+def github_api_request(
+    access_token,
+    path,
+    *,
+    params=None,
+    method="GET",
+    data=None,
+    extra_headers=None,
+):
+    url = f"{GITHUB_API_ROOT}{path}"
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "SmartDevHub-ResourcePlanner",
+    }
+
+    if extra_headers:
+        headers.update(extra_headers)
+
+    try:
+        session = github_session()
+        response = session.request(
+            method=method,
+            url=url,
+            headers=headers,
+            params=params,
+            json=data,
+            timeout=20,
+        )
+
+        response.raise_for_status()
+
+    except requests.exceptions.HTTPError as exc:
+        try:
+            error_payload = response.json()
+            error_message = error_payload.get("message") or str(exc)
+        except Exception:
+            error_message = str(exc)
+
+        raise ValueError(f"GitHub API error: {error_message}") from exc
+
+    except requests.exceptions.RequestException as exc:
+        raise ValueError("GitHub API could not be reached.") from exc
+
+    if not response.text:
+        return {}
+
+    return response.json()
+
+def _frontend_app_url():
+    return (getattr(settings, "FRONTEND_APP_URL", "") or "http://localhost:5173").rstrip(
+        "/"
+    )
+
+
+def _backend_public_url():
+    return (getattr(settings, "BACKEND_PUBLIC_URL", "") or "http://localhost:8000").rstrip(
+        "/"
+    )
+
+
+def get_github_oauth_redirect_uri():
+    configured_redirect_uri = (getattr(settings, "GITHUB_OAUTH_REDIRECT_URI", "") or "").strip()
+    if configured_redirect_uri:
+        return configured_redirect_uri
+    return f"{_frontend_app_url()}/github-governance"
+
+
+def get_github_webhook_callback_url():
+    configured_target_url = (getattr(settings, "GITHUB_WEBHOOK_TARGET_URL", "") or "").strip()
+    if configured_target_url:
+        return configured_target_url
+    return f"{_backend_public_url()}/api/github-webhooks/receive/"
+
+
+def _github_oauth_scope():
+    return (
+        getattr(settings, "GITHUB_OAUTH_SCOPES", "")
+        or "read:user repo read:org admin:repo_hook"
+    ).strip()
+
+
+def _is_local_url(url):
+    normalized_url = (url or "").lower()
+    return "localhost" in normalized_url or "127.0.0.1" in normalized_url
+
+
+def build_github_integration_status():
+    oauth_enabled = bool(
+        getattr(settings, "GITHUB_CLIENT_ID", "") and getattr(settings, "GITHUB_CLIENT_SECRET", "")
+    )
+    webhook_secret_configured = bool(getattr(settings, "GITHUB_WEBHOOK_SECRET", ""))
+    webhook_target_url = get_github_webhook_callback_url()
+
+    return {
+        "oauth_enabled": oauth_enabled,
+        "oauth_redirect_uri": get_github_oauth_redirect_uri(),
+        "oauth_scope": _github_oauth_scope(),
+        "webhook_ready": webhook_secret_configured and bool(webhook_target_url),
+        "webhook_secret_configured": webhook_secret_configured,
+        "webhook_target_url": webhook_target_url,
+        "webhook_events": list(GITHUB_WEBHOOK_EVENTS),
+        "webhook_requires_public_url": _is_local_url(webhook_target_url),
+        "auto_sync_mode": "background_thread",
+        "personal_access_token_fallback": True,
+    }
+
+
+def build_github_oauth_authorize_url(*, user):
+    if not getattr(settings, "GITHUB_CLIENT_ID", "") or not getattr(
+        settings,
+        "GITHUB_CLIENT_SECRET",
+        "",
+    ):
+        raise ValueError("GitHub OAuth is not configured yet.")
+
+    state = signing.dumps(
+        {
+            "user_id": user.id,
+            "nonce": secrets.token_urlsafe(16),
+        },
+        salt="github-oauth-link",
+    )
+    query_string = urllib_parse.urlencode(
+        {
+            "client_id": settings.GITHUB_CLIENT_ID,
+            "redirect_uri": get_github_oauth_redirect_uri(),
+            "scope": _github_oauth_scope(),
+            "state": state,
+            "allow_signup": "true",
+        }
+    )
+    return {
+        "authorize_url": f"{GITHUB_OAUTH_AUTHORIZE_ROOT}?{query_string}",
+        "state": state,
+        "redirect_uri": get_github_oauth_redirect_uri(),
+        "scope": _github_oauth_scope(),
+    }
+
+
+def exchange_github_oauth_code_for_token(code):
+    if not getattr(settings, "GITHUB_CLIENT_ID", "") or not getattr(
+        settings,
+        "GITHUB_CLIENT_SECRET",
+        "",
+    ):
+        raise ValueError("GitHub OAuth is not configured yet.")
+
+    request_body = urllib_parse.urlencode(
+        {
+            "client_id": settings.GITHUB_CLIENT_ID,
+            "client_secret": settings.GITHUB_CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": get_github_oauth_redirect_uri(),
+        }
+    ).encode("utf-8")
     request_object = urllib_request.Request(
-        f"{GITHUB_API_ROOT}{path}{query_string}",
+        GITHUB_OAUTH_TOKEN_ROOT,
+        data=request_body,
         headers={
-            "Authorization": f"Bearer {access_token}",
-            "Accept": "application/vnd.github+json",
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
             "User-Agent": "SmartDevHub-ResourcePlanner",
         },
+        method="POST",
     )
 
     try:
@@ -99,16 +288,293 @@ def github_api_request(access_token, path, *, params=None):
         raw_payload = exc.read().decode("utf-8", errors="ignore")
         try:
             error_payload = json.loads(raw_payload)
-            error_message = error_payload.get("message") or raw_payload
+            error_message = error_payload.get("error_description") or error_payload.get("error")
         except json.JSONDecodeError:
             error_message = raw_payload or str(exc)
-        raise ValueError(f"GitHub API error: {error_message}") from exc
+        raise ValueError(error_message or "GitHub OAuth exchange failed.") from exc
     except urllib_error.URLError as exc:
-        raise ValueError("GitHub API could not be reached.") from exc
+        raise ValueError("GitHub OAuth could not be reached.") from exc
 
-    if not payload:
-        return {}
-    return json.loads(payload)
+    token_payload = json.loads(payload or "{}")
+    access_token = token_payload.get("access_token")
+    if not access_token:
+        raise ValueError(
+            token_payload.get("error_description")
+            or token_payload.get("error")
+            or "GitHub OAuth did not return an access token."
+        )
+    return access_token
+
+
+def connect_github_account_from_oauth_code(*, user, code, state):
+    if not code:
+        raise ValueError("GitHub OAuth code is required.")
+
+    try:
+        state_payload = signing.loads(
+            state,
+            salt="github-oauth-link",
+            max_age=900,
+        )
+    except signing.BadSignature as exc:
+        raise ValueError("GitHub OAuth state is invalid or expired.") from exc
+
+    if state_payload.get("user_id") != user.id:
+        raise ValueError("GitHub OAuth state does not belong to the current user.")
+
+    access_token = exchange_github_oauth_code_for_token(code)
+    return connect_github_account(user=user, access_token=access_token)
+
+
+def _update_repository_metadata(repository, **values):
+    metadata = dict(repository.metadata or {})
+    metadata.update(values)
+    repository.metadata = metadata
+    repository.save(update_fields=["metadata", "updated_at"])
+    return metadata
+
+
+def verify_github_webhook_signature(*, raw_body, signature_header):
+    secret = getattr(settings, "GITHUB_WEBHOOK_SECRET", "") or ""
+    if not secret:
+        raise ValueError("GitHub webhook secret is not configured.")
+
+    expected_signature = "sha256=" + hmac.new(
+        secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+    if not signature_header or not hmac.compare_digest(expected_signature, signature_header):
+        raise ValueError("GitHub webhook signature could not be verified.")
+
+
+def ensure_repository_webhook(repository):
+    integration_status = build_github_integration_status()
+    callback_url = integration_status["webhook_target_url"]
+    if not integration_status["webhook_ready"]:
+        _update_repository_metadata(
+            repository,
+            webhook={
+                "status": "skipped",
+                "reason": "webhook_not_configured",
+                "target_url": callback_url,
+                "events": list(GITHUB_WEBHOOK_EVENTS),
+                "checked_at": timezone.now().isoformat(),
+            },
+        )
+        return {
+            "status": "skipped",
+            "reason": "webhook_not_configured",
+            "target_url": callback_url,
+        }
+
+    try:
+        hook_payloads = github_api_request(
+            repository.account.access_token,
+            f"/repos/{repository.full_name}/hooks",
+        )
+        existing_hook = next(
+            (
+                hook
+                for hook in hook_payloads
+                if (hook.get("config") or {}).get("url") == callback_url
+            ),
+            None,
+        )
+        desired_events = list(GITHUB_WEBHOOK_EVENTS)
+
+        if existing_hook:
+            hook_id = existing_hook.get("id")
+            hook_payload = existing_hook
+            current_events = set(existing_hook.get("events") or [])
+            if not existing_hook.get("active") or not set(desired_events).issubset(current_events):
+                hook_payload = github_api_request(
+                    repository.account.access_token,
+                    f"/repos/{repository.full_name}/hooks/{hook_id}",
+                    method="PATCH",
+                    data={
+                        "active": True,
+                        "events": desired_events,
+                        "config": {
+                            "url": callback_url,
+                            "content_type": "json",
+                            "secret": settings.GITHUB_WEBHOOK_SECRET,
+                            "insecure_ssl": "0",
+                        },
+                    },
+                )
+            status_value = "active"
+        else:
+            hook_payload = github_api_request(
+                repository.account.access_token,
+                f"/repos/{repository.full_name}/hooks",
+                method="POST",
+                data={
+                    "name": "web",
+                    "active": True,
+                    "events": desired_events,
+                    "config": {
+                        "url": callback_url,
+                        "content_type": "json",
+                        "secret": settings.GITHUB_WEBHOOK_SECRET,
+                        "insecure_ssl": "0",
+                    },
+                },
+            )
+            status_value = "created"
+
+        webhook_summary = {
+            "status": status_value,
+            "hook_id": hook_payload.get("id"),
+            "target_url": callback_url,
+            "events": hook_payload.get("events") or desired_events,
+            "checked_at": timezone.now().isoformat(),
+        }
+        _update_repository_metadata(repository, webhook=webhook_summary)
+        return webhook_summary
+    except ValueError as exc:
+        webhook_summary = {
+            "status": "failed",
+            "target_url": callback_url,
+            "events": list(GITHUB_WEBHOOK_EVENTS),
+            "checked_at": timezone.now().isoformat(),
+            "error": str(exc),
+        }
+        _update_repository_metadata(repository, webhook=webhook_summary)
+        return webhook_summary
+
+
+def queue_repository_auto_sync(*, repository, event_name="", payload=None):
+    queued_at = timezone.now().isoformat()
+    _update_repository_metadata(
+        repository,
+        auto_sync={
+            "status": "queued",
+            "event_name": event_name,
+            "queued_at": queued_at,
+        },
+    )
+    AUTO_SYNC_EXECUTOR.submit(
+        _run_repository_auto_sync_job,
+        repository_id=repository.id,
+        event_name=event_name,
+        payload=payload or {},
+    )
+    return {
+        "status": "queued",
+        "repository": repository.full_name,
+        "event_name": event_name,
+        "queued_at": queued_at,
+    }
+
+
+def _run_repository_auto_sync_job(*, repository_id, event_name="", payload=None):
+    close_old_connections()
+    payload = payload or {}
+
+    try:
+        repository = GithubRepository.objects.select_related(
+            "account",
+            "standard_profile",
+            "account__user",
+        ).get(id=repository_id, is_active=True)
+    except GithubRepository.DoesNotExist:
+        close_old_connections()
+        return
+
+    try:
+        scan = scan_github_repository(
+            repository=repository,
+            triggered_by=None,
+            scan_type="scheduled",
+        )
+        _update_repository_metadata(
+            repository,
+            auto_sync={
+                "status": "completed",
+                "event_name": event_name,
+                "last_run_at": timezone.now().isoformat(),
+                "latest_scan_id": scan.id,
+                "latest_scan_status": scan.status,
+            },
+        )
+    except Exception as exc:
+        _update_repository_metadata(
+            repository,
+            auto_sync={
+                "status": "failed",
+                "event_name": event_name,
+                "last_run_at": timezone.now().isoformat(),
+                "error": str(exc),
+                "payload_action": payload.get("action") or "",
+            },
+        )
+    finally:
+        close_old_connections()
+
+
+def process_github_webhook_event(*, event_name, payload):
+    repository_payload = payload.get("repository") or {}
+    repository_full_name = repository_payload.get("full_name") or ""
+    if not repository_full_name:
+        return {
+            "status": "ignored",
+            "reason": "repository_missing",
+        }
+
+    repository = GithubRepository.objects.select_related(
+        "account",
+        "standard_profile",
+        "account__user",
+    ).filter(full_name=repository_full_name, is_active=True).first()
+    if not repository:
+        return {
+            "status": "ignored",
+            "reason": "repository_not_connected",
+            "repository": repository_full_name,
+        }
+
+    if event_name == "push":
+        branch_name = (payload.get("ref") or "").split("/")[-1]
+        if branch_name and branch_name != repository.default_branch:
+            return {
+                "status": "ignored",
+                "reason": "branch_not_tracked",
+                "repository": repository.full_name,
+                "branch_name": branch_name,
+            }
+        head_commit = payload.get("head_commit") or {}
+        pushed_at = _parse_github_datetime(head_commit.get("timestamp")) or timezone.now()
+        repository.last_pushed_at = pushed_at
+        repository.save(update_fields=["last_pushed_at", "updated_at"])
+    elif event_name == "pull_request":
+        action = payload.get("action") or ""
+        if action not in {"opened", "edited", "reopened", "synchronize", "closed"}:
+            return {
+                "status": "ignored",
+                "reason": "pull_request_action_not_tracked",
+                "repository": repository.full_name,
+                "action": action,
+            }
+    else:
+        return {
+            "status": "ignored",
+            "reason": "event_not_supported",
+            "repository": repository.full_name,
+            "event_name": event_name,
+        }
+
+    queued_job = queue_repository_auto_sync(
+        repository=repository,
+        event_name=event_name,
+        payload=payload,
+    )
+    return {
+        "status": "accepted",
+        "repository": repository.full_name,
+        "event_name": event_name,
+        "job": queued_job,
+    }
 
 
 def _starter_rule_definitions():
@@ -308,6 +774,10 @@ def sync_github_repositories(*, account):
 
     for repository_payload in repository_payloads:
         owner_payload = repository_payload.get("owner") or {}
+        existing_repository = GithubRepository.objects.filter(
+            full_name=repository_payload.get("full_name")
+        ).only("metadata").first()
+        existing_metadata = dict(getattr(existing_repository, "metadata", {}) or {})
         repository, _ = GithubRepository.objects.update_or_create(
             full_name=repository_payload.get("full_name"),
             defaults={
@@ -328,6 +798,7 @@ def sync_github_repositories(*, account):
                 "is_fork": bool(repository_payload.get("fork")),
                 "is_organization_repo": bool(owner_payload.get("type") == "Organization"),
                 "metadata": {
+                    **existing_metadata,
                     "open_issues_count": repository_payload.get("open_issues_count") or 0,
                     "watchers_count": repository_payload.get("watchers_count") or 0,
                     "forks_count": repository_payload.get("forks_count") or 0,
@@ -338,6 +809,7 @@ def sync_github_repositories(*, account):
             },
         )
         synced_repository_ids.append(repository.id)
+        ensure_repository_webhook(repository)
 
     if synced_repository_ids:
         GithubRepository.objects.filter(account=account).exclude(
@@ -639,6 +1111,8 @@ def sync_repository_activity(*, repository, scan=None, max_commits=20, max_pull_
         )
         pull_request_records.append(pull_request_record)
 
+    repository.last_synced_at = timezone.now()
+    repository.save(update_fields=["last_synced_at", "updated_at"])
     return build_developer_activity_summary(commit_records, pull_request_records)
 
 
@@ -687,7 +1161,10 @@ def scan_github_repository(*, repository, triggered_by=None, scan_type="manual")
 
     repository.latest_score = scan.score
     repository.latest_scan_at = scan.completed_at
-    repository.save(update_fields=["latest_score", "latest_scan_at", "updated_at"])
+    repository.last_synced_at = timezone.now()
+    repository.save(
+        update_fields=["latest_score", "latest_scan_at", "last_synced_at", "updated_at"]
+    )
     return scan
 
 
@@ -1413,13 +1890,22 @@ def _persist_scan_results(
         commit_summary = commit_activity.get(login) or {}
         activity_summary = developer_activity.get(login) or {}
         score_value = max(0, 100 - author_penalties.get(login, 0))
-        if activity_summary.get("average_commit_score") is not None:
-            score_value = round(
-                (score_value * 0.65)
-                + (activity_summary.get("average_commit_score", 100) * 0.2)
-                + (activity_summary.get("average_pull_request_score", 100) * 0.15),
-                2,
-            )
+
+        average_commit_score = activity_summary.get("average_commit_score")
+        average_pull_request_score = activity_summary.get("average_pull_request_score")
+
+        if average_commit_score is None:
+            average_commit_score = 100
+
+        if average_pull_request_score is None:
+            average_pull_request_score = 100
+
+        score_value = round(
+            (score_value * 0.65)
+            + (average_commit_score * 0.2)
+            + (average_pull_request_score * 0.15),
+            2,
+        )
         DeveloperRepositoryScore.objects.create(
             scan=scan,
             repository=repository,

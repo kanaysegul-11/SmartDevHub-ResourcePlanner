@@ -429,6 +429,11 @@ class GithubAccountConnectSerializer(serializers.Serializer):
     access_token = serializers.CharField()
 
 
+class GithubOAuthConnectSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    state = serializers.CharField()
+
+
 class AIPromptPrepareSerializer(serializers.Serializer):
     repository_id = serializers.IntegerField(required=False)
     standard_profile_id = serializers.IntegerField(required=False)
