@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useList } from "@refinedev/core";
 import { FeatherActivity, FeatherStar, FeatherTarget, FeatherTrendingUp } from "@subframe/core";
 import { useNavigate } from "react-router-dom";
@@ -12,12 +12,67 @@ import LanguageLeaderboard from "../component/analytics/LanguageLeaderboard";
 import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
 import { Badge } from "../ui/components/Badge";
 import { useI18n } from "../I18nContext.jsx";
+import { apiClient } from "../refine/axios";
+import { useUser } from "../UserContext.jsx";
 
 const EMPTY_LIST = [];
+
+const EMPTY_GOVERNANCE_OVERVIEW = {
+  leaderboard: [],
+  scope: "team",
+};
+
+const fetchGovernanceOverview = async ({ isAdmin }) => {
+  if (!isAdmin) {
+    const response = await apiClient.get("/github-repositories/developer-overview/");
+    return response.data || EMPTY_GOVERNANCE_OVERVIEW;
+  }
+
+  const [scoreboardResponse, overviewResponse] = await Promise.allSettled([
+    apiClient.get("/github-repositories/team-scoreboard/"),
+    apiClient.get("/github-repositories/developer-overview/"),
+  ]);
+
+  if (
+    scoreboardResponse.status === "fulfilled" &&
+    overviewResponse.status === "fulfilled"
+  ) {
+    return {
+      ...EMPTY_GOVERNANCE_OVERVIEW,
+      ...(overviewResponse.value.data || {}),
+      leaderboard:
+        scoreboardResponse.value.data?.leaderboard ||
+        overviewResponse.value.data?.leaderboard ||
+        [],
+      scope:
+        scoreboardResponse.value.data?.scope ||
+        overviewResponse.value.data?.scope ||
+        "team",
+    };
+  }
+
+  if (scoreboardResponse.status === "fulfilled") {
+    return {
+      ...EMPTY_GOVERNANCE_OVERVIEW,
+      ...(scoreboardResponse.value.data || {}),
+    };
+  }
+
+  if (overviewResponse.status === "fulfilled") {
+    return {
+      ...EMPTY_GOVERNANCE_OVERVIEW,
+      ...(overviewResponse.value.data || {}),
+    };
+  }
+
+  throw scoreboardResponse.reason || overviewResponse.reason;
+};
 
 function Analytics() {
   const navigate = useNavigate();
   const { language, t } = useI18n();
+  const { userData } = useUser();
+  const isAdmin = Boolean(userData?.isAdmin);
   const sharedQueryOptions = {
     queryOptions: {
       staleTime: 15000,
@@ -26,6 +81,11 @@ function Analytics() {
   };
   const snippetsQuery = useList({ resource: "snippets", ...sharedQueryOptions });
   const commentsQuery = useList({ resource: "comments", ...sharedQueryOptions });
+  const [governanceOverview, setGovernanceOverview] = useState({
+    leaderboard: [],
+    scope: "team",
+  });
+  const [isGovernanceOverviewLoading, setIsGovernanceOverviewLoading] = useState(true);
 
   const snippets = useMemo(
     () => snippetsQuery.data?.data ?? EMPTY_LIST,
@@ -35,6 +95,56 @@ function Analytics() {
     () => commentsQuery.data?.data ?? EMPTY_LIST,
     [commentsQuery.data]
   );
+  useEffect(() => {
+    let ignore = false;
+
+    const loadGovernanceOverview = async () => {
+      setIsGovernanceOverviewLoading(true);
+      try {
+          const data = await fetchGovernanceOverview({ isAdmin });
+        if (!ignore) {
+          setGovernanceOverview(data);
+        }
+      } catch {
+        if (!ignore) {
+          setGovernanceOverview(EMPTY_GOVERNANCE_OVERVIEW);
+        }
+      } finally {
+        if (!ignore) {
+          setIsGovernanceOverviewLoading(false);
+        }
+      }
+    };
+
+    void loadGovernanceOverview();
+    return () => {
+      ignore = true;
+    };
+  }, [isAdmin]);
+
+  useEffect(() => {
+    const handleGovernanceSyncRequested = () => {
+      void fetchGovernanceOverview({ isAdmin })
+        .then((data) => {
+          setGovernanceOverview(data);
+        })
+        .catch(() => {
+          setGovernanceOverview(EMPTY_GOVERNANCE_OVERVIEW);
+        });
+    };
+
+    window.addEventListener(
+      "governance-sync-requested",
+      handleGovernanceSyncRequested
+    );
+
+    return () => {
+      window.removeEventListener(
+        "governance-sync-requested",
+        handleGovernanceSyncRequested
+      );
+    };
+  }, [isAdmin]);
   const filteredSnippets = snippets;
 
   const filteredSnippetMap = useMemo(
@@ -160,7 +270,7 @@ function Analytics() {
     const date = new Date(comment.created_at);
     return !Number.isNaN(date.getTime()) && date >= lastWeekDate;
   }).length;
-
+  const developerScoreRows = governanceOverview.leaderboard || [];
   const formatDate = (value) => {
     if (!value) return t("analytics.noFeedbackYet");
     return new Intl.DateTimeFormat(language || "en", {
@@ -229,6 +339,70 @@ function Analytics() {
                   <p className="mt-3 text-3xl font-black tracking-tight text-slate-950">{item.value}</p>
                 </div>
               ))}
+            </section>
+
+            <section className="w-full rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,255,255,0.9))] p-6 shadow-[0_20px_50px_rgba(148,163,184,0.14)]">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
+                    {t("analytics.developerProjectScores", "Developer project scores")}
+                  </p>
+                  <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-950">
+                    {t("analytics.developerProjectScoresTitle", "User ranking by repository average")}
+                  </h2>
+                </div>
+                <Badge variant={governanceOverview.scope === "team" ? "success" : "neutral"}>
+                  {governanceOverview.scope === "team"
+                    ? t("analytics.teamScope", "Team")
+                    : t("analytics.personalScope", "Personal")}
+                </Badge>
+              </div>
+
+              <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200 bg-slate-50">
+                <div className="hidden grid-cols-[72px_minmax(0,1fr)_160px_120px] gap-4 border-b border-slate-200 bg-white/80 px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-400 md:grid">
+                  <span>{t("analytics.rank", "Rank")}</span>
+                  <span>{t("analytics.user", "User")}</span>
+                  <span>{t("analytics.averageScore", "Avg score")}</span>
+                  <span>{t("analytics.repos", "Repos")}</span>
+                </div>
+                {isGovernanceOverviewLoading ? (
+                  <div className="px-4 py-8 text-sm text-slate-500">
+                    {t("analytics.loadingScores", "Loading repository scores...")}
+                  </div>
+                ) : developerScoreRows.length ? (
+                  developerScoreRows.map((developer, index) => {
+                    const averageProjectScore =
+                      developer.average_scan_score ?? developer.composite_score ?? 0;
+                    return (
+                      <div
+                        key={developer.github_login || developer.username || index}
+                        className="grid gap-4 border-t border-slate-200 px-4 py-4 first:border-t-0 md:grid-cols-[72px_minmax(0,1fr)_160px_120px] md:items-center"
+                      >
+                        <div className="text-lg font-black text-slate-950">#{index + 1}</div>
+                        <div>
+                          <p className="text-base font-black text-slate-950">
+                            {developer.user_full_name || developer.username || developer.display_name || developer.github_login}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-500">{developer.github_login}</p>
+                        </div>
+                        <Badge variant={Number(averageProjectScore || 0) >= 85 ? "success" : "warning"}>
+                          {Math.round(Number(averageProjectScore || 0))} / 100
+                        </Badge>
+                        <div className="text-sm font-bold text-slate-700">
+                          {developer.repository_count || 0}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="px-4 py-8 text-sm text-slate-500">
+                    {t(
+                      "analytics.noDeveloperScores",
+                      "Run repository sync and scans to build the user score table."
+                    )}
+                  </div>
+                )}
+              </div>
             </section>
 
             <section className="grid w-full grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">

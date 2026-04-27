@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useList } from "@refinedev/core";
 import Sidebar from "../component/layout/Sidebar";
@@ -43,18 +43,21 @@ function SnippetList() {
     .trim()
     .toLowerCase();
 
-  const isCurrentUserSnippet = (snippet) => {
-    const authorId = String(snippet.author_details?.id || "").trim();
-    const authorUsername = String(snippet.author_details?.username || "")
-      .trim()
-      .toLowerCase();
+  const isCurrentUserSnippet = useCallback(
+    (snippet) => {
+      const authorId = String(snippet.author_details?.id || "").trim();
+      const authorUsername = String(snippet.author_details?.username || "")
+        .trim()
+        .toLowerCase();
 
-    if (currentUserId && authorId && currentUserId === authorId) {
-      return true;
-    }
+      if (currentUserId && authorId && currentUserId === authorId) {
+        return true;
+      }
 
-    return Boolean(currentUsername && authorUsername && currentUsername === authorUsername);
-  };
+      return Boolean(currentUsername && authorUsername && currentUsername === authorUsername);
+    },
+    [currentUserId, currentUsername]
+  );
 
   const uniqueSnippets = useMemo(() => {
     const uniqueItems = [];
@@ -73,7 +76,7 @@ function SnippetList() {
 
   const mySnippets = useMemo(
     () => uniqueSnippets.filter((snippet) => isCurrentUserSnippet(snippet)),
-    [currentUserId, currentUsername, uniqueSnippets]
+    [isCurrentUserSnippet, uniqueSnippets]
   );
 
   const filteredSnippets = useMemo(() => {

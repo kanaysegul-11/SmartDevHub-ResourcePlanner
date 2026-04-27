@@ -176,7 +176,11 @@ function ContactAdmin() {
               "tr"
             );
           })
-          .map(({ sortTime, ...contact }) => contact);
+          .map((contact) => {
+            const nextContact = { ...contact };
+            delete nextContact.sortTime;
+            return nextContact;
+          });
 
         setContacts(nextContacts);
         syncSelectedContact(nextContacts);

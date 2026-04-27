@@ -77,15 +77,18 @@ function CreateSnippet() {
 
   useEffect(() => {
     if (!isEditMode || !snippet) {
-      return;
+      return undefined;
     }
 
-    setFormData({
-      title: snippet.title || "",
-      description: snippet.description || "",
-      code: snippet.code || "",
-      language: snippet.language || "python",
-    });
+    const populateForm = window.setTimeout(() => {
+      setFormData({
+        title: snippet.title || "",
+        description: snippet.description || "",
+        code: snippet.code || "",
+        language: snippet.language || "python",
+      });
+    }, 0);
+    return () => window.clearTimeout(populateForm);
   }, [isEditMode, snippet]);
 
   const onFinish = async (values) => {

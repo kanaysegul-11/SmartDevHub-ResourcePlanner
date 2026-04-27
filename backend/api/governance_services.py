@@ -4,6 +4,7 @@ import hmac
 import json
 import re
 import secrets
+import time
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from concurrent.futures import ThreadPoolExecutor
@@ -15,7 +16,7 @@ from urllib import request as urllib_request
 import requests
 from django.conf import settings
 from django.core import signing
-from django.db import close_old_connections, transaction
+from django.db import OperationalError, close_old_connections, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -38,21 +39,6 @@ GITHUB_API_ROOT = "https://api.github.com"
 GITHUB_OAUTH_AUTHORIZE_ROOT = "https://github.com/login/oauth/authorize"
 GITHUB_OAUTH_TOKEN_ROOT = "https://github.com/login/oauth/access_token"
 GITHUB_WEBHOOK_EVENTS = ("push", "pull_request")
-TEXT_FILE_EXTENSIONS = {
-    ".py",
-    ".js",
-    ".jsx",
-    ".ts",
-    ".tsx",
-    ".json",
-    ".md",
-    ".yml",
-    ".yaml",
-    ".html",
-    ".css",
-    ".java",
-    ".cs",
-}
 AUTO_SYNC_EXECUTOR = ThreadPoolExecutor(
     max_workers=2,
     thread_name_prefix="governance-sync",
@@ -61,8 +47,6 @@ ACCOUNT_SYNC_EXECUTOR = ThreadPoolExecutor(
     max_workers=2,
     thread_name_prefix="governance-account-sync",
 )
-MAX_REPOSITORY_FILES = 80
-MAX_BLOB_SIZE = 40000
 SEVERITY_PENALTIES = {
     "low": 2,
     "medium": 5,
@@ -77,6 +61,35 @@ STALE_SCAN_TIMEOUT_MINUTES = 10
 STALE_AUTO_SYNC_TIMEOUT_MINUTES = 10
 POLLING_FALLBACK_SYNC_INTERVAL_MINUTES = 5
 POLLING_FALLBACK_HEARTBEAT_MINUTES = 30
+DISABLED_GOVERNANCE_RULE_CODES = {"max_function_length"}
+DEFAULT_COMPLEXITY_EXCLUDED_PATH_PARTS = [
+    ".git",
+    ".next",
+    ".nuxt",
+    ".turbo",
+    ".venv",
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "target",
+    "vendor",
+]
+
+
+def _run_with_sqlite_lock_retry(operation, *, retries=5, base_delay=0.2):
+    for attempt in range(retries):
+        try:
+            return operation()
+        except OperationalError as exc:
+            error_message = str(exc).lower()
+            if "database is locked" not in error_message and "database table is locked" not in error_message:
+                raise
+            if attempt >= retries - 1:
+                raise
+            close_old_connections()
+            time.sleep(base_delay * (attempt + 1))
 
 def github_session():
     session = requests.Session()
@@ -203,10 +216,18 @@ def queue_governance_login_sync(*, user):
             "account_count": 0,
         }
 
-    ACCOUNT_SYNC_EXECUTOR.submit(
-        _run_governance_login_sync_job,
-        account_ids=account_ids,
-    )
+    try:
+        ACCOUNT_SYNC_EXECUTOR.submit(
+            _run_governance_login_sync_job,
+            account_ids=account_ids,
+        )
+    except RuntimeError as exc:
+        return {
+            "status": "skipped",
+            "account_count": len(account_ids),
+            "reason": "executor_unavailable",
+            "detail": str(exc),
+        }
     return {
         "status": "queued",
         "account_count": len(account_ids),
@@ -854,22 +875,21 @@ def _starter_rule_definitions():
         },
         {
             "code": "max_function_length",
-            "title": "Functions should stay concise",
-            "description": "Functions should stay within the configured line budget.",
+            "title": "Keep functions focused and short",
+            "description": "Large functions should be split into smaller helpers with a single responsibility.",
             "category": "complexity",
             "severity": "medium",
             "weight": 6,
             "order": 5,
             "config": {
                 "max_lines": 20,
-                "extensions": [".py", ".js", ".jsx", ".ts", ".tsx"],
             },
         },
         {
-            "code": "commit_message_convention",
+            "code": "commit_message_pattern",
             "title": "Commit messages should follow the team convention",
             "description": "Commit messages should use a conventional prefix and an explicit summary.",
-            "category": "style",
+            "category": "workflow",
             "severity": "medium",
             "weight": 5,
             "order": 6,
@@ -882,7 +902,7 @@ def _starter_rule_definitions():
             "code": "pull_request_description_required",
             "title": "Pull requests should include a clear description",
             "description": "PR descriptions should explain the change and its impact.",
-            "category": "structure",
+            "category": "workflow",
             "severity": "medium",
             "weight": 5,
             "order": 7,
@@ -897,6 +917,10 @@ def _starter_rule_definitions():
 def ensure_default_standard_profile(*, created_by=None):
     profile = StandardProfile.objects.filter(is_default=True).first()
     if profile:
+        profile.rules.filter(
+            code__in=DISABLED_GOVERNANCE_RULE_CODES,
+            is_enabled=True,
+        ).update(is_enabled=False)
         existing_codes = set(profile.rules.values_list("code", flat=True))
         missing_rules = [
             StandardRule(profile=profile, **rule_data)
@@ -941,6 +965,107 @@ def ensure_default_standard_profile(*, created_by=None):
         )
 
     return profile
+
+
+def restore_core_standard_rule_library(*, created_by=None):
+    profile = ensure_default_standard_profile(created_by=created_by)
+    starter_rules = _starter_rule_definitions()
+    starter_by_code = {rule_data["code"]: rule_data for rule_data in starter_rules}
+    starter_codes = set(starter_by_code.keys())
+
+    existing_rules = {
+        rule.code: rule for rule in profile.rules.all()
+    }
+
+    for code, rule_data in starter_by_code.items():
+        existing_rule = existing_rules.get(code)
+        if existing_rule is None:
+            StandardRule.objects.create(profile=profile, **rule_data)
+            continue
+
+        updated_fields = []
+        for field_name in [
+            "title",
+            "description",
+            "category",
+            "severity",
+            "weight",
+            "config",
+            "order",
+        ]:
+            next_value = rule_data[field_name]
+            if getattr(existing_rule, field_name) != next_value:
+                setattr(existing_rule, field_name, next_value)
+                updated_fields.append(field_name)
+
+        if existing_rule.is_enabled != (code not in DISABLED_GOVERNANCE_RULE_CODES):
+            existing_rule.is_enabled = code not in DISABLED_GOVERNANCE_RULE_CODES
+            updated_fields.append("is_enabled")
+
+        if updated_fields:
+            existing_rule.save(update_fields=updated_fields + ["updated_at"])
+
+    removable_rules = list(
+        profile.rules.exclude(code__in=starter_codes)
+    )
+    for removable_rule in removable_rules:
+        remove_standard_rule_and_refresh_scores(rule=removable_rule)
+
+    return ensure_default_standard_profile(created_by=created_by)
+
+
+def remove_standard_rule_and_refresh_scores(*, rule):
+    affected_violations = list(
+        CodeViolation.objects.filter(rule=rule)
+        .values("id", "scan_id", "repository_id")
+    )
+    if not affected_violations:
+        rule.delete()
+        return {
+            "removed_rule_id": rule.id,
+            "removed_rule_code": rule.code,
+            "affected_repository_count": 0,
+            "affected_scan_count": 0,
+            "removed_violation_count": 0,
+        }
+
+    affected_scan_ids = {
+        item["scan_id"] for item in affected_violations if item.get("scan_id")
+    }
+    affected_repository_ids = {
+        item["repository_id"]
+        for item in affected_violations
+        if item.get("repository_id")
+    }
+
+    def _operation():
+        with transaction.atomic():
+            CodeViolation.objects.filter(rule=rule).delete()
+            rule.delete()
+
+            affected_scans = list(
+                RepositoryScan.objects.filter(id__in=affected_scan_ids).select_related(
+                    "repository"
+                )
+            )
+            for scan in affected_scans:
+                _refresh_scan_scores_from_existing_violations(scan)
+
+            affected_repositories = list(
+                GithubRepository.objects.filter(id__in=affected_repository_ids)
+            )
+            for repository in affected_repositories:
+                _refresh_repository_latest_score(repository)
+
+        return {
+            "removed_rule_id": rule.id,
+            "removed_rule_code": rule.code,
+            "affected_repository_count": len(affected_repository_ids),
+            "affected_scan_count": len(affected_scan_ids),
+            "removed_violation_count": len(affected_violations),
+        }
+
+    return _run_with_sqlite_lock_retry(_operation)
 
 
 def connect_github_account(*, user, access_token):
@@ -1044,6 +1169,70 @@ def sync_github_repositories(*, account):
     return account.repositories.count()
 
 
+def refresh_github_repository_index(*, account):
+    repository_payloads = github_api_request(
+        account.access_token,
+        "/user/repos",
+        params={
+            "sort": "updated",
+            "per_page": 100,
+            "affiliation": "owner,collaborator,organization_member",
+        },
+    )
+    default_profile = ensure_default_standard_profile(created_by=account.user)
+    synced_repository_ids = []
+    now = timezone.now()
+
+    for repository_payload in repository_payloads:
+        owner_payload = repository_payload.get("owner") or {}
+        existing_repository = GithubRepository.objects.filter(
+            full_name=repository_payload.get("full_name")
+        ).only("metadata").first()
+        existing_metadata = dict(getattr(existing_repository, "metadata", {}) or {})
+        repository, _ = _run_with_sqlite_lock_retry(
+            lambda: GithubRepository.objects.update_or_create(
+                full_name=repository_payload.get("full_name"),
+                defaults={
+                    "account": account,
+                    "standard_profile": default_profile,
+                    "external_id": repository_payload.get("id"),
+                    "name": repository_payload.get("name") or repository_payload.get("full_name"),
+                    "owner_login": owner_payload.get("login") or "",
+                    "default_branch": repository_payload.get("default_branch") or "main",
+                    "primary_language": repository_payload.get("language") or "",
+                    "repository_url": repository_payload.get("html_url") or "",
+                    "description": repository_payload.get("description") or "",
+                    "homepage_url": repository_payload.get("homepage") or "",
+                    "visibility": repository_payload.get("visibility") or (
+                        "private" if repository_payload.get("private") else "public"
+                    ),
+                    "is_private": bool(repository_payload.get("private")),
+                    "is_fork": bool(repository_payload.get("fork")),
+                    "is_organization_repo": bool(owner_payload.get("type") == "Organization"),
+                    "metadata": {
+                        **existing_metadata,
+                        "open_issues_count": repository_payload.get("open_issues_count") or 0,
+                        "watchers_count": repository_payload.get("watchers_count") or 0,
+                        "forks_count": repository_payload.get("forks_count") or 0,
+                    },
+                    "last_pushed_at": _parse_github_datetime(repository_payload.get("pushed_at")),
+                    "last_synced_at": now,
+                    "is_active": True,
+                },
+            )
+        )
+        synced_repository_ids.append(repository.id)
+
+    _run_with_sqlite_lock_retry(
+        lambda: GithubRepository.objects.filter(account=account).exclude(
+            id__in=synced_repository_ids
+        ).update(is_active=False, last_synced_at=now)
+    )
+    account.last_synced_at = now
+    _run_with_sqlite_lock_retry(lambda: account.save(update_fields=["last_synced_at"]))
+    return len(synced_repository_ids)
+
+
 def fetch_repository_tree(repository):
     branch_payload = github_api_request(
         repository.account.access_token,
@@ -1063,21 +1252,14 @@ def fetch_repository_tree(repository):
 
 def fetch_repository_source_bundle(repository):
     branch_commit, tree_items = fetch_repository_tree(repository)
-    allowed_blob_items = []
+    blob_items = []
     for item in tree_items:
         if item.get("type") != "blob":
             continue
-        path = item.get("path") or ""
-        extension = _get_extension(path)
-        if extension not in TEXT_FILE_EXTENSIONS:
-            continue
-        if int(item.get("size") or 0) > MAX_BLOB_SIZE:
-            continue
-        allowed_blob_items.append(item)
+        blob_items.append(item)
 
-    allowed_blob_items = allowed_blob_items[:MAX_REPOSITORY_FILES]
     source_files = []
-    for item in allowed_blob_items:
+    for item in blob_items:
         blob_payload = github_api_request(
             repository.account.access_token,
             f"/repos/{repository.full_name}/git/blobs/{item.get('sha')}",
@@ -1424,7 +1606,11 @@ def prepare_ai_prompt_bundle(*, repository=None, standard_profile=None, task_sum
     profile = standard_profile or (
         repository.standard_profile if repository else None
     ) or ensure_default_standard_profile()
-    active_rules = list(profile.rules.filter(is_enabled=True).order_by("order", "id"))
+    active_rules = list(
+        profile.rules.filter(is_enabled=True)
+        .exclude(code__in=DISABLED_GOVERNANCE_RULE_CODES)
+        .order_by("order", "id")
+    )
     repository_context = {
         "repository": getattr(repository, "full_name", ""),
         "default_branch": getattr(repository, "default_branch", ""),
@@ -1479,6 +1665,7 @@ def prepare_ai_remediation_bundle(
     violations_queryset = selected_scan.violations.all().order_by("-created_at")
     if violation_ids:
         violations_queryset = violations_queryset.filter(id__in=violation_ids)
+    violations_queryset = violations_queryset.exclude(code__in=DISABLED_GOVERNANCE_RULE_CODES)
     violations = list(violations_queryset[:max_violations])
     if not violations:
         raise ValueError("No visible violations were found for the selected remediation draft.")
@@ -1503,6 +1690,7 @@ def prepare_ai_remediation_bundle(
                 "line_number": violation.line_number,
                 "message": violation.message,
                 "author_login": violation.author_login,
+                "metadata": violation.metadata or {},
             }
         )
 
@@ -1558,6 +1746,328 @@ def prepare_ai_remediation_bundle(
         "affected_paths": affected_paths,
         "user_prompt": user_prompt,
         "output_contract": output_contract,
+    }
+
+
+def _github_content_path(path):
+    return urllib_parse.quote((path or "").strip("/"), safe="/")
+
+
+def _fetch_github_file_content(repository, path, *, ref):
+    payload = github_api_request(
+        repository.account.access_token,
+        f"/repos/{repository.full_name}/contents/{_github_content_path(path)}",
+        params={"ref": ref},
+    )
+    encoded_content = payload.get("content") or ""
+    if not encoded_content:
+        return "", payload.get("sha") or ""
+    decoded = base64.b64decode(encoded_content).decode("utf-8")
+    return decoded, payload.get("sha") or ""
+
+
+def _put_github_file_content(repository, *, path, content, branch, message, sha=None):
+    payload = {
+        "message": message,
+        "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+        "branch": branch,
+    }
+    if sha:
+        payload["sha"] = sha
+    return github_api_request(
+        repository.account.access_token,
+        f"/repos/{repository.full_name}/contents/{_github_content_path(path)}",
+        method="PUT",
+        data=payload,
+    )
+
+
+def _create_remediation_branch(repository, branch_name):
+    ref_payload = github_api_request(
+        repository.account.access_token,
+        f"/repos/{repository.full_name}/git/ref/heads/{urllib_parse.quote(repository.default_branch, safe='/')}",
+    )
+    base_sha = (ref_payload.get("object") or {}).get("sha")
+    if not base_sha:
+        raise ValueError("Default branch reference could not be resolved.")
+
+    safe_branch = re.sub(r"[^A-Za-z0-9._/-]+", "-", branch_name or "").strip("-/")
+    if not safe_branch:
+        safe_branch = f"ai/remediation-{repository.name}"
+
+    existing_branch = _find_existing_remediation_branch(repository, safe_branch)
+    if existing_branch:
+        return existing_branch, base_sha, True
+
+    github_api_request(
+        repository.account.access_token,
+        f"/repos/{repository.full_name}/git/refs",
+        method="POST",
+        data={
+            "ref": f"refs/heads/{safe_branch}",
+            "sha": base_sha,
+        },
+    )
+    return safe_branch, base_sha, False
+
+
+def _find_existing_remediation_branch(repository, branch_name):
+    try:
+        github_api_request(
+            repository.account.access_token,
+            f"/repos/{repository.full_name}/git/ref/heads/{urllib_parse.quote(branch_name, safe='/')}",
+        )
+        return branch_name
+    except ValueError:
+        pass
+
+    try:
+        branches = github_api_request(
+            repository.account.access_token,
+            f"/repos/{repository.full_name}/branches",
+            params={"per_page": 100},
+        )
+    except ValueError:
+        return ""
+
+    remediation_branches = sorted(
+        [
+            branch.get("name") or ""
+            for branch in branches
+            if (branch.get("name") or "") == branch_name
+            or (branch.get("name") or "").startswith(f"{branch_name}-")
+        ],
+        reverse=True,
+    )
+    return remediation_branches[0] if remediation_branches else ""
+
+
+def _build_readme_content(repository):
+    description = repository.description or "Project maintained through SmartDevHub governance."
+    return "\n".join(
+        [
+            f"# {repository.name}",
+            "",
+            description,
+            "",
+            "## Setup",
+            "",
+            "Document the installation steps for this project here.",
+            "",
+            "## Development",
+            "",
+            "Document how to run the project locally.",
+            "",
+            "## Testing",
+            "",
+            "Document the test command and expected quality checks.",
+            "",
+        ]
+    )
+
+
+def _build_test_placeholder_content(repository):
+    return "\n".join(
+        [
+            "# Governance Test Plan",
+            "",
+            f"Repository: {repository.full_name}",
+            "",
+            "Add executable automated tests for the main application behavior here.",
+            "This file marks the required test structure and should be replaced with real tests.",
+            "",
+        ]
+    )
+
+
+def _select_remediation_violations(repository, *, scan=None, violation_ids=None, max_violations=20):
+    selected_scan = scan or repository.scans.filter(status="completed").order_by("-created_at").first()
+    if selected_scan is None:
+        raise ValueError("There is no completed scan to apply remediation from.")
+    violations_queryset = selected_scan.violations.all().order_by("-created_at")
+    if violation_ids:
+        violations_queryset = violations_queryset.filter(id__in=violation_ids)
+    violations_queryset = violations_queryset.exclude(code__in=DISABLED_GOVERNANCE_RULE_CODES)
+    violations = list(violations_queryset[:max_violations])
+    if not violations:
+        raise ValueError("No visible violations were found for remediation.")
+    return selected_scan, violations
+
+
+def apply_safe_repository_remediation(
+    *,
+    repository,
+    scan=None,
+    violation_ids=None,
+    branch_name="",
+):
+    selected_scan, violations = _select_remediation_violations(
+        repository,
+        scan=scan,
+        violation_ids=violation_ids,
+    )
+    suggested_branch = branch_name or (
+        "ai/remediation-" + re.sub(r"[^a-z0-9-]+", "-", repository.name.lower()).strip("-")
+    )
+    applied = []
+    skipped = []
+    touched_paths = set()
+    violation_codes = {violation.code for violation in violations}
+    supported_codes = {"required_readme", "tests_required", "no_var_keyword"}
+
+    if not violation_codes.intersection(supported_codes):
+        return {
+            "status": "no_safe_fix_available",
+            "repository": repository.full_name,
+            "base_branch": repository.default_branch,
+            "base_sha": "",
+            "branch_name": "",
+            "branch_reused": False,
+            "branch_url": "",
+            "compare_url": "",
+            "scan_id": selected_scan.id,
+            "applied": [],
+            "skipped": [
+                {
+                    "code": violation.code,
+                    "path": violation.file_path or "repository",
+                    "reason": "This rule needs a reviewed code patch; no branch was created because there was no deterministic automatic fix.",
+                }
+                for violation in violations
+            ],
+            "touched_paths": [],
+            "next_steps": [
+                "Use the AI draft as a reviewed patch brief.",
+                "Run a new repository scan after the reviewed patch is applied.",
+            ],
+        }
+
+    branch, base_sha, branch_reused = _create_remediation_branch(repository, suggested_branch)
+    if "required_readme" in violation_codes:
+        path = "README.md"
+        try:
+            _fetch_github_file_content(repository, path, ref=branch)
+            skipped.append(
+                {
+                    "code": "required_readme",
+                    "path": path,
+                    "reason": "README.md already exists on the remediation branch.",
+                }
+            )
+        except ValueError:
+            _put_github_file_content(
+                repository,
+                path=path,
+                content=_build_readme_content(repository),
+                branch=branch,
+                message="docs: add governance README",
+            )
+            touched_paths.add(path)
+            applied.append(
+                {
+                    "code": "required_readme",
+                    "path": path,
+                    "action": "created",
+                }
+            )
+
+    if "tests_required" in violation_codes:
+        path = "tests/governance_test_plan.md"
+        try:
+            _fetch_github_file_content(repository, path, ref=branch)
+            skipped.append(
+                {
+                    "code": "tests_required",
+                    "path": path,
+                    "reason": "Governance test plan already exists on the remediation branch.",
+                }
+            )
+        except ValueError:
+            _put_github_file_content(
+                repository,
+                path=path,
+                content=_build_test_placeholder_content(repository),
+                branch=branch,
+                message="test: add governance test plan",
+            )
+            touched_paths.add(path)
+            applied.append(
+                {
+                    "code": "tests_required",
+                    "path": path,
+                    "action": "created",
+                }
+            )
+
+    var_paths = sorted(
+        {
+            violation.file_path
+            for violation in violations
+            if violation.code == "no_var_keyword" and violation.file_path
+        }
+    )
+    for path in var_paths[:10]:
+        try:
+            content, sha = _fetch_github_file_content(repository, path, ref=branch)
+        except ValueError as exc:
+            skipped.append({"code": "no_var_keyword", "path": path, "reason": str(exc)})
+            continue
+        updated_content = re.sub(r"\bvar\s+", "let ", content)
+        if updated_content == content:
+            skipped.append(
+                {
+                    "code": "no_var_keyword",
+                    "path": path,
+                    "reason": "No var declaration was found in the current file.",
+                }
+            )
+            continue
+        _put_github_file_content(
+            repository,
+            path=path,
+            content=updated_content,
+            branch=branch,
+            message="refactor: replace var declarations",
+            sha=sha,
+        )
+        touched_paths.add(path)
+        applied.append(
+            {
+                "code": "no_var_keyword",
+                "path": path,
+                "action": "updated",
+            }
+        )
+
+    for violation in violations:
+        if violation.code in {"required_readme", "tests_required", "no_var_keyword"}:
+            continue
+        skipped.append(
+            {
+                "code": violation.code,
+                "path": violation.file_path or "repository",
+                "reason": "This rule requires review or an AI-generated patch before code can be changed safely.",
+            }
+        )
+
+    return {
+        "status": "applied" if applied else "existing_branch_used" if branch_reused else "branch_created",
+        "repository": repository.full_name,
+        "base_branch": repository.default_branch,
+        "base_sha": base_sha,
+        "branch_name": branch,
+        "branch_reused": branch_reused,
+        "branch_url": f"{repository.repository_url}/tree/{urllib_parse.quote(branch, safe='/')}",
+        "compare_url": f"{repository.repository_url}/compare/{repository.default_branch}...{urllib_parse.quote(branch, safe='/')}",
+        "scan_id": selected_scan.id,
+        "applied": applied,
+        "skipped": skipped,
+        "touched_paths": sorted(touched_paths),
+        "next_steps": [
+            "Review the branch diff before merging.",
+            "Open a pull request from the remediation branch.",
+            "Run repository scan again after the branch is reviewed.",
+        ],
     }
 
 
@@ -2066,6 +2576,18 @@ def build_developer_governance_overview(repositories, *, viewer=None):
             "scope": "team" if is_governance_admin(viewer) else "self",
         }
 
+    repository_by_id = {repository.id: repository for repository in repositories}
+
+    def _account_identity(repository):
+        account = repository.account
+        user = account.user
+        full_name = user.get_full_name() or user.username
+        return {
+            "github_login": account.github_username,
+            "display_name": full_name,
+            "username": user.username,
+            "user_full_name": full_name,
+        }
     restrict_to_viewer = bool(
         viewer
         and getattr(viewer, "is_authenticated", False)
@@ -2085,6 +2607,8 @@ def build_developer_governance_overview(repositories, *, viewer=None):
         lambda: {
             "github_login": "",
             "display_name": "",
+            "username": "",
+            "user_full_name": "",
             "repository_count": 0,
             "violation_count": 0,
             "files_touched": 0,
@@ -2098,40 +2622,77 @@ def build_developer_governance_overview(repositories, *, viewer=None):
             "pull_request_score_total": 0.0,
             "pull_request_score_count": 0,
             "last_activity_at": None,
+            "project_scores": [],
         }
     )
 
     for scan in latest_scans_by_repository.values():
-        for developer_score in scan.developer_scores.all():
-            login = developer_score.github_login or "unknown"
-            if restrict_to_viewer and _normalize_github_login(login) not in visible_logins:
-                continue
-            entry = leaderboard[login]
-            entry["github_login"] = login
-            entry["display_name"] = developer_score.display_name or login
-            entry["repository_count"] += 1
-            entry["violation_count"] += developer_score.violation_count or 0
-            entry["files_touched"] += developer_score.files_touched or 0
-            if developer_score.score is not None:
-                entry["scan_score_total"] += float(developer_score.score)
-                entry["scan_score_count"] += 1
+        repository = repository_by_id.get(scan.repository_id)
+        if not repository:
+            continue
+        identity = _account_identity(repository)
+        login = identity["github_login"] or "unknown"
+        if restrict_to_viewer and _normalize_github_login(login) not in visible_logins:
+            continue
+        entry = leaderboard[login]
+        entry["github_login"] = login
+        entry["display_name"] = identity["display_name"]
+        entry["username"] = identity["username"]
+        entry["user_full_name"] = identity["user_full_name"]
 
+        repository_score_total = 0.0
+        repository_score_count = 0
+        repository_violation_count = 0
+        repository_files_touched = 0
+        repository_commit_count = 0
+        for developer_score in scan.developer_scores.all():
+            repository_violation_count += developer_score.violation_count or 0
+            repository_files_touched += developer_score.files_touched or 0
+            repository_commit_count += developer_score.commit_count or 0
+            if developer_score.score is not None:
+                repository_score_total += float(developer_score.score)
+                repository_score_count += 1
+        repository_score = (
+            round(repository_score_total / repository_score_count, 2)
+            if repository_score_count
+            else float(scan.score)
+            if scan.score is not None
+            else None
+        )
+        entry["repository_count"] += 1
+        entry["violation_count"] += repository_violation_count
+        entry["files_touched"] += repository_files_touched
+        entry["commit_count"] += repository_commit_count
+        if repository_score is not None:
+            entry["scan_score_total"] += repository_score
+            entry["scan_score_count"] += 1
+            entry["project_scores"].append(
+                {
+                    "repository_id": repository.id,
+                    "repository_name": repository.full_name,
+                    "score": repository_score,
+                }
+            )
+
+    # For non-admin users the repository queryset is already restricted to their
+    # connected GitHub accounts, so recent activity should reflect that full
+    # repository activity even when GitHub returns commit email instead of login.
     all_commits = list(
         GithubCommitActivity.objects.filter(repository_id__in=repository_ids).select_related(
             "repository"
         )
     )
-    if restrict_to_viewer:
-        all_commits = [
-            commit
-            for commit in all_commits
-            if _normalize_github_login(commit.author_login) in visible_logins
-        ]
     for commit in all_commits:
-        login = commit.author_login or "unknown"
+        repository = repository_by_id.get(commit.repository_id)
+        if not repository:
+            continue
+        identity = _account_identity(repository)
+        login = identity["github_login"] or "unknown"
         entry = leaderboard[login]
         entry["github_login"] = login
-        entry["display_name"] = commit.author_name or login
+        entry["display_name"] = identity["display_name"]
+        entry["username"] = identity["username"]
+        entry["user_full_name"] = identity["user_full_name"]
         entry["commit_count"] += 1
         if commit.quality_score is not None:
             entry["commit_score_total"] += float(commit.quality_score)
@@ -2146,17 +2707,17 @@ def build_developer_governance_overview(repositories, *, viewer=None):
             repository_id__in=repository_ids
         ).select_related("repository")
     )
-    if restrict_to_viewer:
-        all_pull_requests = [
-            pull_request
-            for pull_request in all_pull_requests
-            if _normalize_github_login(pull_request.author_login) in visible_logins
-        ]
     for pull_request in all_pull_requests:
-        login = pull_request.author_login or "unknown"
+        repository = repository_by_id.get(pull_request.repository_id)
+        if not repository:
+            continue
+        identity = _account_identity(repository)
+        login = identity["github_login"] or "unknown"
         entry = leaderboard[login]
         entry["github_login"] = login
-        entry["display_name"] = pull_request.author_name or login
+        entry["display_name"] = identity["display_name"]
+        entry["username"] = identity["username"]
+        entry["user_full_name"] = identity["user_full_name"]
         entry["pull_request_count"] += 1
         entry["merged_pull_request_count"] += 1 if pull_request.is_merged else 0
         if pull_request.quality_score is not None:
@@ -2170,6 +2731,9 @@ def build_developer_governance_overview(repositories, *, viewer=None):
 
     finalized_leaderboard = []
     for entry in leaderboard.values():
+        normalized_login = _normalize_github_login(entry["github_login"])
+        if normalized_login in {"", "unknown"}:
+            continue
         average_scan_score = round(
             entry["scan_score_total"] / entry["scan_score_count"],
             2,
@@ -2196,6 +2760,8 @@ def build_developer_governance_overview(repositories, *, viewer=None):
             {
                 "github_login": entry["github_login"],
                 "display_name": entry["display_name"],
+                "username": entry["username"] or entry["display_name"] or entry["github_login"],
+                "user_full_name": entry["user_full_name"] or entry["display_name"] or entry["github_login"],
                 "repository_count": entry["repository_count"],
                 "violation_count": entry["violation_count"],
                 "files_touched": entry["files_touched"],
@@ -2206,6 +2772,10 @@ def build_developer_governance_overview(repositories, *, viewer=None):
                 "average_commit_score": average_commit_score,
                 "average_pull_request_score": average_pull_request_score,
                 "composite_score": composite_score,
+                "project_scores": sorted(
+                    entry["project_scores"],
+                    key=lambda item: item["repository_name"],
+                ),
                 "last_activity_at": entry["last_activity_at"].isoformat()
                 if entry["last_activity_at"]
                 else None,
@@ -2237,7 +2807,9 @@ def build_developer_governance_overview(repositories, *, viewer=None):
 
 def evaluate_source_bundle(*, standard_profile, source_files, repository_paths):
     active_rules = list(
-        standard_profile.rules.filter(is_enabled=True).order_by("order", "id")
+        standard_profile.rules.filter(is_enabled=True)
+        .exclude(code__in=DISABLED_GOVERNANCE_RULE_CODES)
+        .order_by("order", "id")
     )
     path_set = {path for path in repository_paths if path}
     normalized_source_files = [
@@ -2285,16 +2857,24 @@ def evaluate_source_bundle(*, standard_profile, source_files, repository_paths):
 
 
 def apply_rule(*, rule, source_files, repository_paths):
+    if rule.code in DISABLED_GOVERNANCE_RULE_CODES:
+        return []
     if rule.code == "required_readme":
         return _check_required_paths(rule, repository_paths)
     if rule.code == "tests_required":
         return _check_tests_present(rule, repository_paths)
+    if rule.code == "semantic_html_structure":
+        return _check_semantic_html_structure(rule, source_files)
     if rule.code == "no_var_keyword":
         return _check_pattern_rule(rule, source_files)
     if rule.code == "python_snake_case_variables":
         return _check_python_snake_case(rule, source_files)
+    if rule.code == "form_label_required":
+        return _check_form_label_rule(rule, source_files)
     if rule.code == "max_function_length":
         return _check_max_function_length(rule, source_files)
+    if rule.config.get("required_any_paths"):
+        return _check_required_any_paths(rule, repository_paths)
     if rule.config.get("required_paths"):
         return _check_required_paths(rule, repository_paths)
     if rule.config.get("patterns"):
@@ -2318,6 +2898,24 @@ def _check_required_paths(rule, repository_paths):
     return violations
 
 
+def _check_required_any_paths(rule, repository_paths):
+    candidate_paths = rule.config.get("required_any_paths") or []
+    if any(path in repository_paths for path in candidate_paths):
+        return []
+    fallback_path = candidate_paths[0] if candidate_paths else ""
+    return [
+        _build_violation(
+            rule=rule,
+            title=rule.title,
+            message=(
+                "At least one required project configuration path is missing: "
+                + ", ".join(candidate_paths)
+            ),
+            file_path=fallback_path,
+        )
+    ]
+
+
 def _check_tests_present(rule, repository_paths):
     prefixes = tuple(rule.config.get("test_path_prefixes") or [])
     suffixes = tuple(rule.config.get("test_file_suffixes") or [])
@@ -2338,6 +2936,81 @@ def _check_tests_present(rule, repository_paths):
             message="Repository does not expose a recognizable test directory or test file.",
         )
     ]
+
+
+def _check_semantic_html_structure(rule, source_files):
+    allowed_extensions = set(rule.config.get("extensions") or [])
+    semantic_tags = rule.config.get("semantic_tags") or []
+    if not semantic_tags:
+        return []
+    semantic_pattern = re.compile(
+        r"<(?:"
+        + "|".join(re.escape(tag) for tag in semantic_tags)
+        + r")\b",
+        flags=re.IGNORECASE,
+    )
+    violations = []
+    for file_item in source_files:
+        file_path = file_item["path"]
+        if allowed_extensions and _get_extension(file_path) not in allowed_extensions:
+            continue
+        content = file_item["content"]
+        if "<div" not in content.lower():
+            continue
+        if semantic_pattern.search(content):
+            continue
+        violations.append(
+            _build_violation(
+                rule=rule,
+                title=rule.title,
+                message=(
+                    "This page uses generic wrapper divs but no semantic layout landmarks."
+                ),
+                file_path=file_path,
+                line_number=1,
+            )
+        )
+    return violations
+
+
+def _check_form_label_rule(rule, source_files):
+    allowed_extensions = set(rule.config.get("extensions") or [])
+    ignored_types = {"hidden", "submit", "button", "reset", "image", "file", "checkbox", "radio"}
+    input_pattern = re.compile(r"<(input|select|textarea)\b([^>]*)>", flags=re.IGNORECASE)
+    type_pattern = re.compile(r"\btype\s*=\s*['\"]?([A-Za-z-]+)", flags=re.IGNORECASE)
+    violations = []
+    for file_item in source_files:
+        file_path = file_item["path"]
+        if allowed_extensions and _get_extension(file_path) not in allowed_extensions:
+            continue
+        content = file_item["content"]
+        for match in input_pattern.finditer(content):
+            tag_name = match.group(1).lower()
+            attrs = match.group(2) or ""
+            if tag_name == "input":
+                type_match = type_pattern.search(attrs)
+                input_type = (type_match.group(1).lower() if type_match else "text")
+                if input_type in ignored_types:
+                    continue
+            attrs_lower = attrs.lower()
+            if (
+                "aria-label=" in attrs_lower
+                or "aria-labelledby=" in attrs_lower
+                or "title=" in attrs_lower
+                or "<label" in content[max(0, match.start() - 200) : match.end() + 200].lower()
+            ):
+                continue
+            line_number = content[: match.start()].count("\n") + 1
+            violations.append(
+                _build_violation(
+                    rule=rule,
+                    title=rule.title,
+                    message="Form controls should be associated with a visible label or accessible name.",
+                    file_path=file_path,
+                    line_number=line_number,
+                )
+            )
+    return violations
 
 
 def _check_pattern_rule(rule, source_files):
@@ -2411,6 +3084,8 @@ def _check_max_function_length(rule, source_files):
 
     for file_item in source_files:
         file_path = file_item["path"]
+        if _is_path_excluded_for_complexity(file_path, rule):
+            continue
         extension = _get_extension(file_path)
         if extension not in allowed_extensions:
             continue
@@ -2422,6 +3097,7 @@ def _check_max_function_length(rule, source_files):
         for function_name, line_number, line_count in functions:
             if line_count <= max_lines:
                 continue
+            suggested_helpers = _suggest_function_helpers(function_name, extension)
             violations.append(
                 _build_violation(
                     rule=rule,
@@ -2432,9 +3108,32 @@ def _check_max_function_length(rule, source_files):
                     ),
                     file_path=file_path,
                     line_number=line_number,
+                    metadata={
+                        "function_name": function_name,
+                        "line_count": line_count,
+                        "max_lines": max_lines,
+                        "suggested_helpers": suggested_helpers,
+                        "fix_strategy": (
+                            "Keep the original function as orchestration only. "
+                            "Move data preparation, handlers, and rendering/building "
+                            "details into the suggested helper functions."
+                        ),
+                    },
                 )
             )
     return violations
+
+
+def _is_path_excluded_for_complexity(file_path, rule):
+    excluded_parts = set(
+        rule.config.get("excluded_path_parts") or DEFAULT_COMPLEXITY_EXCLUDED_PATH_PARTS
+    )
+    normalized_parts = [
+        part.strip().lower()
+        for part in str(file_path or "").replace("\\", "/").split("/")
+        if part.strip()
+    ]
+    return any(part in excluded_parts for part in normalized_parts)
 
 
 def _persist_scan_results(
@@ -2595,6 +3294,95 @@ def _rule_penalty(severity, weight=None):
     return SEVERITY_PENALTIES.get(severity, 5)
 
 
+def _refresh_scan_scores_from_existing_violations(scan):
+    remaining_violations = list(
+        CodeViolation.objects.filter(scan=scan).select_related("rule")
+    )
+    total_penalty = sum(
+        _rule_penalty(
+            violation.severity,
+            getattr(violation.rule, "weight", None),
+        )
+        for violation in remaining_violations
+    )
+    next_score = max(0, 100 - total_penalty)
+    severity_counts = Counter(
+        violation.severity for violation in remaining_violations if violation.severity
+    )
+    rule_counts = Counter(
+        violation.code for violation in remaining_violations if violation.code
+    )
+    next_summary = dict(scan.summary or {})
+    next_summary.update(
+        {
+            "score": next_score,
+            "file_count": scan.file_count or 0,
+            "violation_count": len(remaining_violations),
+            "severity_breakdown": dict(severity_counts),
+            "rule_breakdown": dict(rule_counts),
+        }
+    )
+    scan.score = Decimal(str(next_score))
+    scan.violation_count = len(remaining_violations)
+    scan.summary = next_summary
+    scan.save(update_fields=["score", "violation_count", "summary"])
+    _refresh_developer_scores_for_scan(scan, remaining_violations)
+
+
+def _refresh_developer_scores_for_scan(scan, remaining_violations):
+    author_penalties = defaultdict(int)
+    author_violations = defaultdict(int)
+
+    for violation in remaining_violations:
+        author_login = (violation.author_login or "").strip()
+        if not author_login:
+            continue
+        author_penalties[author_login] += _rule_penalty(
+            violation.severity,
+            getattr(violation.rule, "weight", None),
+        )
+        author_violations[author_login] += 1
+
+    for developer_score in scan.developer_scores.all():
+        login = (developer_score.github_login or "").strip()
+        summary = dict(developer_score.summary or {})
+        penalty = author_penalties.get(login, 0)
+        average_commit_score = summary.get("average_commit_score")
+        average_pull_request_score = summary.get("average_pull_request_score")
+
+        if average_commit_score is None:
+            average_commit_score = 100
+        if average_pull_request_score is None:
+            average_pull_request_score = 100
+
+        next_score = round(
+            (max(0, 100 - penalty) * 0.65)
+            + (float(average_commit_score) * 0.2)
+            + (float(average_pull_request_score) * 0.15),
+            2,
+        )
+        summary["penalty"] = penalty
+        developer_score.violation_count = author_violations.get(login, 0)
+        developer_score.score = Decimal(str(next_score))
+        developer_score.summary = summary
+        developer_score.save(update_fields=["violation_count", "score", "summary"])
+
+
+def _refresh_repository_latest_score(repository):
+    latest_completed_scan = (
+        repository.scans.filter(status="completed")
+        .order_by("-completed_at", "-created_at")
+        .first()
+    )
+    repository.latest_score = (
+        latest_completed_scan.score if latest_completed_scan else None
+    )
+    repository.latest_scan_at = (
+        latest_completed_scan.completed_at if latest_completed_scan else None
+    )
+    repository.save(update_fields=["latest_score", "latest_scan_at", "updated_at"])
+
+
 def _split_message(message):
     normalized_message = (message or "").strip()
     if not normalized_message:
@@ -2609,6 +3397,27 @@ def _get_extension(file_path):
     if "." not in file_path:
         return ""
     return "." + file_path.rsplit(".", 1)[-1].lower()
+
+
+def _suggest_function_helpers(function_name, extension):
+    normalized_name = re.sub(r"[^A-Za-z0-9]+", " ", function_name or "").strip()
+    pascal_name = "".join(
+        part[:1].upper() + part[1:]
+        for part in normalized_name.split()
+        if part
+    ) or "Function"
+    if extension == ".py":
+        snake_name = re.sub(r"(?<!^)(?=[A-Z])", "_", function_name or "function").lower()
+        return [
+            f"_prepare_{snake_name}_data",
+            f"_apply_{snake_name}_rules",
+            f"_build_{snake_name}_result",
+        ]
+    return [
+        f"prepare{pascal_name}Data",
+        f"create{pascal_name}Handlers",
+        f"render{pascal_name}View",
+    ]
 
 
 def _parse_github_datetime(value):

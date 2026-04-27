@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useList } from "@refinedev/core";
-import { FeatherShield, FeatherZap } from "@subframe/core";
+import { FeatherBookOpen, FeatherShield, FeatherSparkles, FeatherZap } from "@subframe/core";
+import { Link } from "react-router-dom";
 
 import Sidebar from "../component/layout/Sidebar";
 import { useI18n } from "../I18nContext.jsx";
@@ -8,28 +9,78 @@ import { useUser } from "../UserContext.jsx";
 import { apiClient } from "../refine/axios";
 import { Badge } from "../ui/components/Badge";
 import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
+import {
+  getLatestRepositoryScan,
+  summarizeViolationsByRule,
+} from "../utils/governanceViolations";
 
 const EMPTY_ARRAY = [];
+const showAiValidationPanel =
+  import.meta.env.VITE_SHOW_AI_VALIDATION_PANEL === "true";
+const GOVERNANCE_LIST_PAGE_SIZE = 200;
+const EMPTY_DEVELOPER_ACTIVITY = {
+  recent_commits: [],
+};
 
 function GithubGovernance() {
   const { userData } = useUser();
   const { t } = useI18n();
   const isAdmin = Boolean(userData?.isAdmin);
-  const accountsQuery = useList({ resource: "github-accounts" });
-  const repositoriesQuery = useList({ resource: "github-repositories" });
-  const scansQuery = useList({ resource: "repository-scans" });
-  const profilesQuery = useList({ resource: "standard-profiles" });
-  const aiRequestsQuery = useList({ resource: "ai-code-requests" });
+  const sharedQueryOptions = {
+    pagination: {
+      current: 1,
+      pageSize: GOVERNANCE_LIST_PAGE_SIZE,
+    },
+    queryOptions: {
+      staleTime: 15000,
+      refetchOnWindowFocus: false,
+    },
+  };
+  const accountsQuery = useList({
+    resource: "github-accounts",
+    ...sharedQueryOptions,
+    filters: isAdmin
+      ? [{ field: "scope", operator: "eq", value: "team" }]
+      : undefined,
+  });
+  const repositoriesQuery = useList({
+    resource: "github-repositories",
+    ...sharedQueryOptions,
+    filters: [{ field: "is_active", operator: "eq", value: true }],
+    sorters: [{ field: "full_name", order: "asc" }],
+  });
+  const scansQuery = useList({
+    resource: "repository-scans",
+    ...sharedQueryOptions,
+    sorters: [{ field: "created_at", order: "desc" }],
+  });
+  const profilesQuery = useList({
+    resource: "standard-profiles",
+    ...sharedQueryOptions,
+  });
+  const aiRequestsQuery = useList({
+    resource: "ai-code-requests",
+    ...sharedQueryOptions,
+    sorters: [{ field: "created_at", order: "desc" }],
+  });
+  const refetchAccounts = accountsQuery.refetch;
+  const refetchRepositories = repositoriesQuery.refetch;
+  const refetchScans = scansQuery.refetch;
+  const refetchProfiles = profilesQuery.refetch;
+  const refetchAiRequests = aiRequestsQuery.refetch;
 
   const accounts = accountsQuery.data?.data ?? EMPTY_ARRAY;
   const repositories = repositoriesQuery.data?.data ?? EMPTY_ARRAY;
   const scans = scansQuery.data?.data ?? EMPTY_ARRAY;
   const profiles = profilesQuery.data?.data ?? EMPTY_ARRAY;
   const aiRequests = aiRequestsQuery.data?.data ?? EMPTY_ARRAY;
+  const currentUserId = Number(userData?.id || userData?.pk || userData?.user_id || 0);
   const hasConnectedGithubAccount = accounts.length > 0;
 
   const [githubToken, setGithubToken] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
+  const [syncingAccountId, setSyncingAccountId] = useState(null);
+  const [disconnectingAccountId, setDisconnectingAccountId] = useState(null);
   const [isLaunchingOauth, setIsLaunchingOauth] = useState(false);
   const [isCompletingOauth, setIsCompletingOauth] = useState(false);
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
@@ -51,13 +102,43 @@ function GithubGovernance() {
   const [latestRemediationDraft, setLatestRemediationDraft] = useState(null);
   const [isPreparingRemediation, setIsPreparingRemediation] = useState(false);
   const [integrationStatus, setIntegrationStatus] = useState(null);
-  const [developerOverview, setDeveloperOverview] = useState({
-    leaderboard: [],
-    recent_commits: [],
-    recent_pull_requests: [],
-    scope: "self",
-  });
+  const [developerActivity, setDeveloperActivity] = useState(
+    EMPTY_DEVELOPER_ACTIVITY
+  );
+  const [isDeveloperActivityLoading, setIsDeveloperActivityLoading] = useState(false);
   const oauthCallbackHandledRef = useRef(false);
+  const isOwnRepository = useCallback(
+    (repository) =>
+      Boolean(currentUserId && Number(repository?.account_user) === currentUserId),
+    [currentUserId]
+  );
+  const canUseAiForRepository = useCallback(
+    (repository) => Boolean(repository && (!isAdmin || isOwnRepository(repository))),
+    [isAdmin, isOwnRepository]
+  );
+  const canDisconnectGithubAccount = useCallback(
+    (account) => Boolean(account && (!isAdmin || Number(account.user) === currentUserId)),
+    [isAdmin, currentUserId]
+  );
+  const aiAccessibleRepositories = useMemo(
+    () =>
+      repositories.filter((repository) =>
+        canUseAiForRepository(repository)
+      ),
+    [repositories, canUseAiForRepository]
+  );
+  const canShowLatestRemediationDraft = useMemo(() => {
+    if (!latestRemediationDraft) {
+      return false;
+    }
+    if (!isAdmin) {
+      return true;
+    }
+    const draftRepositoryName = latestRemediationDraft.repository_context?.repository;
+    return aiAccessibleRepositories.some(
+      (repository) => repository.full_name === draftRepositoryName
+    );
+  }, [latestRemediationDraft, isAdmin, aiAccessibleRepositories]);
 
   const averageRepoScore = useMemo(() => {
     const scores = repositories
@@ -68,10 +149,13 @@ function GithubGovernance() {
     }
     return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
   }, [repositories]);
-  const leaderboard = developerOverview.leaderboard ?? EMPTY_ARRAY;
-  const recentCommitActivities = developerOverview.recent_commits ?? EMPTY_ARRAY;
-  const recentPullRequestActivities =
-    developerOverview.recent_pull_requests ?? EMPTY_ARRAY;
+  const sortedRepositories = useMemo(
+    () =>
+      [...repositories].sort((left, right) =>
+        String(left?.full_name || "").localeCompare(String(right?.full_name || ""))
+      ),
+    [repositories]
+  );
   const personalAccountCount = accounts.length;
   const teamAccountCount = useMemo(() => {
     if (!isAdmin) {
@@ -81,24 +165,81 @@ function GithubGovernance() {
   }, [isAdmin, personalAccountCount, repositories]);
   const recentViolations = useMemo(
     () =>
-      scans.flatMap((scan) =>
-        (scan.violations || []).map((violation, index) => ({
+      repositories.flatMap((repository) => {
+        const repositoryScans = scans.filter(
+          (scan) => Number(scan.repository) === Number(repository.id)
+        );
+        const latestScan = getLatestRepositoryScan(repositoryScans);
+        return (latestScan?.violations || []).map((violation, index) => ({
           ...violation,
-          _key: `${scan.id}-${violation.id || index}`,
-          repository_name: scan.repository_name,
-          scan_score: scan.score,
-          scan_created_at: scan.created_at,
-        }))
-      ).sort((left, right) => {
+          _key: `${latestScan.id}-${violation.id || index}`,
+          repository_name: latestScan.repository_name,
+          scan_score: latestScan.score,
+          scan_created_at: latestScan.created_at,
+        }));
+      }).sort((left, right) => {
         const severityRank = { critical: 4, high: 3, medium: 2, low: 1 };
         return (
           (severityRank[right.severity] || 0) - (severityRank[left.severity] || 0) ||
           new Date(right.scan_created_at || 0) - new Date(left.scan_created_at || 0)
         );
       }),
-    [scans]
+    [repositories, scans]
   );
-  const visibleViolationCount = recentViolations.length;
+  const repositoryViolationSummaries = useMemo(
+    () =>
+      repositories
+        .map((repository) => {
+          const repositoryScans = scans.filter(
+            (scan) => Number(scan.repository) === Number(repository.id)
+          );
+          const latestScan = getLatestRepositoryScan(repositoryScans);
+          const violations = latestScan?.violations || [];
+          return {
+            repository,
+            latestScan,
+            violations,
+            violationCount: Math.max(
+              violations.length,
+              Number(latestScan?.violation_count || 0)
+            ),
+            ruleSummary: summarizeViolationsByRule(violations),
+          };
+        })
+        .filter((item) => item.violationCount > 0)
+        .sort(
+          (left, right) =>
+            right.violationCount - left.violationCount ||
+            left.repository.full_name.localeCompare(right.repository.full_name)
+        ),
+    [repositories, scans]
+  );
+  const firstRepositoryWithViolations = repositoryViolationSummaries[0]?.repository || null;
+  const visibleViolationCount = useMemo(
+    () =>
+      repositories.reduce((total, repository) => {
+        const repositoryScans = scans.filter(
+          (scan) => Number(scan.repository) === Number(repository.id)
+        );
+        const latestScan = getLatestRepositoryScan(repositoryScans);
+        return total + Math.max(
+          latestScan?.violations?.length || 0,
+          Number(latestScan?.violation_count || 0)
+        );
+      }, 0),
+    [repositories, scans]
+  );
+  const latestScanByRepositoryId = useMemo(() => {
+    const scanMap = new Map();
+    scans.forEach((scan) => {
+      const repositoryId = scan.repository;
+      if (!repositoryId || scanMap.has(repositoryId)) {
+        return;
+      }
+      scanMap.set(repositoryId, scan);
+    });
+    return scanMap;
+  }, [scans]);
   const pollingFallbackCount = useMemo(
     () =>
       repositories.filter(
@@ -117,7 +258,7 @@ function GithubGovernance() {
   const roleViewLabel = isAdmin
     ? t("governance.adminView", "Admin view")
     : t("governance.developerView", "Developer view");
-  const overviewScope = developerOverview.scope || (isAdmin ? "team" : "self");
+  const overviewScope = isAdmin ? "team" : "self";
   const visibilityMessage = isAdmin
     ? t(
       "governance.visibilityAdminBody",
@@ -126,21 +267,6 @@ function GithubGovernance() {
     : t(
       "governance.visibilityDeveloperBody",
       "Developers can manage connected repositories, but only see their own score, personal activity, and AI validation history."
-    );
-  const leaderboardTitle = isAdmin
-    ? t("governance.teamLeaderboard", "Developer Leaderboard")
-    : t("governance.myGovernanceScore", "My Governance Score");
-  const activityFeedTitle = isAdmin
-    ? t("governance.teamActivityFeed", "Team Commit & PR Feed")
-    : t("governance.myActivityFeed", "My Commit & PR Feed");
-  const leaderboardEmptyMessage = isAdmin
-    ? t(
-      "governance.teamLeaderboardEmpty",
-      "Run repository activity sync or scan to build the team leaderboard."
-    )
-    : t(
-      "governance.myGovernanceScoreEmpty",
-      "Sync activity or run a scan to build your personal governance score."
     );
   const summaryCards = [
     [t("governance.accounts", "Accounts"), teamAccountCount],
@@ -166,6 +292,10 @@ function GithubGovernance() {
         );
       }).length,
     [repositories]
+  );
+  const recentCommitRows = useMemo(
+    () => (developerActivity.recent_commits || []).slice(0, 5),
+    [developerActivity]
   );
 
   const getStatusLabel = (statusKey) => {
@@ -194,6 +324,21 @@ function GithubGovernance() {
   };
 
   const formatTimestamp = (value) => {
+    if (!value) {
+      return t("governance.notAvailable", "Not available");
+    }
+
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(value));
+    } catch {
+      return value;
+    }
+  };
+
+  const formatCommitTimestamp = (value) => {
     if (!value) {
       return t("governance.notAvailable", "Not available");
     }
@@ -270,6 +415,42 @@ function GithubGovernance() {
     };
   };
 
+  const getScoreState = (repository) => {
+    const score = Number(repository.latest_score);
+    if (!Number.isFinite(score)) {
+      return {
+        label: t("governance.awaitingFirstScore", "Awaiting first score"),
+        detail: t("governance.scoreNotReady", "Scan has not produced a score yet."),
+        variant: "neutral",
+      };
+    }
+
+    if (score <= 0) {
+      return {
+        label: "0 / 100",
+        detail: t(
+          "governance.zeroScoreExplanation",
+          "Scored, but critical rule debt dropped this repository to zero."
+        ),
+        variant: "warning",
+      };
+    }
+
+    if (score < 70) {
+      return {
+        label: `${Math.round(score)} / 100`,
+        detail: t("governance.lowScoreExplanation", "Needs standard fixes."),
+        variant: "warning",
+      };
+    }
+
+    return {
+      label: `${Math.round(score)} / 100`,
+      detail: t("governance.scoredRepository", "Scored repository."),
+      variant: score >= 85 ? "success" : "neutral",
+    };
+  };
+
   const hasBackgroundRefreshWork = useMemo(
     () =>
       repositories.some((repository) =>
@@ -287,45 +468,39 @@ function GithubGovernance() {
     window.history.replaceState({}, document.title, nextUrl);
   };
 
-  const refreshAll = async () => {
-    const [, , , , , overviewResponse, integrationResponse] = await Promise.all([
-      accountsQuery.refetch?.(),
-      repositoriesQuery.refetch?.(),
-      scansQuery.refetch?.(),
-      profilesQuery.refetch?.(),
-      aiRequestsQuery.refetch?.(),
-      apiClient.get("/github-repositories/developer-overview/").catch(() => null),
+  const refreshAll = useCallback(async () => {
+    const [, , , , , integrationResponse] = await Promise.all([
+      refetchAccounts?.(),
+      refetchRepositories?.(),
+      refetchScans?.(),
+      refetchProfiles?.(),
+      refetchAiRequests?.(),
       apiClient.get("/github-accounts/integration-status/").catch(() => null),
     ]);
-    if (overviewResponse?.data) {
-      setDeveloperOverview(overviewResponse.data);
-    }
     if (integrationResponse?.data) {
       setIntegrationStatus(integrationResponse.data);
     }
-  };
+  }, [
+    refetchAccounts,
+    refetchRepositories,
+    refetchScans,
+    refetchProfiles,
+    refetchAiRequests,
+  ]);
 
   useEffect(() => {
     let ignore = false;
 
     const loadGovernanceMeta = async () => {
       try {
-        const [overviewResponse, integrationResponse] = await Promise.all([
-          apiClient.get("/github-repositories/developer-overview/"),
-          apiClient.get("/github-accounts/integration-status/"),
-        ]);
+        const integrationResponse = await apiClient.get(
+          "/github-accounts/integration-status/"
+        );
         if (!ignore) {
-          setDeveloperOverview(overviewResponse.data);
           setIntegrationStatus(integrationResponse.data);
         }
       } catch {
         if (!ignore) {
-          setDeveloperOverview({
-            leaderboard: [],
-            recent_commits: [],
-            recent_pull_requests: [],
-            scope: "self",
-          });
           setIntegrationStatus(null);
         }
       }
@@ -336,6 +511,39 @@ function GithubGovernance() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    if (isAdmin || !hasConnectedGithubAccount) {
+      setDeveloperActivity(EMPTY_DEVELOPER_ACTIVITY);
+      setIsDeveloperActivityLoading(false);
+      return undefined;
+    }
+
+    const loadDeveloperActivity = async () => {
+      setIsDeveloperActivityLoading(true);
+      try {
+        const response = await apiClient.get("/github-repositories/developer-overview/");
+        if (!ignore) {
+          setDeveloperActivity(response.data || EMPTY_DEVELOPER_ACTIVITY);
+        }
+      } catch {
+        if (!ignore) {
+          setDeveloperActivity(EMPTY_DEVELOPER_ACTIVITY);
+        }
+      } finally {
+        if (!ignore) {
+          setIsDeveloperActivityLoading(false);
+        }
+      }
+    };
+
+    void loadDeveloperActivity();
+    return () => {
+      ignore = true;
+    };
+  }, [isAdmin, hasConnectedGithubAccount]);
 
   useEffect(() => {
     if (!hasConnectedGithubAccount) {
@@ -349,7 +557,35 @@ function GithubGovernance() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [hasConnectedGithubAccount, hasBackgroundRefreshWork]);
+  }, [hasConnectedGithubAccount, hasBackgroundRefreshWork, refreshAll]);
+
+  useEffect(() => {
+    const handleGovernanceSyncRequested = () => {
+      void refreshAll();
+      if (!isAdmin && hasConnectedGithubAccount) {
+        void apiClient
+          .get("/github-repositories/developer-overview/")
+          .then((response) => {
+            setDeveloperActivity(response.data || EMPTY_DEVELOPER_ACTIVITY);
+          })
+          .catch(() => {
+            setDeveloperActivity(EMPTY_DEVELOPER_ACTIVITY);
+          });
+      }
+    };
+
+    window.addEventListener(
+      "governance-sync-requested",
+      handleGovernanceSyncRequested
+    );
+
+    return () => {
+      window.removeEventListener(
+        "governance-sync-requested",
+        handleGovernanceSyncRequested
+      );
+    };
+  }, [refreshAll, isAdmin, hasConnectedGithubAccount]);
 
   useEffect(() => {
     let ignore = false;
@@ -412,7 +648,7 @@ function GithubGovernance() {
     return () => {
       ignore = true;
     };
-  }, [t]);
+  }, [t, refreshAll]);
 
   const handleConnectGithub = async (event) => {
     event.preventDefault();
@@ -437,6 +673,65 @@ function GithubGovernance() {
       );
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const handleSyncAccountRepositories = async (accountId) => {
+    if (!accountId) {
+      return;
+    }
+
+    setSyncingAccountId(accountId);
+    try {
+      await apiClient.post(`/github-accounts/${accountId}/sync-repositories/`);
+      await refreshAll();
+    } catch (error) {
+      window.alert(
+        error?.response?.data?.detail ||
+          t("governance.repositorySyncFailed", "Repository sync failed.")
+      );
+    } finally {
+      setSyncingAccountId(null);
+    }
+  };
+
+  const handleDisconnectGithubAccount = async (account) => {
+    if (!account?.id || !canDisconnectGithubAccount(account)) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      t(
+        "governance.disconnectGithubConfirm",
+        "Disconnect this GitHub account from your profile? You can connect a different GitHub account afterwards."
+      )
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setDisconnectingAccountId(account.id);
+    try {
+      await apiClient.delete(`/github-accounts/${account.id}/`);
+      setLatestRemediationDraft(null);
+      setLatestPreparedBundle(null);
+      await refreshAll();
+      window.alert(
+        t(
+          "governance.disconnectGithubSuccess",
+          "GitHub account disconnected. You can now connect another account."
+        )
+      );
+    } catch (error) {
+      window.alert(
+        error?.response?.data?.detail ||
+          t(
+            "governance.disconnectGithubFailed",
+            "GitHub account could not be disconnected."
+          )
+      );
+    } finally {
+      setDisconnectingAccountId(null);
     }
   };
 
@@ -552,6 +847,19 @@ function GithubGovernance() {
       return;
     }
 
+    const selectedRepository = repositories.find(
+      (repository) => Number(repository.id) === Number(repositoryId)
+    );
+    if (!canUseAiForRepository(selectedRepository)) {
+      window.alert(
+        t(
+          "governance.aiOnlyOwnRepositories",
+          "AI fixes are only available for repositories connected to your own GitHub account."
+        )
+      );
+      return;
+    }
+
     setIsPreparingRemediation(true);
     try {
       const response = await apiClient.post("/ai-code-requests/prepare-remediation/", {
@@ -574,9 +882,9 @@ function GithubGovernance() {
   return (
     <div className="flex h-screen w-full items-start overflow-x-hidden bg-transparent font-sans text-slate-900">
       <Sidebar activeItem="governance" logoClickable={true} />
-      <div className="relative flex min-h-0 grow flex-col items-start self-stretch overflow-y-auto pb-10">
+      <div className="relative flex min-h-0 min-w-0 grow flex-col items-start self-stretch overflow-y-auto overflow-x-hidden pb-10">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.76),transparent_36%)]" />
-        <div className="relative flex w-full flex-col gap-6">
+        <div className="relative flex min-w-0 w-full flex-col gap-6">
           <TopbarWithRightNav
             className="mx-6 mt-6 rounded-[28px] border border-white/65 bg-white/55 px-6 py-4 shadow-[0_20px_50px_rgba(148,163,184,0.12)] backdrop-blur md:mx-8 xl:mx-10"
             leftSlot={
@@ -585,13 +893,29 @@ function GithubGovernance() {
               </Badge>
             }
             rightSlot={
-              <Badge variant={isAdmin ? "success" : "neutral"}>
-                {roleViewLabel}
-              </Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  to="/github-governance/rules"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-black text-white shadow-[0_14px_30px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:bg-slate-800"
+                >
+                  <FeatherBookOpen size={16} />
+                  {t("governance.codeRules", "Kod Kuralları")}
+                </Link>
+                <Link
+                  to="/github-governance/ai-prompts"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                >
+                  <FeatherSparkles size={16} />
+                  AI Prompt Rehberi
+                </Link>
+                <Badge variant={isAdmin ? "success" : "neutral"}>
+                  {roleViewLabel}
+                </Badge>
+              </div>
             }
           />
 
-          <div className="grid grid-cols-1 gap-6 px-6 md:px-8 xl:px-10">
+          <div className="grid min-w-0 grid-cols-1 gap-6 px-6 md:px-8 xl:px-10">
             <section className="rounded-[32px] border border-white/65 bg-white/90 p-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)]">
               <Badge variant="neutral" icon={<FeatherZap />}>
                 {t(
@@ -805,8 +1129,8 @@ function GithubGovernance() {
                       )}
                     </div>
                   )}
-                  <div className="mt-5 flex flex-col gap-3">
-                    {accounts.length ? (
+                <div className="mt-5 flex flex-col gap-3">
+                  {accounts.length ? (
                       accounts.map((account) => (
                         <div key={account.id} className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
                           <div className="flex items-start justify-between gap-3">
@@ -814,9 +1138,35 @@ function GithubGovernance() {
                               <p className="text-lg font-black text-slate-950">{account.github_username}</p>
                               <p className="text-sm text-slate-500">{account.masked_token}</p>
                             </div>
-                            <Badge variant="neutral">
-                              {t("governance.repositories", "Repositories")} {account.repository_count || 0}
-                            </Badge>
+                            <div className="flex flex-col items-end gap-2">
+                              <Badge variant="neutral">
+                                {t("governance.repositories", "Repositories")} {account.repository_count || 0}
+                              </Badge>
+                              <div className="flex flex-wrap justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSyncAccountRepositories(account.id)}
+                                  disabled={syncingAccountId === account.id}
+                                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {syncingAccountId === account.id
+                                    ? t("governance.syncing", "Syncing...")
+                                    : t("governance.syncRepositories", "Sync repositories")}
+                                </button>
+                                {canDisconnectGithubAccount(account) ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDisconnectGithubAccount(account)}
+                                    disabled={disconnectingAccountId === account.id}
+                                    className="rounded-2xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {disconnectingAccountId === account.id
+                                      ? t("governance.disconnectingGithub", "Disconnecting...")
+                                      : t("governance.disconnectGithub", "Disconnect")}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
                           </div>
                           <p className="mt-3 text-xs uppercase tracking-[0.16em] text-slate-400">
                             {t("governance.lastSynced", "Last synced")}{" "}
@@ -897,108 +1247,288 @@ function GithubGovernance() {
               </div>
             </section>
 
-            <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-              <div className="rounded-[32px] border border-white/65 bg-white/90 p-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)]">
+            {!isAdmin ? (
+              <section className="rounded-[32px] border border-white/65 bg-white/90 p-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)]">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">
+                      {t("governance.latestCommits", "Latest commits")}
+                    </p>
+                    <h2 className="mt-3 font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
+                      {t("governance.latestCommitsTitle", "Your last 5 GitHub commits")}
+                    </h2>
+                    <p className="mt-3 text-sm leading-6 text-slate-500">
+                      {t(
+                        "governance.latestCommitsBody",
+                        "Review your most recent commit activity from the GitHub account connected to this workspace. This list is informational only and does not affect repository scores."
+                      )}
+                    </p>
+                  </div>
+                  <Badge variant="neutral">
+                    {t("governance.latestCommitCount", "{{count}} commits").replace(
+                      "{{count}}",
+                      String(recentCommitRows.length)
+                    )}
+                  </Badge>
+                </div>
+
+                <div className="mt-5 flex flex-col gap-3">
+                  {isDeveloperActivityLoading ? (
+                    <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+                      {t("governance.loadingRecentCommits", "Loading recent commits...")}
+                    </div>
+                  ) : recentCommitRows.length ? (
+                    recentCommitRows.map((commit) => (
+                      <a
+                        key={commit.id || commit.sha}
+                        href={commit.commit_url || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block rounded-[22px] border border-slate-200 bg-slate-50 p-4 transition hover:-translate-y-0.5 hover:border-sky-200 hover:bg-white hover:shadow-[0_18px_40px_rgba(148,163,184,0.16)]"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-base font-black text-slate-950">
+                              {commit.message_title || t("governance.noDescription", "No description")}
+                            </p>
+                            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">
+                              {commit.repository_name || "-"}
+                            </p>
+                            <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-500">
+                              {commit.message_body ||
+                                t(
+                                  "governance.commitNoBody",
+                                  "No additional commit description."
+                                )}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-2">
+                            <Badge variant="neutral">
+                              {t("governance.informationalOnly", "Informational only")}
+                            </Badge>
+                            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                              {(commit.sha || "").slice(0, 7)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
+                          <span>{commit.author_name || commit.author_login || "-"}</span>
+                          <span>
+                            {formatCommitTimestamp(
+                              commit.committed_at || commit.created_at
+                            )}
+                          </span>
+                        </div>
+                      </a>
+                    ))
+                  ) : (
+                    <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+                      {hasConnectedGithubAccount
+                        ? t(
+                            "governance.noRecentCommits",
+                            "No recent commit activity was found for your connected GitHub account yet."
+                          )
+                        : t(
+                            "governance.connectGithubFirstForCommits",
+                            "Connect your GitHub account first to list your recent commits."
+                          )}
+                    </div>
+                  )}
+                </div>
+              </section>
+            ) : null}
+
+            <section className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+              <div className="min-w-0 rounded-[32px] border border-white/65 bg-white/90 p-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)]">
                 <h2 className="font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
                   {t("governance.repositories", "Repositories")}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  {t(
-                    "governance.repositoriesBody",
-                    "Connected repositories are watched automatically. The table below shows the current monitoring state, latest score, and refresh times."
-                  )}
+                  {isAdmin
+                    ? t(
+                      "governance.repositoriesAdminBody",
+                      "Admin list shows every synced team repository with just the repository name, visible rule violation count, and score impact."
+                    )
+                    : t(
+                      "governance.repositoriesBody",
+                      "Connected repositories are watched automatically. The table below shows the current monitoring state, latest score, and refresh times."
+                    )}
                 </p>
+                {accounts.length ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {accounts.map((account) => (
+                      <div key={account.id} className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSyncAccountRepositories(account.id)}
+                          disabled={syncingAccountId === account.id}
+                          className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {syncingAccountId === account.id
+                            ? t("governance.syncing", "Syncing...")
+                            : `${account.github_username} ${t("governance.syncRepositories", "Sync repositories")}`}
+                        </button>
+                        {canDisconnectGithubAccount(account) ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDisconnectGithubAccount(account)}
+                            disabled={disconnectingAccountId === account.id}
+                            className="rounded-2xl border border-rose-200 bg-white px-4 py-2 text-sm font-bold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {disconnectingAccountId === account.id
+                              ? t("governance.disconnectingGithub", "Disconnecting...")
+                              : `${account.github_username} ${t("governance.disconnectGithub", "Disconnect")}`}
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="mt-5 overflow-hidden rounded-[26px] border border-slate-200 bg-slate-50">
                   {repositories.length ? (
                     <>
-                      <div className="hidden grid-cols-[minmax(0,2.1fr)_1fr_0.8fr_1fr_1.2fr_auto] gap-4 border-b border-slate-200 bg-white/70 px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-400 md:grid">
-                        <span>{t("governance.repositoryColumn", "Repository")}</span>
-                        <span>{t("governance.monitoringColumn", "Monitoring")}</span>
-                        <span>{t("governance.scoreColumn", "Score")}</span>
-                        <span>{t("governance.profileColumn", "Profile")}</span>
-                        <span>{t("governance.lastUpdateColumn", "Last update")}</span>
-                        <span>{t("governance.actionColumn", "Action")}</span>
-                      </div>
-                      {repositories.map((repository) => {
-                        const monitoringState = getRepositoryMonitoringState(repository);
-                        const activityHealthState = getActivityHealthState(repository);
-                        return (
-                          <div
-                            key={repository.id}
-                            className="grid gap-4 border-t border-slate-200 px-4 py-4 first:border-t-0 md:grid-cols-[minmax(0,2.1fr)_1fr_0.8fr_1fr_1.2fr_auto] md:items-center"
-                          >
-                            <div>
-                              <p className="text-lg font-black text-slate-950">{repository.full_name}</p>
-                              <p className="text-sm text-slate-500">
-                                {repository.primary_language ||
-                                  t("governance.unknownLanguage", "Unknown language")}
-                              </p>
-                              {repository.metadata?.webhook?.status === "polling_fallback" ? (
-                                <p className="mt-2 text-xs leading-5 text-slate-500">
-                                  {t(
-                                    "governance.pollingFallbackHint",
-                                    "Webhook requires a public backend URL. Until then, the repository stays under background refresh mode."
-                                  )}
-                                </p>
-                              ) : null}
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <Badge variant={getStatusVariant(monitoringState.status)}>
-                                {monitoringState.label}
-                              </Badge>
-                              <Badge variant={activityHealthState.variant}>
-                                {activityHealthState.label}
-                              </Badge>
-                              {repository.metadata?.auto_sync?.status ? (
-                                <Badge variant={getStatusVariant(repository.metadata.auto_sync.status)}>
-                                  {t("governance.autoSync", "Auto-sync")}{" "}
-                                  {getStatusLabel(repository.metadata.auto_sync.status)}
-                                </Badge>
-                              ) : null}
-                            </div>
-                            <div>
-                              {Number.isFinite(Number(repository.latest_score)) ? (
-                                <Badge variant={Number(repository.latest_score) >= 85 ? "success" : "warning"}>
-                                  {Math.round(Number(repository.latest_score))}
-                                </Badge>
-                              ) : (
-                                <span className="text-sm text-slate-500">
-                                  {t("governance.awaitingFirstScore", "Awaiting first score")}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-sm text-slate-600">
-                              {repository.standard_profile_details?.name ||
-                                t("governance.noProfile", "No profile")}
-                            </div>
-                            <div className="text-sm text-slate-600">
-                              <p>{formatTimestamp(repository.last_synced_at)}</p>
-                              <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-400">
-                                {t("governance.lastPush", "Last push")}{" "}
-                                {formatTimestamp(repository.last_pushed_at)}
-                              </p>
-                              {Number(repository.metadata?.activity_health?.failing_checks || 0) > 0 ? (
-                                <p className="mt-1 text-xs uppercase tracking-[0.14em] text-rose-500">
-                                  {repository.metadata.activity_health.failing_checks}{" "}
-                                  {t("governance.failedChecks", "failed checks")}
-                                </p>
-                              ) : null}
-                            </div>
-                            <div className="flex sm:justify-end">
-                              <button
-                                type="button"
-                                onClick={() => handleScanRepository(repository.id)}
-                                disabled={activeScanId === repository.id}
-                                className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
-                              >
-                                {activeScanId === repository.id
-                                  ? t("governance.refreshing", "Refreshing...")
-                                  : t("governance.refreshNow", "Refresh now")}
-                              </button>
-                            </div>
+                      {isAdmin ? (
+                        <>
+                          <div className="hidden grid-cols-[minmax(0,2fr)_120px_120px] gap-3 border-b border-slate-200 bg-white/70 px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-400 md:grid">
+                            <span>{t("governance.repositoryColumn", "Repository")}</span>
+                            <span>{t("governance.violationsColumn", "Violations")}</span>
+                            <span>{t("governance.scoreColumn", "Score")}</span>
                           </div>
-                        );
-                      })}
+                          {sortedRepositories.map((repository) => {
+                            const latestScan = latestScanByRepositoryId.get(repository.id);
+                            const violationCount = Math.max(
+                              Number(latestScan?.violation_count || 0),
+                              latestScan?.violations?.length || 0
+                            );
+                            const scoreState = getScoreState(repository);
+                            return (
+                              <div
+                                key={repository.id}
+                                className="grid min-w-0 gap-3 border-t border-slate-200 px-4 py-4 first:border-t-0 md:grid-cols-[minmax(0,2fr)_120px_120px] md:items-center"
+                              >
+                                <div className="min-w-0">
+                                  <p className="break-words text-lg font-black text-slate-950">
+                                    {repository.full_name}
+                                  </p>
+                                </div>
+                                <div>
+                                  <Badge variant={violationCount > 0 ? "warning" : "success"}>
+                                    {violationCount}
+                                  </Badge>
+                                </div>
+                                <div>
+                                  <Badge variant={scoreState.variant}>
+                                    {scoreState.label}
+                                  </Badge>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </>
+                      ) : (
+                        <>
+                          <div className="hidden grid-cols-[minmax(0,1.8fr)_minmax(130px,0.8fr)_minmax(90px,0.55fr)_minmax(130px,0.8fr)_minmax(150px,0.9fr)_auto] gap-3 border-b border-slate-200 bg-white/70 px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-400 md:grid">
+                            <span>{t("governance.repositoryColumn", "Repository")}</span>
+                            <span>{t("governance.monitoringColumn", "Monitoring")}</span>
+                            <span>{t("governance.scoreColumn", "Score")}</span>
+                            <span>{t("governance.profileColumn", "Profile")}</span>
+                            <span>{t("governance.lastUpdateColumn", "Last update")}</span>
+                            <span>{t("governance.actionColumn", "Action")}</span>
+                          </div>
+                          {sortedRepositories.map((repository) => {
+                            const monitoringState = getRepositoryMonitoringState(repository);
+                            const activityHealthState = getActivityHealthState(repository);
+                            const scoreState = getScoreState(repository);
+                            const latestScan = latestScanByRepositoryId.get(repository.id);
+                            const ruleBreakdown = latestScan?.summary?.rule_breakdown || {};
+                            const topRule = Object.entries(ruleBreakdown).sort(
+                              (left, right) => Number(right[1] || 0) - Number(left[1] || 0)
+                            )[0];
+                            return (
+                              <div
+                                key={repository.id}
+                                className="grid min-w-0 gap-3 border-t border-slate-200 px-4 py-4 first:border-t-0 md:grid-cols-[minmax(0,1.8fr)_minmax(130px,0.8fr)_minmax(90px,0.55fr)_minmax(130px,0.8fr)_minmax(150px,0.9fr)_auto] md:items-center"
+                              >
+                                <div className="min-w-0">
+                                  <p className="break-words text-lg font-black text-slate-950">{repository.full_name}</p>
+                                  <p className="text-sm text-slate-500">
+                                    {repository.primary_language ||
+                                      t("governance.unknownLanguage", "Unknown language")}
+                                  </p>
+                                  {repository.metadata?.webhook?.status === "polling_fallback" ? (
+                                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                                      {t(
+                                        "governance.pollingFallbackHint",
+                                        "Webhook requires a public backend URL. Until then, the repository stays under background refresh mode."
+                                      )}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <Badge variant={getStatusVariant(monitoringState.status)}>
+                                    {monitoringState.label}
+                                  </Badge>
+                                  <Badge variant={activityHealthState.variant}>
+                                    {activityHealthState.label}
+                                  </Badge>
+                                  {repository.metadata?.auto_sync?.status ? (
+                                    <Badge variant={getStatusVariant(repository.metadata.auto_sync.status)}>
+                                      {t("governance.autoSync", "Auto-sync")}{" "}
+                                      {getStatusLabel(repository.metadata.auto_sync.status)}
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                                <div>
+                                  <div className="flex flex-col items-start gap-1">
+                                    <Badge variant={scoreState.variant}>
+                                      {scoreState.label}
+                                    </Badge>
+                                    <span className="text-xs leading-5 text-slate-500">
+                                      {scoreState.detail}
+                                    </span>
+                                    {latestScan?.violation_count ? (
+                                      <span className="text-xs leading-5 text-rose-600">
+                                        {latestScan.violation_count}{" "}
+                                        {t("governance.violations", "Violations")}
+                                        {topRule ? ` - ${topRule[0]} (${topRule[1]})` : ""}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                                <div className="text-sm text-slate-600">
+                                  {repository.standard_profile_details?.name ||
+                                    t("governance.noProfile", "No profile")}
+                                </div>
+                                <div className="text-sm text-slate-600">
+                                  <p>{formatTimestamp(repository.last_synced_at)}</p>
+                                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-400">
+                                    {t("governance.lastPush", "Last push")}{" "}
+                                    {formatTimestamp(repository.last_pushed_at)}
+                                  </p>
+                                  {Number(repository.metadata?.activity_health?.failing_checks || 0) > 0 ? (
+                                    <p className="mt-1 text-xs uppercase tracking-[0.14em] text-rose-500">
+                                      {repository.metadata.activity_health.failing_checks}{" "}
+                                      {t("governance.failedChecks", "failed checks")}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <div className="flex sm:justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleScanRepository(repository.id)}
+                                    disabled={activeScanId === repository.id}
+                                    className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                                  >
+                                    {activeScanId === repository.id
+                                      ? t("governance.refreshing", "Refreshing...")
+                                      : t("governance.refreshNow", "Refresh now")}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
                     </>
                   ) : (
                     <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
@@ -1032,9 +1562,15 @@ function GithubGovernance() {
                               ? `${t("governance.developers", "Developers")} ${scan.developer_count || 0}`
                               : t("governance.personalVisibility", "Personal visibility")}
                           </Badge>
-                          <Badge variant={Number(scan.score || 0) >= 85 ? "success" : "warning"}>
-                            {t("governance.score", "Score")} {Math.round(Number(scan.score || 0))}
-                          </Badge>
+                          {Number.isFinite(Number(scan.score)) ? (
+                            <Badge variant={Number(scan.score) >= 85 ? "success" : "warning"}>
+                              {t("governance.score", "Score")} {Math.round(Number(scan.score))}
+                            </Badge>
+                          ) : (
+                            <Badge variant="neutral">
+                              {t("governance.scorePending", "Score pending")}
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     ))
@@ -1058,11 +1594,11 @@ function GithubGovernance() {
                   {isAdmin
                     ? t(
                       "governance.teamViolationsBody",
-                      "Inspect the latest rule failures with repository, file, line, and explanation details."
+                      "Review repository-level violation totals, then open a project detail page for exact fixes."
                     )
                     : t(
                       "governance.myViolationsBody",
-                      "Use these file, line, and rule details to understand exactly what needs to be fixed."
+                      "Review repository-level violation totals, then open a project detail page for exact fixes."
                     )}
                 </p>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -1070,50 +1606,104 @@ function GithubGovernance() {
                     {visibleViolationCount} {t("governance.violations", "Violations")}
                   </Badge>
                   <Badge variant="neutral">
+                    {repositoryViolationSummaries.length}{" "}
+                    {t("governance.repositories", "Repositories")}
+                  </Badge>
+                  <Badge variant="neutral">
                     {pollingFallbackCount} {t("governance.pollingFallback", "Background sync fallback")}
                   </Badge>
-                  <button
-                    type="button"
-                    disabled={isPreparingRemediation || !recentViolations.length}
-                    onClick={() =>
-                      handlePrepareRemediation(
-                        recentViolations[0]?.repository || repositories[0]?.id
-                      )
-                    }
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
-                  >
-                    {isPreparingRemediation
-                      ? t("governance.preparing", "Preparing...")
-                      : t("governance.prepareRemediationDraft", "Prepare AI fix draft")}
-                  </button>
+                  {!isAdmin ? (
+                    <button
+                      type="button"
+                      disabled={isPreparingRemediation || !visibleViolationCount}
+                      onClick={() =>
+                        handlePrepareRemediation(
+                          firstRepositoryWithViolations?.id ||
+                            recentViolations[0]?.repository ||
+                            repositories[0]?.id
+                        )
+                      }
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                    >
+                      {isPreparingRemediation
+                        ? t("governance.preparing", "Preparing...")
+                        : t("governance.prepareRemediationDraft", "Prepare AI fix draft")}
+                    </button>
+                  ) : null}
                 </div>
-                <div className="mt-5 flex flex-col gap-3">
-                  {recentViolations.length ? (
-                    recentViolations.slice(0, 10).map((violation) => (
-                      <div key={violation._key} className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                        <div className="flex items-start justify-between gap-3">
+                <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  {repositoryViolationSummaries.length ? (
+                    repositoryViolationSummaries.map(({ repository, latestScan, violationCount, ruleSummary }) => (
+                      <div
+                        key={repository.id}
+                        className="rounded-[24px] border border-slate-200 bg-slate-50 p-5"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="text-lg font-black text-slate-950">{violation.title}</p>
-                            <p className="text-sm text-slate-500">{violation.repository_name}</p>
+                            <p className="text-lg font-black text-slate-950">
+                              {repository.full_name}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {repository.primary_language ||
+                                t("governance.unknownLanguage", "Unknown language")}
+                            </p>
                           </div>
-                          <Badge variant="warning">
-                            {violation.severity || t("governance.unknownStatus", "Unknown")}
+                          <Badge variant={Number(latestScan?.score || 0) >= 85 ? "success" : "warning"}>
+                            {t("governance.score", "Score")}{" "}
+                            {Number.isFinite(Number(latestScan?.score))
+                              ? Math.round(Number(latestScan.score))
+                              : "-"}
                           </Badge>
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Badge variant="neutral">
-                            {violation.file_path || t("governance.repositoryLevel", "Repository level")}
-                          </Badge>
-                          {violation.line_number ? (
-                            <Badge variant="neutral">
-                              {t("governance.line", "Line")} {violation.line_number}
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                              {t("governance.violations", "Violations")}
+                            </p>
+                            <p className="mt-2 text-2xl font-black text-slate-950">
+                              {violationCount}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                              {t("governance.rules", "rules")}
+                            </p>
+                            <p className="mt-2 text-2xl font-black text-slate-950">
+                              {ruleSummary.length}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {ruleSummary.slice(0, 4).map((rule) => (
+                            <Badge
+                              key={`${repository.id}-${rule.code}`}
+                              variant={rule.severity === "high" || rule.severity === "critical" ? "warning" : "neutral"}
+                            >
+                              {rule.code} {rule.count}
                             </Badge>
-                          ) : null}
-                          {violation.author_login ? (
-                            <Badge variant="neutral">{violation.author_login}</Badge>
-                          ) : null}
+                          ))}
                         </div>
-                        <p className="mt-3 text-sm leading-6 text-slate-600">{violation.message}</p>
+                        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                          <span className="text-xs uppercase tracking-[0.14em] text-slate-400">
+                            {formatTimestamp(latestScan?.completed_at || latestScan?.created_at)}
+                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            <Link
+                              to={`/github-governance/repositories/${repository.id}/violations`}
+                              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                            >
+                              {t("governance.details", "Details")}
+                            </Link>
+                            {canUseAiForRepository(repository) ? (
+                              <Link
+                                to={`/github-governance/repositories/${repository.id}/violations`}
+                                className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800"
+                              >
+                                {t("governance.aiDraft", "AI draft")}
+                              </Link>
+                            ) : null}
+                          </div>
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -1125,7 +1715,7 @@ function GithubGovernance() {
                     </div>
                   )}
                 </div>
-                {latestRemediationDraft ? (
+                {canShowLatestRemediationDraft ? (
                   <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -1184,178 +1774,7 @@ function GithubGovernance() {
               </div>
             </section>
 
-            <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_460px]">
-              <div className="rounded-[32px] border border-white/65 bg-white/90 p-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)]">
-                <h2 className="font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
-                  {leaderboardTitle}
-                </h2>
-                <p className="mt-2 text-sm text-slate-500">
-                  {overviewScope === "team"
-                    ? t(
-                      "governance.teamLeaderboardBody",
-                      "Cross-repository contributor ranking based on scan, commit, and pull request quality."
-                    )
-                    : t(
-                      "governance.myGovernanceScoreBody",
-                      "Your visible score blends scan findings, commit quality, and pull request health."
-                    )}
-                </p>
-                <div className="mt-5 flex flex-col gap-3">
-                  {leaderboard.length ? (
-                    leaderboard.map((developer, index) => (
-                      <div
-                        key={developer.github_login || index}
-                        className="rounded-[22px] border border-slate-200 bg-slate-50 p-4"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-lg font-black text-slate-950">
-                              {developer.display_name || developer.github_login}
-                            </p>
-                            <p className="text-sm text-slate-500">
-                              {developer.github_login}
-                            </p>
-                          </div>
-                          <Badge
-                            variant={
-                              Number(developer.composite_score || 0) >= 85
-                                ? "success"
-                                : "warning"
-                            }
-                          >
-                            {t("governance.score", "Score")} {Math.round(Number(developer.composite_score || 0))}
-                          </Badge>
-                        </div>
-                        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                          {[
-                            [t("governance.commits", "Commits"), developer.commit_count || 0],
-                            [t("governance.pullRequestsShort", "PRs"), developer.pull_request_count || 0],
-                            [t("governance.mergedPullRequests", "Merged PRs"), developer.merged_pull_request_count || 0],
-                            [t("governance.violations", "Violations"), developer.violation_count || 0],
-                          ].map(([label, value]) => (
-                            <div
-                              key={label}
-                              className="rounded-2xl border border-slate-200 bg-white px-3 py-3"
-                            >
-                              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                                {label}
-                              </p>
-                              <p className="mt-2 text-lg font-black text-slate-950">
-                                {value}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-                      {leaderboardEmptyMessage}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-[32px] border border-white/65 bg-white/90 p-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)]">
-                <h2 className="font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
-                  {activityFeedTitle}
-                </h2>
-                <p className="mt-2 text-sm text-slate-500">
-                  {overviewScope === "team"
-                    ? t(
-                      "governance.teamActivityFeedBody",
-                      "A live stream of recent contributor activity across connected repositories."
-                    )
-                    : t(
-                      "governance.myActivityFeedBody",
-                      "Only commits and pull requests authored by your connected GitHub account are shown here."
-                    )}
-                </p>
-                <div className="mt-5 rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-black text-slate-950">
-                    {isAdmin
-                      ? t("governance.recentTeamCommits", "Recent Team Commits")
-                      : t("governance.myRecentCommits", "My Recent Commits")}
-                  </p>
-                  <div className="mt-3 flex flex-col gap-2">
-                    {recentCommitActivities.length ? (
-                      recentCommitActivities.slice(0, 5).map((commit) => (
-                        <div
-                          key={commit.id}
-                          className="rounded-2xl border border-slate-200 bg-white px-3 py-3"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-black text-slate-950">
-                              {commit.message_title || commit.sha}
-                            </p>
-                            <Badge
-                              variant={
-                                Number(commit.quality_score || 0) >= 85
-                                  ? "success"
-                                  : "warning"
-                              }
-                            >
-                              {Math.round(Number(commit.quality_score || 0))}
-                            </Badge>
-                          </div>
-                          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                            {commit.author_login} - {commit.repository_name}
-                          </p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">
-                        {t("governance.noCommitActivity", "No commit activity synced yet.")}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-5 rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-black text-slate-950">
-                    {isAdmin
-                      ? t("governance.recentTeamPullRequests", "Recent Team Pull Requests")
-                      : t("governance.myRecentPullRequests", "My Recent Pull Requests")}
-                  </p>
-                  <div className="mt-3 flex flex-col gap-2">
-                    {recentPullRequestActivities.length ? (
-                      recentPullRequestActivities.slice(0, 5).map((pullRequest) => (
-                        <div
-                          key={pullRequest.id}
-                          className="rounded-2xl border border-slate-200 bg-white px-3 py-3"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-black text-slate-950">
-                              PR #{pullRequest.pull_number} - {pullRequest.title}
-                            </p>
-                            <Badge
-                              variant={
-                                Number(pullRequest.quality_score || 0) >= 85
-                                  ? "success"
-                                  : "warning"
-                              }
-                            >
-                              {Math.round(Number(pullRequest.quality_score || 0))}
-                            </Badge>
-                          </div>
-                          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                            {pullRequest.author_login} - {pullRequest.repository_name}
-                          </p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">
-                        {t(
-                          "governance.noPullRequestActivity",
-                          "No pull request activity synced yet."
-                        )}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {false ? (
+            {showAiValidationPanel ? (
             <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
               <div className="rounded-[32px] border border-white/65 bg-white/90 p-6 shadow-[0_24px_70px_rgba(148,163,184,0.12)]">
                 <h2 className="font-['Newsreader'] text-3xl font-medium tracking-tight text-slate-950">
@@ -1371,7 +1790,7 @@ function GithubGovernance() {
                       className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-sky-400 focus:bg-white"
                     >
                       <option value="">{t("governance.noRepository", "No repository")}</option>
-                      {repositories.map((repository) => (
+                      {aiAccessibleRepositories.map((repository) => (
                         <option key={repository.id} value={repository.id}>{repository.full_name}</option>
                       ))}
                     </select>

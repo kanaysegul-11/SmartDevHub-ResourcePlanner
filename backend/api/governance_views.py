@@ -1,5 +1,6 @@
 import json
 
+from django.db import OperationalError
 from django.db.models import Avg, Count, Q
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -8,6 +9,7 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .governance_serializers import (
+    AIRemediationApplySerializer,
     AIRemediationPrepareSerializer,
     AICodeRequestSerializer,
     AIPromptPrepareSerializer,
@@ -32,14 +34,19 @@ from .governance_services import (
     finalize_stale_governance_runs,
     get_user_github_logins,
     is_governance_admin,
+    apply_safe_repository_remediation,
+    DISABLED_GOVERNANCE_RULE_CODES,
     prepare_ai_remediation_bundle,
     prepare_ai_prompt_bundle,
     process_github_webhook_event,
     queue_due_polling_refreshes,
+    remove_standard_rule_and_refresh_scores,
     scan_github_repository,
     serialize_evaluation,
     sync_repository_activity,
     sync_github_repositories,
+    refresh_github_repository_index,
+    restore_core_standard_rule_library,
     queue_governance_login_sync,
     validate_ai_output,
     verify_github_webhook_signature,
@@ -90,19 +97,33 @@ class StandardProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="create-starter-profile")
     def create_starter_profile(self, request):
-        profile = ensure_default_standard_profile(created_by=request.user)
+        profile = restore_core_standard_rule_library(created_by=request.user)
         serializer = self.get_serializer(profile)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class StandardRuleViewSet(viewsets.ModelViewSet):
-    queryset = StandardRule.objects.select_related("profile")
+    queryset = StandardRule.objects.select_related("profile").exclude(
+        code__in=DISABLED_GOVERNANCE_RULE_CODES
+    )
     serializer_class = StandardRuleSerializer
     permission_classes = [GovernanceAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["profile", "category", "severity", "is_enabled"]
     search_fields = ["code", "title", "description"]
     ordering_fields = ["order", "title", "created_at"]
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        summary = remove_standard_rule_and_refresh_scores(rule=instance)
+        return Response(
+            {
+                "status": "deleted",
+                "detail": "Rule deleted and affected repository scores refreshed.",
+                **summary,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class GithubAccountViewSet(viewsets.ModelViewSet):
@@ -114,7 +135,10 @@ class GithubAccountViewSet(viewsets.ModelViewSet):
         queryset = GithubAccount.objects.select_related("user")
         if (
             is_governance_admin(self.request.user)
-            and self.request.query_params.get("scope") == "team"
+            and (
+                self.request.query_params.get("scope") == "team"
+                or getattr(self, "action", "") in {"sync_repositories", "sync_all_repositories"}
+            )
         ):
             return queryset
         return queryset.filter(user=self.request.user)
@@ -183,6 +207,40 @@ class GithubAccountViewSet(viewsets.ModelViewSet):
             {
                 "account": serializer.data,
                 "synced_repository_count": synced_count,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"], url_path="sync-all-repositories")
+    def sync_all_repositories(self, request):
+        account_queryset = self.get_queryset().filter(is_active=True)
+        account_summaries = []
+
+        try:
+            for account in account_queryset:
+                synced_count = refresh_github_repository_index(account=account)
+                account_summaries.append(
+                    {
+                        "account_id": account.id,
+                        "github_username": account.github_username,
+                        "synced_repository_count": synced_count,
+                    }
+                )
+        except OperationalError as exc:
+            return Response(
+                {
+                    "status": "busy",
+                    "detail": "Repository sync is temporarily waiting for the database lock to clear.",
+                    "error": str(exc),
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(
+            {
+                "status": "completed",
+                "account_count": len(account_summaries),
+                "accounts": account_summaries,
             },
             status=status.HTTP_200_OK,
         )
@@ -331,6 +389,64 @@ class GithubRepositoryViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=False, methods=["get"], url_path="team-scoreboard")
+    def team_scoreboard(self, request):
+        repositories = list(
+            GithubRepository.objects.select_related("account", "account__user")
+            .filter(is_active=True)
+            .order_by("full_name")
+        )
+        scoreboard = {}
+
+        for repository in repositories:
+            login = (repository.account.github_username or repository.owner_login or "").strip()
+            if not login:
+                continue
+            key = login.lower()
+            user = repository.account.user
+            entry = scoreboard.setdefault(
+                key,
+                {
+                    "github_login": login,
+                    "display_name": user.get_full_name() or user.username,
+                    "username": user.username,
+                    "user_full_name": user.get_full_name() or user.username,
+                    "repository_count": 0,
+                    "repository_scores": [],
+                },
+            )
+            entry["repository_count"] += 1
+            score = repository.latest_score
+            if score is not None:
+                entry["repository_scores"].append(float(score))
+
+        leaderboard = []
+        for entry in scoreboard.values():
+            scores = entry.pop("repository_scores", [])
+            average_scan_score = round(sum(scores) / len(scores), 2) if scores else 0
+            leaderboard.append(
+                {
+                    **entry,
+                    "average_scan_score": average_scan_score,
+                    "composite_score": average_scan_score,
+                }
+            )
+
+        leaderboard.sort(
+            key=lambda item: (
+                -float(item.get("average_scan_score") or 0),
+                item.get("github_login") or "",
+            )
+        )
+
+        return Response(
+            {
+                "scope": "team",
+                "leaderboard": leaderboard,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class RepositoryScanViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RepositoryScanSerializer
@@ -379,12 +495,7 @@ class GithubCommitActivityViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = GithubCommitActivity.objects.select_related("repository", "scan")
         if is_governance_admin(self.request.user):
             return queryset
-        visible_logins = get_user_github_logins(self.request.user)
-        if not visible_logins:
-            return queryset.none()
-        return queryset.filter(repository__account__user=self.request.user).filter(
-            _login_query("author_login", visible_logins)
-        )
+        return queryset.filter(repository__account__user=self.request.user)
 
 
 class GithubPullRequestActivityViewSet(viewsets.ReadOnlyModelViewSet):
@@ -398,12 +509,7 @@ class GithubPullRequestActivityViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = GithubPullRequestActivity.objects.select_related("repository")
         if is_governance_admin(self.request.user):
             return queryset
-        visible_logins = get_user_github_logins(self.request.user)
-        if not visible_logins:
-            return queryset.none()
-        return queryset.filter(repository__account__user=self.request.user).filter(
-            _login_query("author_login", visible_logins)
-        )
+        return queryset.filter(repository__account__user=self.request.user)
 
 
 class AICodeRequestViewSet(viewsets.ReadOnlyModelViewSet):
@@ -431,6 +537,20 @@ class AICodeRequestViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(account__user=self.request.user)
         return queryset.filter(id=repository_id).first()
 
+    def _can_use_ai_for_repository(self, repository):
+        return bool(repository and repository.account.user_id == self.request.user.id)
+
+    def _repository_ai_forbidden_response(self):
+        return Response(
+            {
+                "detail": (
+                    "AI remediation can only be used for repositories connected "
+                    "to your own GitHub account."
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     def _get_accessible_profile(self, profile_id):
         if not profile_id:
             return None
@@ -447,6 +567,8 @@ class AICodeRequestViewSet(viewsets.ReadOnlyModelViewSet):
         repository = self._get_accessible_repository(
             serializer.validated_data.get("repository_id")
         )
+        if repository and not self._can_use_ai_for_repository(repository):
+            return self._repository_ai_forbidden_response()
         standard_profile = self._get_accessible_profile(
             serializer.validated_data.get("standard_profile_id")
         )
@@ -466,6 +588,8 @@ class AICodeRequestViewSet(viewsets.ReadOnlyModelViewSet):
         repository = self._get_accessible_repository(
             serializer.validated_data.get("repository_id")
         )
+        if repository and not self._can_use_ai_for_repository(repository):
+            return self._repository_ai_forbidden_response()
         standard_profile = self._get_accessible_profile(
             serializer.validated_data.get("standard_profile_id")
         )
@@ -510,6 +634,8 @@ class AICodeRequestViewSet(viewsets.ReadOnlyModelViewSet):
                 {"detail": "Repository could not be found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        if not self._can_use_ai_for_repository(repository):
+            return self._repository_ai_forbidden_response()
 
         scan = None
         scan_id = serializer.validated_data.get("scan_id")
@@ -533,3 +659,43 @@ class AICodeRequestViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(bundle, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="apply-remediation")
+    def apply_remediation(self, request):
+        serializer = AIRemediationApplySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        repository = self._get_accessible_repository(
+            serializer.validated_data.get("repository_id")
+        )
+        if not repository:
+            return Response(
+                {"detail": "Repository could not be found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not self._can_use_ai_for_repository(repository):
+            return self._repository_ai_forbidden_response()
+
+        scan = None
+        scan_id = serializer.validated_data.get("scan_id")
+        if scan_id:
+            scan_queryset = repository.scans.all()
+            if not is_governance_admin(self.request.user):
+                scan_queryset = scan_queryset.filter(repository__account__user=self.request.user)
+            scan = scan_queryset.filter(id=scan_id).first()
+            if not scan:
+                return Response(
+                    {"detail": "Scan could not be found for remediation."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        try:
+            result = apply_safe_repository_remediation(
+                repository=repository,
+                scan=scan,
+                violation_ids=serializer.validated_data.get("violation_ids") or [],
+                branch_name=serializer.validated_data.get("branch_name") or "",
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_201_CREATED)

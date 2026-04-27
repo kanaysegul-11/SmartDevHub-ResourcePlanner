@@ -267,7 +267,7 @@ function Dashboard() {
       recentActivity,
       enrichedTeamMembers,
     };
-  }, [commentsQuery.data, projectsQuery.data, recentActivity, snippetsQuery.data, tasksQuery.data, teamQuery.data, usersQuery.data]);
+  }, [commentsQuery.data, projectsQuery.data, recentActivity, snippetsQuery.data, teamQuery.data, usersQuery.data]);
 
   const teamActivities = useMemo(() => stats?.enrichedTeamMembers ?? [], [stats]);
 

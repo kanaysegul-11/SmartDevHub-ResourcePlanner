@@ -213,22 +213,20 @@ function SoftwareAssets() {
   const billingCycleLabels = copy.billingCycles || {};
   const requestTypeLabels = copy.requestTypes || {};
   const requestStatusLabels = copy.requestStatuses || {};
-  const sortOptions = copy.sortOptions || {};
   const availableTabs = useMemo(
     () => TAB_ITEMS.filter((tabKey) => isAdmin || tabKey !== "cost"),
     [isAdmin]
   );
-  const availableSortOptions = useMemo(
-    () =>
-      [
-        { value: "renewal_asc", label: sortOptions.renewal_asc },
-        isAdmin ? { value: "cost_desc", label: sortOptions.cost_desc } : null,
-        { value: "vendor_asc", label: sortOptions.vendor_asc },
-        { value: "updated_desc", label: sortOptions.updated_desc },
-        { value: "utilization_desc", label: sortOptions.utilization_desc },
-      ].filter(Boolean),
-    [isAdmin, sortOptions]
-  );
+  const availableSortOptions = useMemo(() => {
+    const sortOptions = copy.sortOptions || {};
+    return [
+      { value: "renewal_asc", label: sortOptions.renewal_asc },
+      isAdmin ? { value: "cost_desc", label: sortOptions.cost_desc } : null,
+      { value: "vendor_asc", label: sortOptions.vendor_asc },
+      { value: "updated_desc", label: sortOptions.updated_desc },
+      { value: "utilization_desc", label: sortOptions.utilization_desc },
+    ].filter(Boolean);
+  }, [copy.sortOptions, isAdmin]);
   const statusLabels = useMemo(
     () => ({ active: copy.active, inactive: copy.inactive, archived: copy.archived }),
     [copy]
@@ -895,40 +893,6 @@ function SoftwareAssets() {
       setProcessingRequestId(null);
     }
   };
-
-  const renderSimpleList = (title, items, icon) => (
-    <div className="rounded-[28px] border border-slate-200/80 bg-white/85 p-5 shadow-[0_18px_50px_rgba(148,163,184,0.1)]">
-      <div className="flex items-center gap-2">
-        {icon}
-        <h3 className="font-['Newsreader'] text-2xl tracking-tight text-slate-950">{title}</h3>
-      </div>
-      <div className="mt-4 space-y-3">
-        {!items?.length ? (
-          <div className="rounded-[18px] border border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500">
-            {copy.noRecords}
-          </div>
-        ) : (
-          items.map((item) => (
-            <button
-              key={`${title}-${item.id}`}
-              type="button"
-              onClick={() => setSelectedAssetId(item.id)}
-              className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-left transition hover:bg-slate-50"
-            >
-              <p className="font-semibold text-slate-900">{item.name}</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {[item.vendor, formatDate(item.renewal_date)].filter(Boolean).join(" / ")}
-              </p>
-              <p className="mt-2 text-xs text-slate-400">
-                {[item.primary_assignment?.email, item.vendor_contact].filter(Boolean).join(" / ") ||
-                  copy.noValue}
-              </p>
-            </button>
-          ))
-        )}
-      </div>
-    </div>
-  );
 
   const renderTable = (title, records) => (
     <SoftwareAssetsTableCard

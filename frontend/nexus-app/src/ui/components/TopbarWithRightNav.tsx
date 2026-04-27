@@ -83,17 +83,17 @@ const TopbarWithRightNavRoot = React.forwardRef<
   return (
     <nav
       className={SubframeUtils.twClassNames(
-        "flex w-full items-center gap-4 bg-default-background px-6 py-4",
+        "flex min-w-0 w-full flex-wrap items-center gap-4 bg-default-background px-6 py-4",
         className
       )}
       ref={ref}
       {...otherProps}
     >
       {leftSlot ? (
-        <div className="flex items-center gap-4">{leftSlot}</div>
+        <div className="flex min-w-0 items-center gap-4">{leftSlot}</div>
       ) : null}
       {rightSlot ? (
-        <div className="flex grow shrink-0 basis-0 items-center justify-end gap-4">
+        <div className="flex min-w-0 grow shrink basis-auto flex-wrap items-center justify-end gap-3">
           {rightSlot}
         </div>
       ) : null}

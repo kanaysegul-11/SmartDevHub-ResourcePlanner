@@ -7,7 +7,6 @@ import SettingsTabs from "../component/settings/SettingsTabs";
 import AvatarUpload from "../component/settings/AvatarUpload";
 import ProfileForm from "../component/settings/ProfileForm";
 import PasswordForm from "../component/settings/PasswordForm";
-import NotificationsPanel from "../component/settings/NotificationsPanel";
 import LanguagePreferences from "../component/settings/LanguagePreferences";
 import { TopbarWithRightNav } from "../ui/components/TopbarWithRightNav";
 import { Badge } from "../ui/components/Badge";
@@ -199,8 +198,6 @@ function Settings() {
                 loading={loading}
               />
             ) : null}
-
-            {activeTab === "notifications" ? <NotificationsPanel /> : null}
 
             {activeTab === "language" ? (
               <LanguagePreferences

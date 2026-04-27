@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useUser } from "./UserContext.jsx";
 import { defaultLanguage, getLanguageMeta, translations } from "./i18n/translations.js";
+import { normalizeLegacyTurkishText } from "./utils/text.js";
 
 const I18nContext = createContext(null);
 
@@ -28,9 +29,11 @@ export function I18nProvider({ children }) {
       language,
       setLanguage: setPreferredLanguage,
       t: (key, fallback = key) =>
-        getValueByPath(activeTranslations, key) ??
-        getValueByPath(translations[defaultLanguage], key) ??
-        fallback,
+        normalizeLegacyTurkishText(
+          getValueByPath(activeTranslations, key) ??
+            getValueByPath(translations[defaultLanguage], key) ??
+            fallback
+        ),
     };
   }, [language]);
 

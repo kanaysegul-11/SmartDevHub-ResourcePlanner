@@ -1995,7 +1995,14 @@ class CustomLoginView(ObtainAuthToken):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
         token, created = Token.objects.get_or_create(user=user)
-        governance_sync = queue_governance_login_sync(user=user)
+        try:
+            governance_sync = queue_governance_login_sync(user=user)
+        except Exception as exc:
+            governance_sync = {
+                'status': 'skipped',
+                'reason': 'login_sync_failed',
+                'detail': str(exc),
+            }
         return Response({
             'token': token.key,
             'user_id': user.pk,

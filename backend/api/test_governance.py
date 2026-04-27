@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import hmac
 import json
@@ -12,8 +13,10 @@ from rest_framework.test import APITestCase
 from .governance_services import (
     evaluate_commit_quality,
     evaluate_pull_request_quality,
+    evaluate_source_bundle,
     ensure_default_standard_profile,
     ensure_repository_webhook,
+    fetch_repository_source_bundle,
     finalize_stale_governance_runs,
     prepare_ai_remediation_bundle,
     queue_due_polling_refreshes,
@@ -122,6 +125,26 @@ class GovernanceApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["governance_sync"]["status"], "queued")
         mock_queue_governance_login_sync.assert_called_once()
+
+    @patch("api.views.queue_governance_login_sync")
+    def test_login_response_survives_governance_sync_failure(self, mock_queue_governance_login_sync):
+        mock_queue_governance_login_sync.side_effect = RuntimeError(
+            "cannot schedule new futures after shutdown"
+        )
+
+        response = self.client.post(
+            "/api/login/",
+            {
+                "username": "member",
+                "password": "strong-pass-123",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("token", response.data)
+        self.assertEqual(response.data["governance_sync"]["status"], "skipped")
+        self.assertEqual(response.data["governance_sync"]["reason"], "login_sync_failed")
 
     def test_ai_validate_endpoint_creates_request_and_flags_var_usage(self):
         profile = ensure_default_standard_profile(created_by=self.user)
@@ -307,6 +330,72 @@ class GovernanceApiTests(APITestCase):
             1,
         )
         self.assertIsNotNone(repository.latest_score)
+
+    @patch("api.governance_services.github_api_request")
+    def test_repository_source_bundle_reads_all_utf8_blobs_without_path_filtering(
+        self,
+        mock_github_api_request,
+    ):
+        profile = ensure_default_standard_profile(created_by=self.user)
+        account = GithubAccount.objects.create(
+            user=self.user,
+            github_username="member-github",
+            access_token="ghp_exampletoken1234",
+            account_type="User",
+        )
+        repository = GithubRepository.objects.create(
+            account=account,
+            standard_profile=profile,
+            name="smart-hub",
+            full_name="member-github/smart-hub",
+            owner_login="member-github",
+            default_branch="main",
+            primary_language="JavaScript",
+        )
+        blob_contents = {
+            "src-main": "var app = 1;\n",
+            "node-modules": "var vendored = 1;\n",
+            "dist-build": "var bundled = 1;\n",
+            "no-extension": "var script = 1;\n",
+        }
+
+        def api_response(_token, path, **_kwargs):
+            if path == "/repos/member-github/smart-hub/branches/main":
+                return {"commit": {"sha": "commit-123"}}
+            if path == "/repos/member-github/smart-hub/git/trees/commit-123":
+                return {
+                    "tree": [
+                        {"type": "blob", "path": "src/main.js", "sha": "src-main"},
+                        {
+                            "type": "blob",
+                            "path": "node_modules/pkg/index.js",
+                            "sha": "node-modules",
+                        },
+                        {"type": "blob", "path": "dist/app.js", "sha": "dist-build"},
+                        {"type": "blob", "path": "scripts/run", "sha": "no-extension"},
+                    ]
+                }
+            blob_sha = path.rsplit("/", 1)[-1]
+            return {
+                "content": base64.b64encode(
+                    blob_contents[blob_sha].encode("utf-8")
+                ).decode("ascii")
+            }
+
+        mock_github_api_request.side_effect = api_response
+
+        source_bundle = fetch_repository_source_bundle(repository)
+
+        self.assertEqual(source_bundle["commit_sha"], "commit-123")
+        self.assertEqual(
+            {file_item["path"] for file_item in source_bundle["files"]},
+            {
+                "src/main.js",
+                "node_modules/pkg/index.js",
+                "dist/app.js",
+                "scripts/run",
+            },
+        )
 
     def test_developer_overview_endpoint_returns_leaderboard_and_activity(self):
         profile = ensure_default_standard_profile(created_by=self.user)
@@ -524,7 +613,7 @@ class GovernanceApiTests(APITestCase):
             "member-github",
         )
 
-    def test_repository_scan_detail_hides_other_developer_breakdown_for_non_admin(self):
+    def test_repository_scan_detail_keeps_all_violations_visible_for_non_admin(self):
         profile = ensure_default_standard_profile(created_by=self.user)
         rule = profile.rules.first()
         account = GithubAccount.objects.create(
@@ -551,7 +640,7 @@ class GovernanceApiTests(APITestCase):
             score=84,
             summary={"score": 84},
             file_count=14,
-            violation_count=3,
+            violation_count=4,
             developer_count=2,
         )
         DeveloperRepositoryScore.objects.create(
@@ -598,7 +687,7 @@ class GovernanceApiTests(APITestCase):
             title="Teammate issue",
             file_path="src/teammate.py",
             line_number=8,
-            message="Should stay hidden from a non-admin viewer.",
+            message="Should stay visible in the repository violation list.",
             author_login="teammate-github",
             commit_sha="def456",
         )
@@ -615,6 +704,19 @@ class GovernanceApiTests(APITestCase):
             author_login="",
             commit_sha="",
         )
+        CodeViolation.objects.create(
+            scan=scan,
+            repository=repository,
+            rule=rule,
+            severity="medium",
+            code="max_function_length",
+            title="Removed rule issue",
+            file_path="src/too_long.py",
+            line_number=1,
+            message="This removed rule should not be exposed anymore.",
+            author_login="member-github",
+            commit_sha="ghi789",
+        )
 
         response = self.client.get(f"/api/repository-scans/{scan.id}/")
 
@@ -626,9 +728,15 @@ class GovernanceApiTests(APITestCase):
             "member-github",
         )
         visible_authors = {violation["author_login"] for violation in response.data["violations"]}
+        self.assertEqual(response.data["violation_count"], 3)
+        self.assertEqual(len(response.data["violations"]), 3)
+        self.assertNotIn(
+            "max_function_length",
+            {violation["code"] for violation in response.data["violations"]},
+        )
         self.assertIn("member-github", visible_authors)
         self.assertIn("", visible_authors)
-        self.assertNotIn("teammate-github", visible_authors)
+        self.assertIn("teammate-github", visible_authors)
 
     @override_settings(
         GITHUB_CLIENT_ID="client-id",
@@ -958,6 +1066,45 @@ class GovernanceApiTests(APITestCase):
         self.assertEqual(bundle["remediation_scope"][0]["violation_id"], violation.id)
         self.assertIn("src/service.py", bundle["affected_paths"])
         self.assertTrue(bundle["suggested_branch_name"].startswith("ai/remediation-"))
+
+    def test_max_function_length_rule_is_removed_from_evaluation(self):
+        profile = ensure_default_standard_profile(created_by=self.user)
+        max_length_rule = StandardRule.objects.create(
+            profile=profile,
+            code="max_function_length",
+            title="Functions should stay concise",
+            description="Functions should stay within the configured line budget.",
+            category="complexity",
+            severity="medium",
+            weight=6,
+            order=99,
+            config={
+                "max_lines": 20,
+                "extensions": [".js", ".jsx"],
+            },
+        )
+        long_js_function = "\n".join(
+            [
+                "function renderScreen() {",
+                *[f"  const value{i} = {i};" for i in range(24)],
+                "  return value1;",
+                "}",
+            ]
+        )
+
+        evaluation = evaluate_source_bundle(
+            standard_profile=profile,
+            source_files=[
+                {"path": "src/App.jsx", "content": long_js_function},
+            ],
+            repository_paths={"README.md", "tests/example.test.js", "src/App.jsx"},
+        )
+
+        self.assertTrue(max_length_rule.is_enabled)
+        self.assertNotIn(
+            "max_function_length",
+            [violation["code"] for violation in evaluation["violations"]],
+        )
 
     def test_prepare_remediation_endpoint_returns_bundle(self):
         profile = ensure_default_standard_profile(created_by=self.user)

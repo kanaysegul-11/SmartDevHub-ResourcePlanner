@@ -573,6 +573,23 @@ const softwareAssetTranslationsTr = {
 
 const governanceTranslationsEn = {
   workspace: "Code Governance",
+  codeRules: "Code Rules",
+  codeRulesTitle: "Company code standards and evaluation rules",
+  codeRulesBody:
+    "This page explains which rules developers are evaluated against, how findings should be fixed, and where AI remediation is intentionally limited.",
+  categories: "Categories",
+  profile: "Profile",
+  aiGuardrail: "AI guardrail",
+  safeBranchOnly: "Safe branch",
+  searchRules: "Search rule, category, or description",
+  category: "Category",
+  allCategories: "All categories",
+  loadingRules: "Loading rules...",
+  whyImportant: "Why it matters",
+  wrongExample: "Wrong example",
+  rightExample: "Correct example",
+  weight: "Score impact",
+  noRulesVisible: "No visible rules found.",
   badge: "GitHub Standards & AI Validation",
   adminView: "Admin view",
   developerView: "Developer view",
@@ -629,6 +646,13 @@ const governanceTranslationsEn = {
   connectAccount: "Connect account",
   connecting: "Connecting...",
   noGithubAccount: "No GitHub account connected yet.",
+  disconnectGithub: "Disconnect",
+  disconnectingGithub: "Disconnecting...",
+  disconnectGithubConfirm:
+    "Disconnect this GitHub account from your profile? You can connect a different GitHub account afterwards.",
+  disconnectGithubSuccess:
+    "GitHub account disconnected. You can now connect another account.",
+  disconnectGithubFailed: "GitHub account could not be disconnected.",
   standardProfiles: "Standard Profiles",
   noDescription: "No description",
   rules: "rules",
@@ -681,9 +705,170 @@ const governanceTranslationsEn = {
   teamViolations: "Team Violations",
   myViolations: "My Violations",
   teamViolationsBody:
-    "Inspect the latest rule failures with repository, file, line, and explanation details.",
+    "Review repository-level violation totals, then open a project detail page for exact fixes.",
   myViolationsBody:
-    "Use these file, line, and rule details to understand exactly what needs to be fixed.",
+    "Review repository-level violation totals, then open a project detail page for exact fixes.",
+  details: "Details",
+  aiDraft: "AI draft",
+  aiOnlyOwnRepositories:
+    "AI fixes are only available for repositories connected to your own GitHub account.",
+  violationDetails: "Violation Details",
+  backToGovernance: "Back",
+  repositoryViolationReport: "Repository violation report",
+  repositoryViolationReportBody:
+    "Each item shows what is wrong and what the expected structure should be.",
+  files: "Files",
+  lastScan: "Last scan",
+  loadingViolations: "Loading violations...",
+  violationThis: "Violation",
+  correctStructure: "Correct structure",
+  suggestedCodeShape: "Suggested code shape",
+  search: "Search",
+  searchViolations: "Search file, rule, or message",
+  rule: "Rule",
+  allRules: "All rules",
+  severity: "Severity",
+  allSeverities: "All severities",
+  severityLevels: {
+    critical: "Critical",
+    high: "High",
+    medium: "Medium",
+    low: "Low",
+    unknown: "Unknown",
+  },
+  ruleTitles: {
+    required_readme: "Repository must include README",
+    tests_required: "Repository should include tests",
+    semantic_html_structure: "Use semantic HTML landmarks in page structure",
+    no_var_keyword: "Avoid var in JavaScript or TypeScript",
+    image_alt_required: "Images must include alt text",
+    python_snake_case_variables: "Python variables should use snake_case",
+    form_label_required: "Form inputs should be paired with labels",
+    strict_equality_required: "Use strict equality operators in JavaScript",
+    no_dangerously_set_inner_html:
+      "Avoid dangerouslySetInnerHTML without sanitization",
+    css_tokens_required: "Prefer theme tokens or CSS variables",
+    mobile_first_css: "Write responsive styles mobile-first",
+    react_props_destructuring:
+      "Destructure React props in component signatures",
+    react_hooks_top_level: "React Hooks should stay at the top level",
+    jsx_logic_should_stay_simple: "Keep complex logic out of JSX",
+    error_boundary_required: "Wrap critical UI areas with Error Boundaries",
+    button_type_required: "Buttons in forms should declare a type",
+    commit_message_convention:
+      "Commit messages should follow the team convention",
+    eslint_config_required:
+      "Repositories should include ESLint configuration",
+    prettier_config_required:
+      "Repositories should include Prettier configuration",
+    husky_pre_commit_required:
+      "Use a pre-commit hook for code quality checks",
+    lint_staged_required:
+      "Run lint-staged or an equivalent staged-file check",
+    pull_request_description_required:
+      "Pull requests should include a clear description",
+    lazy_loading_images: "Non-critical images should use lazy loading",
+    optimized_images_preferred: "Prefer optimized image formats",
+    external_links_noopener:
+      "External blank-target links should use rel noopener",
+    max_function_length: "Keep functions under the line limit",
+  },
+  ruleMessages: {
+    required_readme: "README.md is missing from the project root.",
+    tests_required:
+      "The project does not include an executable test directory or test file.",
+    semantic_html_structure:
+      "The page structure relies on generic wrappers instead of semantic landmarks.",
+    no_var_keyword: "A var declaration was found in JavaScript or TypeScript code.",
+    image_alt_required: "One or more images are missing alt text.",
+    python_snake_case_variables:
+      "A Python variable name does not follow snake_case.",
+    form_label_required:
+      "A form control is used without a label or accessible name.",
+    strict_equality_required: "A loose equality operator is being used.",
+    no_dangerously_set_inner_html:
+      "dangerouslySetInnerHTML is used without a safe sanitization flow.",
+    css_tokens_required:
+      "Shared style tokens or CSS variables should be used instead of hard-coded values.",
+    mobile_first_css:
+      "The responsive styling approach does not follow a mobile-first pattern.",
+    react_props_destructuring:
+      "A React component reads from props directly instead of destructuring its signature.",
+    react_hooks_top_level:
+      "A React Hook appears to be called outside the top-level component flow.",
+    jsx_logic_should_stay_simple:
+      "The JSX body includes complex chained logic or calculation.",
+    error_boundary_required:
+      "A critical UI area appears to be missing an error boundary.",
+    button_type_required:
+      "A button is missing an explicit type attribute.",
+    commit_message_convention:
+      "The commit message does not follow the team convention.",
+    eslint_config_required: "The repository is missing an ESLint configuration.",
+    prettier_config_required:
+      "The repository is missing a Prettier configuration.",
+    husky_pre_commit_required:
+      "A pre-commit quality hook is not configured.",
+    lint_staged_required:
+      "A staged-file quality check such as lint-staged is missing.",
+    pull_request_description_required:
+      "The pull request description does not include the expected detail.",
+    lazy_loading_images:
+      "A non-critical image is missing loading=\"lazy\".",
+    optimized_images_preferred:
+      "An image asset could use a more optimized file format.",
+    external_links_noopener:
+      "A new-tab link is missing rel=\"noopener noreferrer\".",
+    max_function_length:
+      "The function length exceeds the configured line limit.",
+  },
+  prepareSafeAiDraft: "Prepare safe AI draft",
+  deleteRule: "Delete rule",
+  deleting: "Deleting...",
+  deleteRuleConfirm:
+    "Are you sure you want to delete this rule? This action recalculates affected scores.",
+  deleteRuleSuccess:
+    "The rule was deleted and affected repository scores were refreshed.",
+  deleteRuleFailed:
+    "The rule could not be deleted or the affected scores could not be refreshed.",
+  filteredViolations: "filtered violations",
+  aiDraftSafety: "Draft only: no code is changed without review.",
+  safeAiDraft: "Safe AI draft",
+  safeWorkflow: "Safe workflow",
+  safeWorkflowBody:
+    "Review the draft, then create a dedicated branch for safe automatic fixes. Main branch is never edited directly.",
+  applySafeDraftTitle: "Apply controlled fixes",
+  applySafeDraftBody:
+    "Creates a new GitHub branch and applies only low-risk fixes that can be changed deterministically.",
+  applySafeAiDraft: "Create branch and apply safe fixes",
+  applyingSafeDraft: "Applying...",
+  remediationApplyFailed: "Remediation branch could not be created.",
+  remediationBranchReady: "Remediation branch ready",
+  existingBranchUsed: "Existing remediation branch used",
+  noSafeBranchCreated: "No automatic branch was created",
+  reviewPatchRequired:
+    "These violations need a reviewed patch before code can be changed.",
+  noSafeFixExplanation:
+    "Meaning: the system found issues, but they are not safe one-click edits. No branch was created and no repository code was changed.",
+  existingBranchExplanation:
+    "Meaning: a remediation branch already existed for this repository, so the system reused it instead of creating another one.",
+  branchReadyExplanation:
+    "Meaning: a remediation branch is ready. Use the diff to review exactly what changed.",
+  skipMaxFunctionLength:
+    "This needs a human-reviewed refactor. The system did not change the file automatically because splitting a long function can affect behavior.",
+  skipReviewedPatchRequired:
+    "This rule needs a reviewed patch first. The system did not create a branch or change code automatically.",
+  skipAlreadyExists: "The expected file already exists on the remediation branch.",
+  ignoredVendorViolations: "vendor findings hidden",
+  openBranch: "Open branch",
+  viewDiff: "View diff",
+  appliedFiles: "Applied files",
+  skippedFixes: "Needs review",
+  alreadyHandled: "Already handled on branch",
+  noSafeFixesApplied:
+    "No deterministic fix was applied automatically; the repository code was not changed.",
+  noSkippedFixes: "No skipped fix remains.",
+  prepareThisViolation: "Draft fix for this",
   noViolationsVisible: "No visible violations found yet.",
   prepareRemediationDraft: "Prepare AI fix draft",
   remediationDraft: "AI Remediation Draft",
@@ -772,6 +957,23 @@ const governanceTranslationsEn = {
 
 const governanceTranslationsTr = {
   workspace: "Kod Yönetimi",
+  codeRules: "Kod Kuralları",
+  codeRulesTitle: "Şirket kod standartları ve değerlendirme kuralları",
+  codeRulesBody:
+    "Bu sayfa çalışanların hangi kurallara göre değerlendirildiğini, ihlallerin nasıl düzeltileceğini ve AI düzeltme akışının hangi sınırlarda çalıştığını açıklar.",
+  categories: "Kategoriler",
+  profile: "Profil",
+  aiGuardrail: "AI sınırı",
+  safeBranchOnly: "Güvenli branch",
+  searchRules: "Kural, kategori veya açıklama ara",
+  category: "Kategori",
+  allCategories: "Tüm kategoriler",
+  loadingRules: "Kurallar yükleniyor...",
+  whyImportant: "Neden önemli?",
+  wrongExample: "Hatalı örnek",
+  rightExample: "Doğrusu",
+  weight: "Puan etkisi",
+  noRulesVisible: "Görünür kural bulunamadı.",
   badge: "GitHub Standartları ve AI Doğrulama",
   adminView: "Yönetici görünümü",
   developerView: "Geliştirici görünümü",
@@ -828,6 +1030,13 @@ const governanceTranslationsTr = {
   connectAccount: "Hesabı bağla",
   connecting: "Bağlanıyor...",
   noGithubAccount: "Henüz bağlı GitHub hesabı yok.",
+  disconnectGithub: "Bağlantıyı kaldır",
+  disconnectingGithub: "Kaldırılıyor...",
+  disconnectGithubConfirm:
+    "Bu GitHub hesabını profilinizden kaldırmak istiyor musunuz? Sonrasında farklı bir GitHub hesabı bağlayabilirsiniz.",
+  disconnectGithubSuccess:
+    "GitHub hesabı kaldırıldı. Artık farklı bir hesap bağlayabilirsiniz.",
+  disconnectGithubFailed: "GitHub hesabı kaldırılamadı.",
   standardProfiles: "Standart Profiller",
   noDescription: "Açıklama yok",
   rules: "kural",
@@ -880,9 +1089,179 @@ const governanceTranslationsTr = {
   teamViolations: "Ekip İhlalleri",
   myViolations: "İhlallerim",
   teamViolationsBody:
-    "Son kural ihlallerini depo, dosya, satır ve açıklama detaylarıyla inceleyin.",
+    "Proje bazlı ihlal sayılarını inceleyin, tam düzeltmeler için proje detayını açın.",
   myViolationsBody:
-    "Tam olarak neyi düzeltmeniz gerektiğini görmek için dosya, satır ve kural detaylarını kullanın.",
+    "Proje bazlı ihlal sayılarını inceleyin, tam düzeltmeler için proje detayını açın.",
+  details: "Detay",
+  aiDraft: "AI taslak",
+  aiOnlyOwnRepositories:
+    "AI düzeltmeleri yalnızca kendi GitHub hesabınıza bağlı projelerde kullanılabilir.",
+  violationDetails: "İhlal Detayları",
+  backToGovernance: "Geri dön",
+  repositoryViolationReport: "Proje ihlal raporu",
+  repositoryViolationReportBody:
+    "Her madde neyin yanlış olduğunu ve olması gereken yapıyı gösterir.",
+  files: "Dosya",
+  lastScan: "Son tarama",
+  loadingViolations: "İhlaller yükleniyor...",
+  violationThis: "İhlal",
+  correctStructure: "Doğrusu",
+  suggestedCodeShape: "Önerilen kod şekli",
+  search: "Ara",
+  searchViolations: "Dosya, kural veya mesaj ara",
+  rule: "Kural",
+  allRules: "Tüm kurallar",
+  severity: "Önem",
+  allSeverities: "Tüm önemler",
+  severityLevels: {
+    critical: "Kritik",
+    high: "Yüksek",
+    medium: "Orta",
+    low: "Düşük",
+    unknown: "Bilinmiyor",
+  },
+  ruleTitles: {
+    required_readme: "Repository README içermeli",
+    tests_required: "Repository test içermeli",
+    semantic_html_structure: "Sayfa yapısında semantik HTML kullan",
+    no_var_keyword: "JavaScript veya TypeScript içinde var kullanma",
+    image_alt_required: "Görseller alt metin içermeli",
+    python_snake_case_variables:
+      "Python değişkenleri snake_case kullanmalı",
+    form_label_required: "Form alanları label ile eşleşmeli",
+    strict_equality_required:
+      "JavaScript'te strict equality operatörleri kullan",
+    no_dangerously_set_inner_html:
+      "dangerouslySetInnerHTML kullanımını sanitize etmeden yapma",
+    css_tokens_required: "Tema tokenları veya CSS değişkenlerini tercih et",
+    mobile_first_css: "Responsive stilleri mobile-first yaz",
+    react_props_destructuring:
+      "React props değerlerini imzada destructure et",
+    react_hooks_top_level:
+      "React Hook'larını sadece üst seviyede çağır",
+    jsx_logic_should_stay_simple: "Karmaşık mantığı JSX dışına taşı",
+    error_boundary_required:
+      "Kritik arayüz alanlarını Error Boundary ile sar",
+    button_type_required:
+      "Form içindeki button etiketlerinde type belirt",
+    commit_message_convention:
+      "Commit mesajları ekip standardına uymalı",
+    eslint_config_required: "Repository ESLint konfigürasyonu içermeli",
+    prettier_config_required:
+      "Repository Prettier konfigürasyonu içermeli",
+    husky_pre_commit_required:
+      "Pre-commit kalite kontrol hook'u kullanılmalı",
+    lint_staged_required:
+      "lint-staged veya eşdeğer staged-file kontrolü çalışmalı",
+    pull_request_description_required:
+      "Pull request açıklaması net ve yeterli olmalı",
+    lazy_loading_images:
+      "Kritik olmayan görseller lazy loading kullanmalı",
+    optimized_images_preferred:
+      "Daha optimize görsel formatları tercih edilmeli",
+    external_links_noopener:
+      "Yeni sekmede açılan linklerde rel noopener kullanılmalı",
+    max_function_length: "Fonksiyonlar satır sınırını aşmamalı",
+  },
+  ruleMessages: {
+    required_readme: "README.md dosyası proje kök dizininde bulunmuyor.",
+    tests_required:
+      "Projede çalıştırılabilir test klasörü veya test dosyası bulunmuyor.",
+    semantic_html_structure:
+      "Sayfa yapısı semantik yerleşim etiketleri yerine genel wrapper alanlarına dayanıyor.",
+    no_var_keyword:
+      "JavaScript veya TypeScript kodunda var bildirimi bulundu.",
+    image_alt_required:
+      "Bir veya daha fazla görsel alt metni olmadan kullanılıyor.",
+    python_snake_case_variables:
+      "Bir Python değişken adı snake_case standardına uymuyor.",
+    form_label_required:
+      "Bir form kontrolü label veya erişilebilir isim olmadan kullanılıyor.",
+    strict_equality_required: "Gevşek eşitlik operatörü kullanılıyor.",
+    no_dangerously_set_inner_html:
+      "dangerouslySetInnerHTML güvenli sanitize akışı olmadan kullanılıyor.",
+    css_tokens_required:
+      "Sabit stil değerleri yerine ortak token veya CSS değişkeni kullanılmalı.",
+    mobile_first_css:
+      "Responsive stil yaklaşımı mobile-first desenini izlemiyor.",
+    react_props_destructuring:
+      "React bileşeni props nesnesini doğrudan kullanıyor; imzada destructuring bekleniyor.",
+    react_hooks_top_level:
+      "React Hook çağrısı top-level akışın dışında görünüyor.",
+    jsx_logic_should_stay_simple:
+      "JSX gövdesinde karmaşık zincirlenmiş mantık veya hesaplama var.",
+    error_boundary_required:
+      "Kritik bir arayüz alanında error boundary eksik görünüyor.",
+    button_type_required:
+      "Bir button etiketinde açık type özelliği eksik.",
+    commit_message_convention:
+      "Commit mesajı ekip standardına uymuyor.",
+    eslint_config_required:
+      "Repository içinde ESLint konfigürasyonu bulunmuyor.",
+    prettier_config_required:
+      "Repository içinde Prettier konfigürasyonu bulunmuyor.",
+    husky_pre_commit_required:
+      "Pre-commit kalite kontrol hook'u yapılandırılmamış.",
+    lint_staged_required:
+      "lint-staged gibi staged-file kalite kontrolü eksik.",
+    pull_request_description_required:
+      "Pull request açıklaması beklenen ayrıntıyı içermiyor.",
+    lazy_loading_images:
+      "Kritik olmayan bir görselde loading=\"lazy\" eksik.",
+    optimized_images_preferred:
+      "Bir görsel varlığı daha optimize bir formatla sunulabilir.",
+    external_links_noopener:
+      "Yeni sekmede açılan bir bağlantıda rel=\"noopener noreferrer\" eksik.",
+    max_function_length:
+      "Fonksiyon uzunluğu yapılandırılmış satır sınırını aşıyor.",
+  },
+  prepareSafeAiDraft: "Güvenli AI taslak hazırla",
+  deleteRule: "Kuralı sil",
+  deleting: "Siliniyor...",
+  deleteRuleConfirm:
+    "Bu kuralı silmek istediğinize emin misiniz? Bu işlem etkilenen puanları yeniden hesaplar.",
+  deleteRuleSuccess:
+    "Kural silindi ve etkilenen depo puanları yenilendi.",
+  deleteRuleFailed:
+    "Kural silinemedi veya etkilenen puanlar yenilenemedi.",
+  filteredViolations: "filtrelenmiş ihlal",
+  aiDraftSafety: "Sadece taslak: inceleme olmadan kod değişmez.",
+  safeAiDraft: "Güvenli AI taslak",
+  safeWorkflow: "Güvenli iş akışı",
+  safeWorkflowBody:
+    "Taslağı inceleyin, sonra güvenli otomatik düzeltmeler için ayrı bir branch oluşturun. Main branch doğrudan değiştirilmez.",
+  applySafeDraftTitle: "Kontrollü düzeltmeleri uygula",
+  applySafeDraftBody:
+    "Yeni bir GitHub branch'i oluşturur ve yalnızca deterministik şekilde değiştirilebilen düşük riskli düzeltmeleri uygular.",
+  applySafeAiDraft: "Branch aç ve güvenli düzeltmeleri uygula",
+  applyingSafeDraft: "Uygulanıyor...",
+  remediationApplyFailed: "Düzeltme branch'i oluşturulamadı.",
+  remediationBranchReady: "Düzeltme branch'i hazır",
+  existingBranchUsed: "Mevcut düzeltme branch'i kullanıldı",
+  noSafeBranchCreated: "Otomatik branch oluşturulmadı",
+  reviewPatchRequired:
+    "Bu ihlallerde kod değişmeden önce incelenmiş bir patch gerekiyor.",
+  noSafeFixExplanation:
+    "Anlamı: Sistem ihlal buldu ama bunlar tek tıkla güvenli değiştirilecek türde değil. Branch açılmadı ve repository kodu değiştirilmedi.",
+  existingBranchExplanation:
+    "Anlamı: Bu repository için düzeltme branch'i zaten vardı, sistem yeni branch açmak yerine onu kullandı.",
+  branchReadyExplanation:
+    "Anlamı: Düzeltme branch'i hazır. Nelerin değiştiğini görmek için diff'i inceleyin.",
+  skipMaxFunctionLength:
+    "Bu ihlal insan kontrolünde refactor gerektirir. Uzun fonksiyonu otomatik bölmek davranışı bozabileceği için sistem dosyayı değiştirmedi.",
+  skipReviewedPatchRequired:
+    "Bu kural için önce incelenmiş bir patch gerekir. Sistem otomatik branch açmadı ve kod değiştirmedi.",
+  skipAlreadyExists: "Beklenen dosya düzeltme branch'inde zaten var.",
+  ignoredVendorViolations: "paket/generator bulgusu gizlendi",
+  openBranch: "Branch'i aç",
+  viewDiff: "Diff'i gör",
+  appliedFiles: "Uygulanan dosyalar",
+  skippedFixes: "İnceleme gerekiyor",
+  alreadyHandled: "Branch'te zaten tamamlandı",
+  noSafeFixesApplied:
+    "Otomatik deterministik düzeltme uygulanmadı; repository kodu değiştirilmedi.",
+  noSkippedFixes: "Atlanan düzeltme kalmadı.",
+  prepareThisViolation: "Bu ihlal için taslak",
   noViolationsVisible: "Henüz görünür ihlal bulunmuyor.",
   prepareRemediationDraft: "AI düzeltme taslağı hazırla",
   remediationDraft: "AI Düzeltme Taslağı",
@@ -1470,6 +1849,16 @@ export const translations = {
       reviewQueue: "Review queue",
       reviewQueueTitle: "Snippets needing attention",
       reviewQueueBody: "Records with no feedback yet or weak scores surface here first so review effort lands where it matters.",
+      developerProjectScores: "Developer project scores",
+      developerProjectScoresTitle: "User ranking by repository average",
+      teamScope: "Team",
+      personalScope: "Personal",
+      rank: "Rank",
+      user: "User",
+      averageScore: "Avg score",
+      repos: "Repos",
+      loadingScores: "Loading repository scores...",
+      noDeveloperScores: "Run repository sync and scans to build the user score table.",
       needsReview: "Needs review",
       needsFirstReview: "Needs first review",
       emptyQueue: "No snippets need extra attention right now.",
@@ -2123,9 +2512,9 @@ export const translations = {
       selectProjectHint: "Soldan bir proje seçildiğinde tarih, durum ve ilerleme detaylarını burada göreceksin.",
     },
     analytics: {
-      workspace: "Analytics Workspace",
-      liveData: "Canlı Veri",
-      title: "Snippet Analytics",
+      workspace: "Analitik Alanı",
+      liveData: "Canlı veri",
+      title: "Snippet Analitiği",
       subtitle: "Kütüphanenizin performans verileri burada.",
       searchPlaceholder: "Analizlerde ara...",
       searchMatches: "Eşleşme",
@@ -2143,8 +2532,11 @@ export const translations = {
       languageCoverage: "Dil kapsamı",
       languageCoverageBody: "Filtrelenmiş kütüphanede aktif olarak temsil edilen kod dili sayısını gösterir.",
       languagePopularity: "Dil Popülerliği",
+      languagePopularityBody: "Paylaşılan kod tabanında hangi teknolojilerin öne çıktığını ve hangilerinin daha az kullanıldığını gösterir.",
       sentiment: "Kullanıcı Memnuniyeti",
+      sentimentBody: "Yorum puanları hızlı bir sağlık kontrolü için memnun, nötr ve mutsuz kümelerine ayrılır.",
       leaderboard: "Dil Başarı Sıralaması",
+      leaderboardBody: "Ortalama puanlar her snippet'in diline bağlı gerçek geri bildirimlerden hesaplanır.",
       top5: "TOP 5",
       codeCount: "Kod",
       noLeaderboardData: "Puanlı geri bildirim gelmeye başladığında sıralama burada görünür.",
@@ -2162,6 +2554,16 @@ export const translations = {
       reviewQueue: "İnceleme kuyruğu",
       reviewQueueTitle: "İlgi bekleyen snippetler",
       reviewQueueBody: "Henüz yorum almayan veya düşük puanlı kayıtlar burada öne çıkar; böylece inceleme eforu doğru yere gider.",
+      developerProjectScores: "Geliştirici depo puanları",
+      developerProjectScoresTitle: "Depo ortalamasına göre kullanıcı sıralaması",
+      teamScope: "Ekip",
+      personalScope: "Kişisel",
+      rank: "Sıra",
+      user: "Kullanıcı",
+      averageScore: "Ort. puan",
+      repos: "Depo",
+      loadingScores: "Depo puanları yükleniyor...",
+      noDeveloperScores: "Kullanıcı puan tablosunu oluşturmak için depo senkronu ve tarama çalıştırın.",
       needsReview: "İnceleme gerekli",
       needsFirstReview: "İlk yorum bekliyor",
       emptyQueue: "Şu anda ekstra ilgi isteyen snippet yok.",
@@ -2171,7 +2573,7 @@ export const translations = {
       happy: "Memnun",
       neutral: "Nötr",
       unhappy: "Mutsuz",
-      unknown: "Unknown",
+      unknown: "Bilinmiyor",
     },
     tasks: {
       workspace: "Görev Alanı",

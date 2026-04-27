@@ -51,6 +51,10 @@ class StandardRule(models.Model):
         ("testing", "Testing"),
         ("security", "Security"),
         ("complexity", "Complexity"),
+        ("quality", "Quality"),
+        ("workflow", "Workflow"),
+        ("architecture", "Architecture"),
+        ("performance", "Performance"),
         ("ai", "AI"),
     ]
     SEVERITY_CHOICES = [

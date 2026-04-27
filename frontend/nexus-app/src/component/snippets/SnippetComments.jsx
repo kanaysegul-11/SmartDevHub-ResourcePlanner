@@ -100,10 +100,14 @@ function SnippetComments({
 
   useEffect(() => {
     if (editingCommentId && !comments.some((comment) => comment.id === editingCommentId)) {
-      setEditingCommentId(null);
-      setEditingText("");
-      setEditingRating(0);
+      const resetEditingState = window.setTimeout(() => {
+        setEditingCommentId(null);
+        setEditingText("");
+        setEditingRating(0);
+      }, 0);
+      return () => window.clearTimeout(resetEditingState);
     }
+    return undefined;
   }, [comments, editingCommentId]);
 
   const canManageComment = (comment) => {

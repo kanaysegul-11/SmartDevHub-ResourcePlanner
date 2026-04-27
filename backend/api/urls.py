@@ -39,6 +39,16 @@ router.register(r'ai-code-requests', AICodeRequestViewSet, basename='ai-code-req
 
 
 urlpatterns = [
+    path(
+        'github-accounts/sync-all-repositories/',
+        GithubAccountViewSet.as_view({'post': 'sync_all_repositories'}),
+        name='github-account-sync-all-repositories',
+    ),
+    path(
+        'github-repositories/team-scoreboard/',
+        GithubRepositoryViewSet.as_view({'get': 'team_scoreboard'}),
+        name='github-repository-team-scoreboard',
+    ),
     path('', include(router.urls)),
     path('github-webhooks/receive/', GithubWebhookReceiveView.as_view(), name='github-webhook-receive'),
     path('status/', EmployeeStatusViewSet.as_view({'get': 'list'}), name='status-list'),

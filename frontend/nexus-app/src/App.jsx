@@ -6,6 +6,7 @@ import {
   DocumentTitleHandler,
 } from "@refinedev/react-router-v6";
 import { Routes, Route, Outlet } from "react-router-dom";
+import { useEffect } from "react";
 import routerProvider from "@refinedev/react-router-v6";
 
 import { dataProvider } from "./refine/dataProvider";
@@ -25,10 +26,21 @@ import Tasks from "./pages/Tasks";
 import SoftwareAssets from "./pages/SoftwareAssets";
 import NotificationsPage from "./pages/NotificationsPage";
 import ContactAdmin from "./pages/ContactAdmin";
+import CodeStandards from "./pages/CodeStandards";
 import GithubGovernance from "./pages/GithubGovernance";
+import AIPromptPlaybook from "./pages/AIPromptPlaybook";
+import RepositoryViolationDetails from "./pages/RepositoryViolationDetails";
 import MessageNotificationWatcher from "./component/notifications/MessageNotificationWatcher.jsx";
 import { useUser } from "./UserContext.jsx";
+import { apiClient } from "./refine/axios";
 import { Toaster } from "sonner";
+
+const GOVERNANCE_SYNC_COOLDOWN_MS = 15000;
+let governanceSyncInFlight = false;
+let lastGovernanceSyncUserId = null;
+let lastGovernanceSyncAt = 0;
+const GOVERNANCE_SYNC_RETRY_DELAY_MS = 3000;
+const GOVERNANCE_SYNC_MAX_ATTEMPTS = 2;
 
 function AdminOnlyRoute({ children }) {
   const { userData } = useUser();
@@ -41,6 +53,84 @@ function AdminOnlyRoute({ children }) {
 }
 
 function App() {
+  const { userData } = useUser();
+
+  useEffect(() => {
+    if (!userData?.id) {
+      return undefined;
+    }
+
+    const currentUserId = String(userData.id);
+    const now = Date.now();
+    const shouldSkipBecauseRecent =
+      governanceSyncInFlight ||
+      (lastGovernanceSyncUserId === currentUserId &&
+        now - lastGovernanceSyncAt < GOVERNANCE_SYNC_COOLDOWN_MS);
+
+    if (shouldSkipBecauseRecent) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let refreshTimeoutId = null;
+
+    const wait = (delay) =>
+      new Promise((resolve) => {
+        window.setTimeout(resolve, delay);
+      });
+
+    const triggerGovernanceSync = async () => {
+      governanceSyncInFlight = true;
+      lastGovernanceSyncUserId = currentUserId;
+      lastGovernanceSyncAt = Date.now();
+      window.dispatchEvent(new CustomEvent("governance-sync-started"));
+
+      try {
+        let completed = false;
+        for (let attempt = 0; attempt < GOVERNANCE_SYNC_MAX_ATTEMPTS; attempt += 1) {
+          try {
+            await apiClient.post("/github-accounts/sync-all-repositories/");
+            completed = true;
+            break;
+          } catch (error) {
+            const statusCode = Number(error?.response?.status || 0);
+            const isRetryable = [423, 429, 500, 502, 503, 504].includes(statusCode);
+            if (!isRetryable || attempt >= GOVERNANCE_SYNC_MAX_ATTEMPTS - 1) {
+              throw error;
+            }
+            await wait(GOVERNANCE_SYNC_RETRY_DELAY_MS * (attempt + 1));
+          }
+        }
+
+        if (!completed) {
+          throw new Error("Governance sync could not be completed.");
+        }
+      } catch {
+        window.dispatchEvent(new CustomEvent("governance-sync-failed"));
+        governanceSyncInFlight = false;
+        return;
+      }
+
+      refreshTimeoutId = window.setTimeout(() => {
+        if (!cancelled) {
+          window.dispatchEvent(new CustomEvent("governance-sync-requested"));
+          window.dispatchEvent(new CustomEvent("governance-sync-completed"));
+        }
+        governanceSyncInFlight = false;
+      }, 4000);
+    };
+
+    void triggerGovernanceSync();
+
+    return () => {
+      cancelled = true;
+      if (refreshTimeoutId) {
+        window.clearTimeout(refreshTimeoutId);
+        governanceSyncInFlight = false;
+      }
+    };
+  }, [userData?.id]);
+
   return (
     <Refine
       dataProvider={dataProvider}
@@ -126,6 +216,13 @@ function App() {
           },
         },
         {
+          name: "ai-prompt-playbook",
+          list: "/github-governance/ai-prompts",
+          meta: {
+            label: "AI Prompt Rehberi",
+          },
+        },
+        {
           name: "settings",
           list: "/settings",
           meta: {
@@ -171,6 +268,12 @@ function App() {
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/software-assets" element={<SoftwareAssets />} />
           <Route path="/github-governance" element={<GithubGovernance />} />
+          <Route path="/github-governance/rules" element={<CodeStandards />} />
+          <Route path="/github-governance/ai-prompts" element={<AIPromptPlaybook />} />
+          <Route
+            path="/github-governance/repositories/:repositoryId/violations"
+            element={<RepositoryViolationDetails />}
+          />
           <Route
             path="/add-member"
             element={

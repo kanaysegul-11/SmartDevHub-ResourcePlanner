@@ -1,6 +1,10 @@
 from rest_framework import serializers
 
-from .governance_services import get_user_github_logins, is_governance_admin
+from .governance_services import (
+    DISABLED_GOVERNANCE_RULE_CODES,
+    get_user_github_logins,
+    is_governance_admin,
+)
 from .models import (
     AICodeRequest,
     AICodeValidationResult,
@@ -60,7 +64,7 @@ class StandardRuleSerializer(serializers.ModelSerializer):
 
 
 class StandardProfileSerializer(serializers.ModelSerializer):
-    rules = StandardRuleSerializer(many=True, read_only=True)
+    rules = serializers.SerializerMethodField()
     created_by_details = UserSerializer(source="created_by", read_only=True)
     active_rule_count = serializers.SerializerMethodField()
 
@@ -85,7 +89,23 @@ class StandardProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ["created_by"]
 
     def get_active_rule_count(self, obj):
-        return obj.rules.filter(is_enabled=True).count()
+        return (
+            obj.rules.filter(is_enabled=True)
+            .exclude(code__in=DISABLED_GOVERNANCE_RULE_CODES)
+            .count()
+        )
+
+    def get_rules(self, obj):
+        rules = (
+            obj.rules.all()
+            .exclude(code__in=DISABLED_GOVERNANCE_RULE_CODES)
+            .order_by("order", "id")
+        )
+        return StandardRuleSerializer(
+            rules,
+            many=True,
+            context=self.context,
+        ).data
 
 
 class GithubAccountSerializer(serializers.ModelSerializer):
@@ -131,6 +151,8 @@ class GithubAccountSerializer(serializers.ModelSerializer):
 
 class GithubRepositorySerializer(serializers.ModelSerializer):
     account_username = serializers.CharField(source="account.github_username", read_only=True)
+    account_user = serializers.IntegerField(source="account.user_id", read_only=True)
+    account_user_details = UserSerializer(source="account.user", read_only=True)
     standard_profile_details = StandardProfileSerializer(
         source="standard_profile",
         read_only=True,
@@ -142,6 +164,8 @@ class GithubRepositorySerializer(serializers.ModelSerializer):
             "id",
             "account",
             "account_username",
+            "account_user",
+            "account_user_details",
             "standard_profile",
             "standard_profile_details",
             "external_id",
@@ -304,6 +328,7 @@ class RepositoryScanSerializer(GovernanceVisibilityMixin, serializers.ModelSeria
         read_only=True,
     )
     triggered_by_details = UserSerializer(source="triggered_by", read_only=True)
+    violation_count = serializers.SerializerMethodField()
     developer_count = serializers.SerializerMethodField()
     violations = serializers.SerializerMethodField()
     developer_scores = serializers.SerializerMethodField()
@@ -335,20 +360,23 @@ class RepositoryScanSerializer(GovernanceVisibilityMixin, serializers.ModelSeria
         ]
 
     def get_violations(self, obj):
-        violations = list(obj.violations.all())
-        if self._restrict_to_viewer():
-            visible_logins = self._visible_logins()
-            violations = [
-                violation
-                for violation in violations
-                if not self._normalize_login(violation.author_login)
-                or self._normalize_login(violation.author_login) in visible_logins
-            ]
+        violations = [
+            violation
+            for violation in obj.violations.all()
+            if violation.code not in DISABLED_GOVERNANCE_RULE_CODES
+        ]
         return CodeViolationSerializer(
             violations,
             many=True,
             context=self.context,
         ).data
+
+    def get_violation_count(self, obj):
+        return sum(
+            1
+            for violation in obj.violations.all()
+            if violation.code not in DISABLED_GOVERNANCE_RULE_CODES
+        )
 
     def get_developer_scores(self, obj):
         developer_scores = list(obj.developer_scores.all())
@@ -461,3 +489,7 @@ class AIRemediationPrepareSerializer(serializers.Serializer):
         required=False,
         allow_empty=True,
     )
+
+
+class AIRemediationApplySerializer(AIRemediationPrepareSerializer):
+    branch_name = serializers.CharField(required=False, allow_blank=True)

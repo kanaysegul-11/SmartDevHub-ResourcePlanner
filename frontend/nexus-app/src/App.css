@@ -6,10 +6,14 @@ html,
 body,
 #root {
   min-height: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at top left, rgba(14, 165, 233, 0.14), transparent 28%),
     radial-gradient(circle at top right, rgba(245, 158, 11, 0.1), transparent 24%),
