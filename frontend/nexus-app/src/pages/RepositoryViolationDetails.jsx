@@ -190,9 +190,9 @@ function RepositoryViolationDetails() {
   };
 
   return (
-    <div className="flex h-screen w-full items-start overflow-x-hidden bg-transparent font-sans text-slate-900">
+    <div className="app-shell flex bg-transparent font-sans text-slate-900">
       <Sidebar activeItem="governance" logoClickable={true} />
-      <div className="relative flex min-h-0 min-w-0 grow flex-col items-start self-stretch overflow-y-auto overflow-x-hidden pb-10">
+      <div className="app-shell__main relative flex flex-col items-start pb-10">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.76),transparent_36%)]" />
         <div className="relative flex min-w-0 w-full flex-col gap-6">
           <TopbarWithRightNav

@@ -513,9 +513,9 @@ function Tasks() {
   };
 
   return (
-    <div className="flex h-screen w-full items-start overflow-hidden bg-transparent font-sans text-slate-900">
+    <div className="app-shell flex bg-transparent font-sans text-slate-900">
       <Sidebar activeItem="tasks" showTeamSubmenu={true} logoClickable={true} />
-      <div className="relative flex grow flex-col items-start self-stretch overflow-y-auto pb-10">
+      <div className="app-shell__main relative flex flex-col items-start pb-10">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.76),transparent_36%)]" />
         <div className="relative flex w-full flex-col gap-6">
           <TopbarWithRightNav

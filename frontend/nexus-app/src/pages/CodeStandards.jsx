@@ -323,6 +323,160 @@ const EXTENDED_CATEGORY_LABELS = {
   performance: "Performans",
 };
 
+const createCompanyStandardSections = (language) => {
+  if (language === "tr") {
+    return [
+      {
+        id: "delivery",
+        eyebrow: "Teslim standardi",
+        title: "Kod calisir, okunur ve aciklanabilir olmali",
+        body:
+          "Sirket icinde kabul edilen kod sadece sonucu veren degil; ekipteki baska bir gelistiricinin okuyup devralabilecegi kadar duzenli kod olmalidir.",
+        bullets: [
+          "Placeholder veya yari kalmis kod kabul edilmez.",
+          "Dosya isimleri, component isimleri ve klasor duzeni tutarli olur.",
+          "Kod review yorumuna ihtiyac duymadan temel amacini anlatabilmelidir.",
+        ],
+      },
+      {
+        id: "frontend",
+        eyebrow: "Arayuz standardi",
+        title: "Erisilebilir ve semantik bir arayuz zorunludur",
+        body:
+          "Ozellikle urun, panel ve form ekranlarinda semantic HTML, label iliskisi ve guvenli buton davranisi standart kabul edilir.",
+        bullets: [
+          "header, main, section, article gibi etiketler dogru yerde kullanilir.",
+          "img alt, form label/htmlFor ve button type gibi temel A11y kurallari atlanmaz.",
+          "Responsive davranis mobil oncelikli kurulur.",
+        ],
+      },
+      {
+        id: "architecture",
+        eyebrow: "Mimari standard",
+        title: "Kod buyudukce degil, parcalandikca yonetilebilir olmali",
+        body:
+          "Sirket projelerinde tek dosyada yigilan mantik yerine moduler, isimlendirmesi net ve test eklemeye uygun bir yapi beklenir.",
+        bullets: [
+          "Buyuk bilesenler daha kucuk parcalara bolunur.",
+          "Agir hesaplar JSX disina tasinir.",
+          "Hook kullanimi top-level ve tahmin edilebilir olur.",
+        ],
+      },
+      {
+        id: "workflow",
+        eyebrow: "Takim is akisi",
+        title: "Kod kadar commit ve PR kalitesi de standardin parcasi",
+        body:
+          "Gercek yazilim sirketlerinde kalite sadece kod satirinda degil; commit mesaji, PR aciklamasi ve degisikligin izlenebilirliginde de olculur.",
+        bullets: [
+          "Commit mesaji standart prefix ve anlamli ozet icerir.",
+          "PR aciklamasi ne degisti, neden degisti ve nasil test edildi bilgisini verir.",
+          "Kod bir sonraki gelistiriciye temiz devir mantigiyla teslim edilir.",
+        ],
+      },
+      {
+        id: "quality",
+        eyebrow: "Kalite kapisi",
+        title: "Prompt yonlendirir, denetim dogrular",
+        body:
+          "AI ile kod yazilsa bile sirket standardi ancak tarama, lint ve review ile gercekten korunabilir.",
+        bullets: [
+          "Prompt sadece yonlendirme katmanidir.",
+          "Kurallar sayfasi ortak standardi tanimlar.",
+          "Governance ve review sureci standarda gercek uyumu kontrol eder.",
+        ],
+      },
+      {
+        id: "performance",
+        eyebrow: "Performans tabani",
+        title: "Ilk acilis ve bakim maliyeti birlikte dusunulur",
+        body:
+          "Ozellikle frontend islerinde performans yalnizca hiz degil; bundle boyutu, lazy loading ve gorsel optimizasyonu ile birlikte ele alinir.",
+        bullets: [
+          "Route veya agir bolumler lazy load edilmeye uygun tasarlanir.",
+          "Gorsellerde uygun yerde loading='lazy' kullanilir.",
+          "Gereksiz bagimlilik ve tekrarli yapi olusturulmaz.",
+        ],
+      },
+    ];
+  }
+
+  return [
+    {
+      id: "delivery",
+      eyebrow: "Delivery baseline",
+      title: "Code must be workable, readable, and explainable",
+      body:
+        "In a software company, accepted code is not only code that works. It must also be structured so another engineer can read it and continue the work safely.",
+      bullets: [
+        "No placeholders or half-finished code.",
+        "File names, component names, and folder structure stay consistent.",
+        "The intent should be understandable without heavy review comments.",
+      ],
+    },
+    {
+      id: "frontend",
+      eyebrow: "UI baseline",
+      title: "Accessible and semantic UI is mandatory",
+      body:
+        "For product, panel, and form screens, semantic HTML, label relationships, and safe button behavior are treated as baseline quality rules.",
+      bullets: [
+        "Use header, main, section, article, and related semantic landmarks correctly.",
+        "Do not skip img alt, form label/htmlFor, or button type rules.",
+        "Responsive behavior is built mobile-first.",
+      ],
+    },
+    {
+      id: "architecture",
+      eyebrow: "Architecture baseline",
+      title: "Code should become manageable by being modular",
+      body:
+        "Company projects should avoid single-file logic piles and instead prefer modular, clearly named, test-friendly structures.",
+      bullets: [
+        "Large components are split into smaller pieces.",
+        "Heavy calculations move outside JSX.",
+        "Hooks stay top-level and predictable.",
+      ],
+    },
+    {
+      id: "workflow",
+      eyebrow: "Team workflow",
+      title: "Commit and PR quality are part of the standard too",
+      body:
+        "In real software teams, quality is measured not only in code lines but also in commit messages, PR descriptions, and traceable change history.",
+      bullets: [
+        "Commit messages use a standard prefix and meaningful summary.",
+        "PR descriptions explain what changed, why it changed, and how it was tested.",
+        "Code is delivered so the next engineer can safely continue from it.",
+      ],
+    },
+    {
+      id: "quality",
+      eyebrow: "Quality gate",
+      title: "Prompts guide the result, governance verifies it",
+      body:
+        "Even when AI is used, company standards are only protected when scanning, linting, and review confirm the output.",
+      bullets: [
+        "The prompt is a guidance layer.",
+        "The rules page defines the shared engineering baseline.",
+        "Governance and review check real compliance.",
+      ],
+    },
+    {
+      id: "performance",
+      eyebrow: "Performance baseline",
+      title: "First load and maintenance cost are considered together",
+      body:
+        "Frontend performance is not only about speed; it also includes bundle size, lazy loading, and image optimization choices.",
+      bullets: [
+        "Routes or heavy areas are structured for lazy loading.",
+        "Use loading='lazy' where appropriate for images.",
+        "Avoid unnecessary dependencies and repeated structures.",
+      ],
+    },
+  ];
+};
+
 function getRuleGuide(rule) {
   return (
     RULE_GUIDES[rule.code] || EXTRA_RULE_GUIDES[rule.code] || {
@@ -341,7 +495,7 @@ function getRuleGuide(rule) {
 }
 
 function CodeStandards() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { userData } = useUser();
   const isAdmin = Boolean(userData?.isAdmin);
   const [searchText, setSearchText] = useState("");
@@ -391,6 +545,10 @@ function CodeStandards() {
       return matchesCategory && (!normalizedSearch || searchable.includes(normalizedSearch));
     });
   }, [categoryFilter, rules, searchText]);
+  const companyStandardSections = useMemo(
+    () => createCompanyStandardSections(language),
+    [language]
+  );
 
   const nextRuleOrder = useMemo(
     () => rules.reduce((maxValue, rule) => Math.max(maxValue, Number(rule.order || 0)), 0) + 1,
@@ -544,9 +702,9 @@ function CodeStandards() {
   };
 
   return (
-    <div className="flex h-screen w-full items-start overflow-x-hidden bg-transparent font-sans text-slate-900">
+    <div className="app-shell flex bg-transparent font-sans text-slate-900">
       <Sidebar activeItem="governance" logoClickable={true} />
-      <div className="relative flex min-h-0 min-w-0 grow flex-col items-start self-stretch overflow-y-auto overflow-x-hidden pb-10">
+      <div className="app-shell__main relative flex flex-col items-start pb-10">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.76),transparent_36%)]" />
         <div className="relative flex min-w-0 w-full flex-col gap-6">
           <TopbarWithRightNav
@@ -615,6 +773,61 @@ function CodeStandards() {
                       {value}
                     </p>
                   </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-[26px] border border-white/65 bg-white/90 p-5 shadow-[0_18px_40px_rgba(148,163,184,0.1)]">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    {language === "tr"
+                      ? "Sirket muhendislik omurgasi"
+                      : "Company engineering baseline"}
+                  </p>
+                  <h2 className="mt-2 text-2xl font-black text-slate-950">
+                    {language === "tr"
+                      ? "Az ama net kurallar: gercek yazilim sirketi standardi"
+                      : "Few but sharp rules: a realistic software company standard"}
+                  </h2>
+                  <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-500">
+                    {language === "tr"
+                      ? "Bu bolum tek tek teknik kurallarin ustunde duran ortak sirket mantigini anlatir. Yeni gelen bir gelistirici AI kullansa bile once bu omurgaya uymali."
+                      : "This section explains the company baseline above the individual technical rules. Even when a new engineer uses AI, the work should first align with this shared foundation."}
+                  </p>
+                </div>
+                <Badge variant="neutral">
+                  {companyStandardSections.length}{" "}
+                  {language === "tr" ? "ana baslik" : "core sections"}
+                </Badge>
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {companyStandardSections.map((section) => (
+                  <article
+                    key={section.id}
+                    className="rounded-[24px] border border-slate-200 bg-slate-50 p-5"
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      {section.eyebrow}
+                    </p>
+                    <h3 className="mt-2 text-xl font-black text-slate-950">
+                      {section.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-6 text-slate-500">
+                      {section.body}
+                    </p>
+                    <div className="mt-4 space-y-2">
+                      {section.bullets.map((bullet) => (
+                        <div
+                          key={bullet}
+                          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600"
+                        >
+                          {bullet}
+                        </div>
+                      ))}
+                    </div>
+                  </article>
                 ))}
               </div>
             </section>

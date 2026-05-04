@@ -301,10 +301,10 @@ function Dashboard() {
   };
 
   return (
-    <div className="flex h-screen w-full items-start overflow-hidden bg-transparent text-slate-900">
+    <div className="app-shell flex bg-transparent text-slate-900">
       <Sidebar activeItem="dashboard" showTeamSubmenu={true} />
 
-      <div className="relative flex grow flex-col items-start self-stretch overflow-y-auto">
+      <div className="app-shell__main relative flex flex-col items-start">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.76),transparent_36%)]" />
 
         <div className="relative flex w-full flex-col gap-10 px-6 py-6 md:px-8 md:py-8 xl:px-10 xl:py-10">

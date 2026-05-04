@@ -571,7 +571,7 @@ function Sidebar({
 
   return (
     <SidebarWithSections
-      className="dark-surface z-20 m-4 mr-0 w-[272px] flex-none self-stretch overflow-hidden rounded-[30px] border border-white/10 bg-slate-950 text-white shadow-[0_24px_80px_rgba(15,23,42,0.24)] [&_.border-neutral-border]:border-white/10 [&_.text-subtext-color]:text-slate-300"
+      className="dark-surface sticky top-4 z-20 mx-4 my-4 h-[calc(100vh-2rem)] w-[272px] shrink-0 overflow-hidden rounded-[30px] border border-white/10 bg-slate-950 text-white shadow-[0_24px_80px_rgba(15,23,42,0.24)] [&_.border-neutral-border]:border-white/10 [&_.text-subtext-color]:text-slate-300"
       header={
         <div
           className={`flex w-full items-center gap-3 ${logoClickable ? "cursor-pointer" : ""

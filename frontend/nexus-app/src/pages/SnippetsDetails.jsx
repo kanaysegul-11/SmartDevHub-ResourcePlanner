@@ -148,10 +148,10 @@ function SnippetDetail() {
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-transparent">
+    <div className="app-shell flex bg-transparent">
       <Sidebar activeItem="snippets" logoutVariant="danger" logoClickable={true} showTeamSubmenu={true} />
 
-      <div className="relative flex grow flex-col overflow-y-auto pb-10">
+      <div className="app-shell__main relative flex flex-col pb-10">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.76),transparent_36%)]" />
 
         <div className="relative mx-auto flex w-full max-w-[1500px] flex-col gap-6 px-6 py-6 md:px-8 xl:px-10">

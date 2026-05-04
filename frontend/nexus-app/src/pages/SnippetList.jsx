@@ -107,9 +107,9 @@ function SnippetList() {
   };
 
   return (
-    <div className="flex h-screen w-full items-start overflow-hidden bg-slate-50 text-slate-900">
+    <div className="app-shell flex bg-slate-50 text-slate-900">
       <Sidebar activeItem="snippets" showTeamSubmenu={true} logoClickable={true} />
-      <div className="flex grow flex-col items-start self-stretch overflow-y-auto bg-default-background">
+      <div className="app-shell__main flex flex-col items-start bg-default-background">
         <TopbarWithRightNav
           className="border-b border-solid border-neutral-border bg-white px-8 py-3"
           leftSlot={<Badge variant="neutral" icon={<FeatherCode />}>{t("snippets.workspace")}</Badge>}
