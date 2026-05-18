@@ -1,65 +1,66 @@
 # SmartDevHub Resource Planner
 
-Bu proje iki ana parçadan oluşur:
+SmartDevHub Resource Planner; ekip, proje, görev, yazılım/lisans takibi ve GitHub kod yönetişimi için geliştirilmiş Django REST API + React arayüz uygulamasıdır.
 
-- `backend`: Django REST API
-- `frontend/nexus-app`: Vite + React arayüzü
+## Ana Özellikler
 
-Başka bir bilgisayarda projeyi çalıştırmak için aşağıdaki kurulum adımlarını izleyebilirsin.
+- Şirket geneli yazılım ve abonelik takibi
+- Kişiye atanmış lisanslar ve ortak ekip lisansları
+- Lisans istekleri, onay/karşılama akışı, audit ve sync kayıtları
+- Proje, görev, ekip durumu ve ekip içi mesajlaşma
+- Kod kütüphanesi, yorum ve puanlama
+- GitHub hesap/repo bağlantısı
+- Kod standardı profilleri, kural tanımları, repo tarama ve ihlal raporları
+- Geliştirici bazlı GitHub skorları, commit ve PR kalite sinyalleri
+- AI prompt rehberi ve AI çıktısını standartlara göre doğrulama
+
+## Proje Yapısı
+
+```text
+backend/                 Django REST API
+frontend/nexus-app/      React + Vite frontend
+docs/                    Kurulum ve entegrasyon notları
+docs/ai-rules/           AI kod üretimi için ayrı kural dosyaları
+sample-data/             Örnek CSV verileri
+requirements.txt         Backend Python bağımlılıkları
+.env.example             Lokal ortam değişkenleri örneği
+```
 
 ## Gerekenler
 
 - Python 3.12+
-- Node.js 20+ ve npm
+- Node.js 20+
+- npm
 - Git
 
-## Projeyi Alma
+## Ortam Değişkenleri
+
+Root klasörde örnek dosyayı kopyalayın:
 
 ```powershell
-git clone <repo-url>
-cd SmartDevHub-ResourcePlanner
+copy .env.example .env
 ```
 
-## 1. Backend Kurulumu
+GitHub OAuth veya webhook kullanacaksanız `.env` içindeki değerleri doldurun. Gerçek secret değerlerini repoya eklemeyin.
 
-Backend klasörüne gir:
+Frontend API adresi için normalde ayrıca dosya gerekmez; varsayılan adres `http://localhost:8000/api` olarak kullanılır. Farklı backend adresi gerekiyorsa `frontend/nexus-app/.env.local` oluşturup şunu ekleyebilirsiniz:
 
-```powershell
-cd backend
+```env
+VITE_API_BASE_URL=http://localhost:8000/api
 ```
 
-Sanal ortam oluştur ve aktif et:
+## Backend Kurulumu
 
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
-```
-
-Gerekli Python paketlerini kur:
-
-```powershell
-pip install django djangorestframework django-cors-headers django-filter
-```
-
-Veritabanını hazırlamak için migration çalıştır:
-
-```powershell
+pip install -r requirements.txt
+cd backend
 python manage.py migrate
-```
-
-İstersen yönetici kullanıcı oluştur:
-
-```powershell
-python manage.py createsuperuser
-```
-
-Backend sunucusunu başlat:
-
-```powershell
 python manage.py runserver
 ```
 
-Backend varsayılan olarak şu adreste çalışır:
+Backend varsayılan adresi:
 
 ```text
 http://localhost:8000
@@ -71,91 +72,66 @@ API tabanı:
 http://localhost:8000/api
 ```
 
-## 2. Frontend Kurulumu
+## Frontend Kurulumu
 
-Yeni bir terminal aç ve frontend klasörüne gir:
+Yeni bir terminal açın:
 
 ```powershell
 cd frontend\nexus-app
-```
-
-Node paketlerini kur:
-
-```powershell
 npm install
-```
-
-`.env` dosyasını kontrol et. Lokal geliştirme için mevcut değer şu şekilde olmalı:
-
-```env
-VITE_API_BASE_URL=http://localhost:8000/api
-```
-
-Frontend geliştirme sunucusunu başlat:
-
-```powershell
 npm run dev
 ```
 
-Frontend genelde şu adreste açılır:
+Frontend varsayılan adresi:
 
 ```text
 http://localhost:5173
 ```
 
-## Çalıştırma Sırası
-
-Projeyi lokal ortamda kullanmak için önce backend, sonra frontend başlatılmalı:
-
-1. `backend` içinde `python manage.py runserver`
-2. `frontend/nexus-app` içinde `npm run dev`
-
-## Google Login Kullanılacaksa
-
-Google ile giriş kullanılacaksa backend tarafında ortam değişkeni tanımlanmalı:
-
-```powershell
-$env:GOOGLE_CLIENT_ID="senin_google_client_id_degerin"
-```
-
-Ardından backend yeniden başlatılmalı.
-
-Frontend tarafında da ilgili Google client ayarı projede kullanılıyorsa Vite env değerlerinin doğru olduğundan emin ol.
-
-## Veritabanı Notu
-
-Projede `backend/db.sqlite3` dosyası bulunuyor. İstersen:
-
-- Bu dosyayı kullanarak mevcut verilerle devam edebilirsin.
-- Ya da temiz başlangıç için kendi veritabanını oluşturup `python manage.py migrate` çalıştırabilirsin.
-
-## Faydalı Komutlar
+## Test ve Kontrol Komutları
 
 Backend:
 
 ```powershell
-python manage.py runserver
-python manage.py migrate
-python manage.py createsuperuser
+cd backend
+..\venv\Scripts\python.exe manage.py test api
 ```
 
 Frontend:
 
 ```powershell
-npm install
-npm run dev
+cd frontend\nexus-app
+npm run lint
 npm run build
 ```
 
-## Olası Sorunlar
+## Canlı Lisans CSV Akışı
 
-Eğer frontend açılıyor ama veri gelmiyorsa:
+Kişiye atanmış lisanslar CSV dosyalarından senkronize edilebilir:
 
-- Backend'in çalıştığını kontrol et.
-- `frontend/nexus-app/.env` içindeki `VITE_API_BASE_URL` değerini kontrol et.
-- Tarayıcı konsolunda veya backend terminalinde hata olup olmadığına bak.
+```powershell
+cd backend
+python manage.py export_user_license_csvs
+python manage.py sync_live_license_csvs
+python manage.py watch_live_license_csvs
+```
 
-Eğer CORS hatası alırsan:
+Windows izleyici:
 
-- Frontend'in `http://localhost:5173` üzerinde çalıştığından emin ol.
-- Backend ayarlarında CORS yapılandırmasının değişmediğini kontrol et.
+```powershell
+.\backend\start_live_license_csv_watcher.ps1
+```
+
+Detaylar için [sample-data/live-licenses/README.md](sample-data/live-licenses/README.md) dosyasına bakın.
+
+## GitHub Entegrasyonu
+
+GitHub OAuth ve webhook kurulumu için [docs/GITHUB_OAUTH_SETUP.md](docs/GITHUB_OAUTH_SETUP.md) dosyasını izleyin.
+
+Lokal geliştirmede webhook için public URL gerekir. Public URL yoksa uygulama polling fallback ile çalışır.
+
+## Teslim Notları
+
+- `.env`, `backend/.env`, `backend/db.sqlite3`, `__pycache__` ve `.pyc` dosyaları repoya eklenmemelidir.
+- Gerçek GitHub OAuth secret değerleri repoya yazılmamalıdır.
+- AI kod üretim kuralları `docs/ai-rules/` altında ayrı dosyalar halinde tutulur.

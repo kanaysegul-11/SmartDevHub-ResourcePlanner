@@ -13,15 +13,11 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import os
 from corsheaders.defaults import default_headers
-from pathlib import Path
-import os
-from dotenv import load_dotenv
 
 
 # Simple .env loader (no external deps) - loads key=value pairs from a .env
 # placed in the project root (BASE_DIR). Lines starting with '#' are ignored.
-def _load_local_dotenv(base_dir):
-    env_path = base_dir / '.env'
+def _load_local_dotenv(env_path):
     if not env_path.exists():
         return
     try:
@@ -42,12 +38,12 @@ def _load_local_dotenv(base_dir):
         # Silently ignore parsing problems - fallback to environment
         pass
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+ROOT_DIR = BASE_DIR.parent
 
-# Load local .env early so settings that follow can use those values.
-_load_local_dotenv(BASE_DIR)
+# Load local env files early so settings below can use those values.
+_load_local_dotenv(ROOT_DIR / ".env")
+_load_local_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production

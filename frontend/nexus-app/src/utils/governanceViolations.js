@@ -30,7 +30,7 @@ export const getViolationRecommendation = (violation) => {
     return "JavaScript ve TypeScript kodunda == yerine ===, != yerine !== kullanın.";
   }
   if (code === "semantic_html_structure") {
-    return "Sayfa iskeletinde yalnızca div kullanmak yerine header, nav, main, section, article, aside ve footer gibi semantik etiketleri tercih edin.";
+    return "Sayfa iskeletinde yalnızca div kullanmak yerine header, nav, main, section, article, aside ve footer gibi semantık etiketleri tercih edin.";
   }
   if (code === "form_label_required") {
     return "Her anlamlı input, select veya textarea elemanını bir label, htmlFor ya da aria-label ile bağlayın.";
@@ -69,7 +69,7 @@ export const getViolationRecommendation = (violation) => {
     return "Commit öncesi kalite kontrolleri için .husky/pre-commit gibi bir hook tanımlayın.";
   }
   if (code === "lint_staged_required") {
-    return "Staged dosyalarda hızlı kontrol çalıştırmak için lint-staged veya eşdeğer bir yapı kurun.";
+    return "Staged dosyalarda hızlı kontrol çalıştırmak için lint-staged veya eşdeğer bir yapı kürün.";
   }
   if (code === "lazy_loading_images") {
     return "İlk ekranda zorunlu olmayan görsellerde loading=\"lazy\" kullanın.";
@@ -123,7 +123,7 @@ export const getViolationDisplayMessage = (violation, t) => {
   if (code === "semantic_html_structure") {
     return t?.(
       "governance.ruleMessages.semantic_html_structure",
-      "Sayfa iskeletinde semantik yerleşim etiketleri yerine genel wrapper yapısı kullanılıyor."
+      "Sayfa iskeletinde semantık yerleşim etiketleri yerine genel wrapper yapısı kullanılıyor."
     );
   }
   if (code === "no_var_keyword") {
@@ -298,8 +298,8 @@ export const getViolationFixExample = (violation) => {
     const [prepareHelper, handlerHelper, renderHelper] = helpers;
     if (isPython) {
       return [
-        `# Hedef: ${functionName} fonksiyonunu ${violation?.metadata?.max_lines || 20} satirin altina indirin.`,
-        "# Ana fonksiyon sadece akisi yonetsin; detaylari helper fonksiyonlara tasiyin.",
+        `# Hedef: ${functionName} fonksiyonunu ${violation?.metadata?.max_lines || 20} satırın altına indirin.`,
+        "# Ana fonksiyon sadece akışı yonetsin; detayları helper fonksiyonlara taşıyın.",
         "",
         `def ${functionName}(params):`,
         `    prepared_data = ${prepareHelper}(params)`,
@@ -307,21 +307,21 @@ export const getViolationFixExample = (violation) => {
         `    return ${renderHelper}(result)`,
         "",
         `def ${prepareHelper}(params):`,
-        "    # Mevcut fonksiyondaki veri hazirlama, filtreleme veya hesaplama satirlarini buraya tasiyin.",
+        "    # Mevcut fonksiyondaki veri hazırlama, filtreleme veya hesaplama satırlarını buraya taşıyın.",
         "    return {}",
         "",
         `def ${handlerHelper}(prepared_data):`,
-        "    # Mevcut fonksiyondaki karar, validasyon veya is kurali satirlarini buraya tasiyin.",
+        "    # Mevcut fonksiyondaki karar, validasyon veya iş kuralı satırlarını buraya taşıyın.",
         "    return prepared_data",
         "",
         `def ${renderHelper}(result):`,
-        "    # Mevcut fonksiyondaki sonuc olusturma/dondurme kismini burada sade tutun.",
+        "    # Mevcut fonksiyondaki sonuc oluşturma/dondurme kismini burada sade tutun.",
         "    return result",
       ].join("\n");
     }
     return [
-      `// Hedef: ${functionName} fonksiyonunu ${violation?.metadata?.max_lines || 20} satirin altina indirin.`,
-      `// Ana fonksiyon sadece akisi yonetsin; detaylari helper fonksiyonlara tasiyin.`,
+      `// Hedef: ${functionName} fonksiyonunu ${violation?.metadata?.max_lines || 20} satırın altına indirin.`,
+      `// Ana fonksiyon sadece akışı yonetsin; detayları helper fonksiyonlara taşıyın.`,
       "",
       `const ${functionName} = (params) => {`,
       `  const preparedData = ${prepareHelper}(params);`,
@@ -331,17 +331,17 @@ export const getViolationFixExample = (violation) => {
       `};`,
       "",
       `const ${prepareHelper} = (params) => {`,
-      `  // Mevcut fonksiyondaki veri hazirlama, filtreleme veya hesaplama satirlarini buraya tasiyin.`,
+      `  // Mevcut fonksiyondaki veri hazırlama, filtreleme veya hesaplama satırlarını buraya taşıyın.`,
       `  return {};`,
       `};`,
       "",
       `const ${handlerHelper} = (params) => {`,
-      `  // Mevcut fonksiyondaki event handler veya state guncelleme kisimlarini buraya tasiyin.`,
+      `  // Mevcut fonksiyondaki event handler veya state güncelleme kısımlarını buraya taşıyın.`,
       `  return {};`,
       `};`,
       "",
       `const ${renderHelper} = (preparedData, handlers) => {`,
-      `  // Mevcut JSX/render donusunu burada sade ve okunur sekilde kurun.`,
+      `  // Mevcut JSX/render dönüşünü burada sade ve okunur şekilde kürün.`,
       `  return null;`,
       `};`,
     ].join("\n");
@@ -349,13 +349,13 @@ export const getViolationFixExample = (violation) => {
 
   if (code === "no_var_keyword") {
     return [
-      "// Hatali",
+      "// Hatalı",
       "var total = calculateTotal(items);",
       "",
-      "// Dogrusu",
+      "// Doğrusu",
       "const total = calculateTotal(items);",
       "",
-      "// Deger sonradan yeniden ataniyorsa:",
+      "// Değer sonradan yeniden ataniyorsa:",
       "let total = 0;",
       "total = calculateTotal(items);",
     ].join("\n");
@@ -369,33 +369,33 @@ export const getViolationFixExample = (violation) => {
       .replace(/[^A-Za-z0-9_]+/g, "_")
       .toLowerCase();
     return [
-      "# Hatali",
+      "# Hatalı",
       `${variableName} = get_user_data()`,
       "",
-      "# Dogrusu",
+      "# Doğrusu",
       `${snakeName} = get_user_data()`,
     ].join("\n");
   }
 
   if (code === "required_readme") {
     return [
-      "# Proje Adi",
+      "# Proje Adı",
       "",
       "## Kurulum",
-      "Projeyi calistirmak icin gerekli adimlari yazin.",
+      "Projeyi çalıştırmak için gerekli adımları yazın.",
       "",
-      "## Gelistirme",
-      "Lokal calistirma komutlarini yazin.",
+      "## Geliştirme",
+      "Lokal çalıştırma komutlarini yazın.",
       "",
       "## Test",
-      "Test komutunu ve beklenen sonucu yazin.",
+      "Test komutunu ve beklenen sonucu yazın.",
     ].join("\n");
   }
 
   if (code === "tests_required") {
     return [
-      "// Ornek test dosyasi: __tests__/example.test.js",
-      "describe('ana davranis', () => {",
+      "// Örnek test dosyasi: __tests__/example.test.js",
+      "describe('ana davranış', () => {",
       "  it('beklenen sonucu uretir', () => {",
       "    expect(true).toBe(true);",
       "  });",

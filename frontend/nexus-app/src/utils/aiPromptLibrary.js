@@ -1,113 +1,161 @@
 const buildTurkishLibrary = () => {
   const hardRequirements = [
-    "Eksik birakma, pseudo-code yazma veya 'burayi sen doldur' benzeri placeholder kullanma.",
-    "Kod bloklarini tam, calisir ve birbiriyle tutarli ver.",
-    "Ayni problem icin dosya isimleri, component isimleri ve klasor duzeni boyunca tek bir naming standardi koru.",
-    "Var olan kurallar ile celisen yaratici ama kontrolsuz kararlar verme.",
-    "Cevabi yarim kesme; tum istenen dosyalari ve gerekli baglanti kodlarini ver.",
-    "Ornek iskelet degil, calistirilabilir ve uretime yakin bir cozum ver.",
-    "State akislarini, event handler'lari, prop zincirlerini ve import-export baglantilarini eksiksiz tamamla.",
-    "Eksik dependency, eksik route, eksik provider, baglanmamis component veya yarim entegrasyon birakma.",
-    "Istenen yapida form, liste, filtre, sepet, modal veya API akisi varsa aradaki wiring kodunu atlama.",
-    "Ciktiyi yari bitmis demo gibi degil, ekipte gelistirilmeye devam edilebilecek duzgun bir teslim olarak hazirla.",
+    "Eksik bırakma, pseudo-code yazma veya 'burayı sen doldur' benzeri placeholder kullanma.",
+    "Kod bloklarını tam, çalışır ve birbiriyle tutarlı ver.",
+    "Aynı problem için dosya isimleri, component isimleri ve klasör düzeni boyunca tek bir naming standardı koru.",
+    "Var olan kurallar ile çelişen yaratıcı ama kontrolsüz kararlar verme.",
+    "Cevabı yarım kesme; tüm istenen dosyaları ve gerekli bağlantı kodlarını ver.",
+    "Örnek iskelet değil, çalıştırılabilir ve üretime yakın bir çözüm ver.",
+    "State akışlarını, event handler'ları, prop zincirlerini ve import-export bağlantılarını eksiksiz tamamla.",
+    "Eksik dependency, eksik route, eksik provider, bağlanmamış component veya yarım entegrasyon bırakma.",
+    "İstenen yapıda form, liste, filtre, sepet, modal veya API akışı varsa aradaki wiring kodunu atlama.",
+    "Çıktıyı yarı bitmiş demo gibi değil, ekipte geliştirilmeye devam edilebilecek düzgün bir teslim olarak hazırla.",
   ];
 
   const deliveryContract = [
-    "Sadece fikir verme; istenen cozumun gercek kodunu ver.",
-    "Dosyalar birbirine bagli calisacak sekilde import, export, state ve event akislarini tamamla.",
-    "Kodda TODO, FIXME, placeholder data veya 'ornek olarak' diye yarim birakilan bolumler kullanma.",
-    "Aksi belirtilmedikce, cikti mevcut ekip tarafindan gelistirilmeye devam edilebilecek kadar duzenli ve tutarli olsun.",
+    "Sadece fikir verme; istenen çözümün gerçek kodunu ver.",
+    "Dosyalar birbirine bağlı çalışacak şekilde import, export, state ve event akışlarını tamamla.",
+    "Kodda TODO, FIXME, placeholder data veya 'örnek olarak' diye yarım bırakılan bölümler kullanma.",
+    "Aksi belirtilmedikçe, çıktı mevcut ekip tarafından geliştirilmeye devam edilebilecek kadar düzenli ve tutarlı olsun.",
+  ];
+
+  const projectContract = [
+    "Çıktı yeni ve bağımsız bir demo ekran değil, mevcut SmartDevHub-ResourcePlanner projesine uygulanabilir patch olarak hazırlanmalı.",
+    "Frontend ana uygulama React/Vite ve JSX kullanır; yeni ana ekran kodları .jsx, saf yardımcı kodlar .js dosyalarına yazılmalı.",
+    "Software Assets ekranı için mevcut sayfa yolu frontend/nexus-app/src/pages/SoftwareAssets.jsx olarak korunmalı.",
+    "Software Assets componentleri gerekiyorsa frontend/nexus-app/src/component/softwareAssets/ altında mevcut naming düzenine uygun tutulmalı.",
+    "API çağrıları frontend/nexus-app/src/refine/axios.js içindeki apiClient ile yapılmalı; fetch/axios instance tekrar oluşturulmamalı.",
+    "Rol kontrolü mevcut useUser akışı ve userData?.isAdmin bilgisiyle yapılmalı.",
+    "Backend alan adları değiştirilmemeli: license_mode, record_type, operational_status, provider_code, seats_total, billing_cycle, purchase_price, currency, assignments, primary_assignment ve license_requests kullanılmalı.",
+    "Ortak lisans ayrımı license_mode === \"shared\", kişiye atanmış lisans ayrımı license_mode === \"assigned\" üzerinden yapılmalı.",
+    "Mock data, seed data, local-only demo state veya gerçek API yerine sahte veri eklenmemeli.",
+    "Yeni route, yeni framework, yeni tasarım sistemi veya TypeScript geçişi istenmedikçe önerilmemeli.",
+    "Çıktı dosya bazlı değişiklikleri mevcut dosya yollarına göre vermeli ve hangi mevcut kodun değişeceğini açık söylemeli.",
+    "Aynı görev farklı AI araçlarına verildiğinde dosya yolu, model alanı, component isimlendirmesi ve API sözleşmesi aynı kalmalı.",
+  ];
+
+  const teamCollaborationContract = [
+    "Frontend işi önce dosya sahipliklerine bölünmeli; her geliştirici yalnızca kendisine verilen dosya veya klasörlerde değişiklik istemeli.",
+    "AI çıktısı verilen sahiplik sınırının dışına çıkarsa kabul edilmemeli.",
+    "Ortak dosya değişikliği gerekiyorsa AI kod yazmak yerine bunu koordinasyon riski olarak belirtmeli.",
+    "Aynı dosyaya aynı anda birden fazla kişinin AI çıktısı uygulanmamalı.",
+    "Sayfa sahibi ana state, route ve API akışı kararlarından sorumlu olmalı.",
+    "Component sahibi yalnızca kendisine verilen component arayüzü, prop sözleşmesi ve görsel davranıştan sorumlu olmalı.",
+    "Her prompt izin verilen dosyaları, yasaklı dosyaları ve beklenen çıktı formatını açıkça içermeli.",
+    "AI yeni route, yeni dependency veya yeni tasarım sistemi önermeden önce gerekçe ve koordinasyon notu vermeli.",
+    "Tüm geliştiriciler aynı component naming, aynı API client, aynı rol kontrolü ve aynı dosya uzantısı standardını korumalı.",
+    "AI cevapları birebir aynı olmak zorunda değil; aynı sözleşmeye göre değerlendirilebilir olmak zorunda.",
+    "Task isteği proje sözleşmesiyle çelişirse AI önce çelişki raporu vermeli ve netleşmeden kod üretmemeli.",
+    "Her çıktı dosya sahipliği, API standardı, mock data yasağı, erişilebilirlik, lint ve build checklistiyle bitmeli.",
   ];
 
   const ruleModules = [
     {
       id: "semantic-html",
-      title: "Kural Dosyasi 1: HTML ve Erisilebilirlik",
+      title: "Kural Dosyası 1: HTML ve Erişilebilirlik",
       shortTitle: "HTML",
-      badge: "Temel yapi",
+      badge: "Temel yapı",
       summary:
-        "Semantik HTML, alt metin, form erisilebilirligi ve guvenli link kullanimi icin cekirdek kurallar.",
+        "Semantik HTML, alt metin, form erişilebilirliği ve güvenli link kullanımı için çekirdek kurallar.",
       lines: [
         "header, nav, main, section, article, aside ve footer gibi semantik etiketleri tercih et.",
-        "Tum img etiketlerinde alt kullan; dekoratif gorsellerde alt bos olabilir.",
-        "Her form alanini label, htmlFor veya esit erisilebilir isimle bagla.",
-        "Form icindeki button elemanlarinda type mutlaka acikca yazilsin.",
+        "Tüm img etiketlerinde alt kullan; dekoratif görsellerde alt boş olabilir.",
+        "Her form alanını label, htmlFor veya eşit erişilebilir isimle bağla.",
+        "Form içindeki button elemanlarında type mutlaka açıkça yazılsın.",
         "target=\"_blank\" kullanan linklerde rel=\"noopener noreferrer\" ekle.",
       ],
     },
     {
       id: "styling-system",
-      title: "Kural Dosyasi 2: CSS ve Tasarim Sistemi",
+      title: "Kural Dosyası 2: CSS ve Tasarım Sistemi",
       shortTitle: "CSS",
       badge: "Stil sistemi",
       summary:
-        "Scoped styling, token yapisi, mobile-first responsive ve okunabilir sinif isimleri icin kurallar.",
+        "Scoped styling, token yapısı, mobile-first responsive ve okunabilir sınıf isimleri için kurallar.",
       lines: [
         "Tailwind, CSS Modules veya benzeri scoped stil stratejisi tercih et.",
-        "Duz CSS gerekiyorsa BEM isimlendirme kullan.",
-        "Renk, bosluk, tipografi ve radius degerlerini token veya CSS variable ile yonet.",
-        "Responsive yaklasim mobile-first olsun; kucuk ekrandan buyuge ilerle.",
-        "Tekrarlanan stil mantigini ortak utility veya component seviyesinde toparla.",
+        "Düz CSS gerekiyorsa BEM isimlendirme kullan.",
+        "Renk, boşluk, tipografi ve radius değerlerini token veya CSS variable ile yönet.",
+        "Responsive yaklaşım mobile-first olsun; küçük ekrandan büyüğe ilerle.",
+        "Tekrarlanan stil mantığını ortak utility veya component seviyesinde toparla.",
       ],
     },
     {
       id: "react-architecture",
-      title: "Kural Dosyasi 3: React ve JavaScript Standartlari",
+      title: "Kural Dosyası 3: React ve JavaScript Standartları",
       shortTitle: "React",
-      badge: "Kod duzeni",
+      badge: "Kod düzeni",
       summary:
-        "Naming convention, Hook kullanimi, props destructuring ve sade JSX icin ana uygulama kurallari.",
+        "Naming convention, Hook kullanımı, props destructuring ve sade JSX için ana uygulama kuralları.",
       lines: [
-        "Component isimleri PascalCase, fonksiyon ve degisken isimleri camelCase, sabitler UPPER_SNAKE_CASE olsun.",
-        "Props destructuring kullan ve JSX icinde agir hesap yazma; hesaplari return oncesi hazirla.",
-        "Hook'lari sadece top-level kullan; loop, kosul veya nested function icinde Hook cagir ma.",
+        "Component isimleri PascalCase, fonksiyon ve değişken isimleri camelCase, sabitler UPPER_SNAKE_CASE olsun.",
+        "Props destructuring kullan ve JSX içinde ağır hesap yazma; hesapları return öncesi hazırla.",
+        "Hook'ları sadece top-level kullan; loop, koşul veya nested function içinde Hook çağırma.",
         "Sadece === ve !== kullan; var kullanma, const ve let tercih et.",
-        "Mantigi okunur helper fonksiyonlara bol, bilesenleri gereksiz buyutme.",
+        "Mantığı okunur helper fonksiyonlara böl, bileşenleri gereksiz büyütme.",
       ],
     },
     {
       id: "project-structure",
-      title: "Kural Dosyasi 4: Proje Mimari ve Dosya Duzeni",
+      title: "Kural Dosyası 4: Proje Mimari ve Dosya Düzeni",
       shortTitle: "Mimari",
-      badge: "Moduler yapi",
+      badge: "Modüler yapı",
       summary:
-        "Dosya uzantilari, moduler klasor yapisi, index export duzeni ve tekrari azaltan component ayristirmasi.",
+        "Dosya uzantıları, modüler klasör yapısı, index export düzeni ve tekrarı azaltan component ayrıştırması.",
       lines: [
-        "React bilesenleri icin .jsx veya .tsx, saf mantik dosyalari icin .js veya .ts kullan.",
-        "Bilesenleri ve utility dosyalarini mantikli klasorlerde grupla.",
-        "Uygun yerlerde index export ile import yollarini sade tut.",
-        "Buyuk bilesenleri daha kucuk ve tekrar kullanilabilir parcalara bol.",
-        "Var olan tasarim sistemi varsa onu bozma; yeni yapilar mevcut duzene uyumlu olsun.",
+        "React bileşenleri için .jsx veya .tsx, saf mantık dosyaları için .js veya .ts kullan.",
+        "Bileşenleri ve utility dosyalarını mantıklı klasörlerde grupla.",
+        "Uygun yerlerde index export ile import yollarını sade tut.",
+        "Büyük bileşenleri daha küçük ve tekrar kullanılabilir parçalara böl.",
+        "Var olan tasarım sistemi varsa onu bozma; yeni yapılar mevcut düzene uyumlu olsun.",
       ],
     },
     {
-      id: "quality-safety",
-      title: "Kural Dosyasi 5: Guvenlik, Hata ve Kalite",
-      shortTitle: "Guvenlik",
-      badge: "Risk kontrolu",
+      id: "project-ai-contract",
+      title: "Kural Dosyası 5: Proje AI Çıktı Sözleşmesi",
+      shortTitle: "AI Sözleşme",
+      badge: "Tek ekip standardı",
       summary:
-        "XSS, Error Boundary, validation ve kod kalite araclari ile ilgili zorunlu prensipler.",
+        "Farklı AI araçlarının aynı proje alan adları, dosya yolları ve patch mantığıyla çıktı üretmesi için zorunlu proje sözleşmesi.",
+      lines: projectContract,
+    },
+    {
+      id: "team-ai-collaboration",
+      title: "Kural Dosyası 6: Takım AI Çalışma Sözleşmesi",
+      shortTitle: "Takım AI",
+      badge: "Eş zamanlı çalışma",
+      summary:
+        "Birden fazla frontend geliştiricinin Cursor, Codex, Gemini veya ChatGPT ile aynı ekip standardında çalışması için dosya sahipliği ve review kuralları.",
+      lines: teamCollaborationContract,
+    },
+    {
+      id: "quality-safety",
+      title: "Kural Dosyası 7: Güvenlik, Hata ve Kalite",
+      shortTitle: "Güvenlik",
+      badge: "Risk kontrolü",
+      summary:
+        "XSS, Error Boundary, validation ve kod kalite araçları ile ilgili zorunlu prensipler.",
       lines: [
-        "dangerouslySetInnerHTML kullanma; mecbursa sanitize edilmemis icerik render etme.",
-        "Kritik UI alanlarinda Error Boundary dusun.",
-        "Kullanici girdilerini dogrula; hata mesajlarini net ve kontrollu ver.",
-        "Kod ESLint ve Prettier uyumlu olmali; Husky ve lint-staged akisina ters dusme.",
-        "Gecici hack yerine kalici ve aciklanabilir cozum uret.",
+        "dangerouslySetInnerHTML kullanma; mecbursa sanitize edilmemiş içerik render etme.",
+        "Kritik UI alanlarında Error Boundary düşün.",
+        "Kullanıcı girdilerini doğrula; hata mesajlarını net ve kontrollü ver.",
+        "Kod ESLint ve Prettier uyumlu olmalı; Husky ve lint-staged akışına ters düşme.",
+        "Geçici hack yerine kalıcı ve açıklanabilir çözüm üret.",
       ],
     },
     {
       id: "performance-delivery",
-      title: "Kural Dosyasi 6: Performans ve Teslimat",
+      title: "Kural Dosyası 8: Performans ve Teslimat",
       shortTitle: "Performans",
-      badge: "Uretim kalitesi",
+      badge: "Üretim kalitesi",
       summary:
-        "Lazy loading, optimize gorsel kullanimi ve ilk acilis performansi icin gerekli son kurallar.",
+        "Lazy loading, optimize görsel kullanımı ve ilk açılış performansı için gerekli son kurallar.",
       lines: [
-        "Agir ekranlari veya route'lari React.lazy ve Suspense ile bol.",
-        "Uygun gorsellerde loading=\"lazy\" kullan.",
-        "Mumkunse WebP veya AVIF gibi optimize formatlari tercih et.",
-        "Gereksiz bundle buyumesine ve tekrarli bagimliliklara dikkat et.",
-        "Performans iyilestirmesi gerekiyorsa davranisi bozmadan minimum gerekli degisikligi yap.",
+        "Ağır ekranları veya route'ları React.lazy ve Suspense ile böl.",
+        "Uygun görsellerde loading=\"lazy\" kullan.",
+        "Mümkünse WebP veya AVIF gibi optimize formatları tercih et.",
+        "Gereksiz bundle büyümesine ve tekrarlı bağımlılıklara dikkat et.",
+        "Performans iyileştirmesi gerekiyorsa davranışı bozmadan minimum gerekli değişikliği yap.",
       ],
     },
   ];
@@ -116,142 +164,145 @@ const buildTurkishLibrary = () => {
     {
       id: "new-project",
       title: "Yeni Proje",
-      badge: "Sifirdan kurulum",
+      badge: "Sıfırdan kurulum",
       summary:
-        "Sifirdan proje, panel, uygulama veya tam moduler dosya yapisi kurdurmak icin kullanin.",
+        "Sıfırdan proje, panel, uygulama veya tam modüler dosya yapısı kurdurmak için kullanın.",
       instructions: [
-        "Projeyi sifirdan kur ve dosya yapisini mantikli sekilde parcala.",
+        "Projeyi sıfırdan kur ve dosya yapısını mantıklı şekilde parçala.",
         "UI varsa modern, temiz ve mobile-first tasarla.",
-        "Backend varsa validation, endpoint ve hata yonetimini net kur.",
-        "Gereksiz boilerplate yazma; yalnizca gereken dosyalari uret.",
-        "Ana akislari yari birakma; projeyi acilista calisabilir iskelete kadar tamamla.",
+        "Backend varsa validation, endpoint ve hata yönetimini net kur.",
+        "Gereksiz boilerplate yazma; yalnızca gereken dosyaları üret.",
+        "Ana akışları yarı bırakma; projeyi açılışta çalışabilir iskelete kadar tamamla.",
       ],
-      requestLabel: "PROJE ISTEGI",
+      requestLabel: "PROJE İSTEĞİ",
       requestPlaceholder:
-        "[Buraya proje amacini, hedef kullaniciyi, teknoloji tercihini ve beklenen ozellikleri yazin]",
+        "[Buraya proje amacını, hedef kullanıcıyı, teknoloji tercihini ve beklenen özellikleri yazın]",
     },
     {
       id: "frontend-screen",
       title: "Frontend Ekran",
       badge: "UI / React",
       summary:
-        "Tek ekran, dashboard, form veya panel tasarlatip kodlatmak icin kullanin.",
+        "Tek ekran, dashboard, form veya panel tasarlatıp kodlatmak için kullanın.",
       instructions: [
-        "Ekrani React ile uret ve component yapisini bol.",
-        "Formlar, kartlar ve durum alanlari semantik ve erisilebilir olsun.",
-        "Responsive davranisi mobil oncelikli kur.",
-        "Gerekirse lazy-load edilmeye uygun bolumlere ayir.",
-        "Tek bir kart ornegi verme; ekranin butun ana bolumlerini ve baglantilarini tamamla.",
+        "Ekranı React ile üret ve component yapısını böl.",
+        "Formlar, kartlar ve durum alanları semantik ve erişilebilir olsun.",
+        "Responsive davranışı mobil öncelikli kur.",
+        "Gerekirse lazy-load edilmeye uygun bölümlere ayır.",
+        "Tek bir kart örneği verme; ekranın bütün ana bölümlerini ve bağlantılarını tamamla.",
       ],
-      requestLabel: "EKRAN ISTEGI",
+      requestLabel: "EKRAN İSTEĞİ",
       requestPlaceholder:
-        "[Buraya ekranin amacini, bolumlerini, kullanici aksiyonlarini ve veri alanlarini yazin]",
+        "[Buraya ekranın amacını, bölümlerini, kullanıcı aksiyonlarını ve veri alanlarını yazın]",
     },
     {
       id: "backend-api",
       title: "Backend API",
       badge: "Servis / Endpoint",
       summary:
-        "Endpoint, servis, validation veya veri akisi kurarken temiz backend cikisi almak icin kullanin.",
+        "Endpoint, servis, validation veya veri akışı kurarken temiz backend çıkışı almak için kullanın.",
       instructions: [
-        "Temiz katmanlama kullan; input validation ve hata yonetimini belirginlestir.",
-        "Request ve response yapisini acik yaz.",
-        "Guvenlik risklerini azaltacak sekilde coding yap.",
-        "Gerekiyorsa test eklemeye uygun, moduler backend kodu ver.",
-        "Controller, service, schema/serializer ve temel hata akislarini kopuk birakma.",
+        "Temiz katmanlama kullan; input validation ve hata yönetimini belirginleştir.",
+        "Request ve response yapısını açık yaz.",
+        "Güvenlik risklerini azaltacak şekilde coding yap.",
+        "Gerekiyorsa test eklemeye uygun, modüler backend kodu ver.",
+        "Controller, service, schema/serializer ve temel hata akışlarını kopuk bırakma.",
       ],
-      requestLabel: "BACKEND GOREVI",
+      requestLabel: "BACKEND GÖREVİ",
       requestPlaceholder:
-        "[Buraya endpoint amacini, veri modelini, request-response yapisini ve is kurallarini yazin]",
+        "[Buraya endpoint amacını, veri modelini, request-response yapısını ve iş kurallarını yazın]",
     },
     {
       id: "bug-fix",
       title: "Bug Fix",
-      badge: "Hata duzeltme",
+      badge: "Hata düzeltme",
       summary:
-        "Mevcut projede bir hatayi kurallari koruyarak duzeltmek icin kullanin.",
+        "Mevcut projede bir hatayı kuralları koruyarak düzeltmek için kullanın.",
       instructions: [
-        "Hatanin kok nedenini acikla.",
-        "Sadece yamalama yapma; temiz ve kalici cozum uret.",
-        "Gerekirse ilgili kodu refactor et ama davranisi gereksiz bozma.",
-        "Cozum sonunda hangi kurallara uyuldugunu checklist ile yaz.",
-        "Sadece sorunlu satiri degil, sorunun sebep oldugu bagli kod akislarini da duzelt.",
+        "Hatanın kök nedenini açıkla.",
+        "Sadece yamalama yapma; temiz ve kalıcı çözüm üret.",
+        "Gerekirse ilgili kodu refactor et ama davranışı gereksiz bozma.",
+        "Çözüm sonunda hangi kurallara uyulduğunu checklist ile yaz.",
+        "Sadece sorunlu satırı değil, sorunun sebep olduğu bağlı kod akışlarını da düzelt.",
       ],
       requestLabel: "KOD / HATA",
       requestPlaceholder:
-        "[Buraya ilgili kodu, hata mesajini, beklenen davranisi ve gerekirse stack trace'i yazin]",
+        "[Buraya ilgili kodu, hata mesajını, beklenen davranışı ve gerekirse stack trace'i yazın]",
     },
     {
       id: "refactor",
       title: "Refactor",
       badge: "Mevcut kodu toparla",
       summary:
-        "Eski veya daginik kodu ekip kurallarina yaklastirip daha bakimli hale getirmek icin kullanin.",
+        "Eski veya dağınık kodu ekip kurallarına yaklaştırıp daha bakımlı hale getirmek için kullanın.",
       instructions: [
-        "Davranisi koru ama okunabilirligi ve modulerligi artir.",
-        "Naming, dosya yapisi ve JSX mantigini toparla.",
-        "Tekrari azalt, gerekirse helper fonksiyonlara bol.",
-        "Degisiklik sonunda refactor stratejisini ve kurallara uyumu ozetle.",
-        "Refactor sonrasi moduller birbirinden kopuk kalmasin; tum baglantilar tutarli olsun.",
+        "Davranışı koru ama okunabilirliği ve modülerliği artır.",
+        "Naming, dosya yapısı ve JSX mantığını toparla.",
+        "Tekrarı azalt, gerekirse helper fonksiyonlara böl.",
+        "Değişiklik sonunda refactor stratejisini ve kurallara uyumu özetle.",
+        "Refactor sonrası modüller birbirinden kopuk kalmasın; tüm bağlantılar tutarlı olsun.",
       ],
-      requestLabel: "MEVCUT MODUL",
+      requestLabel: "MEVCUT MODÜL",
       requestPlaceholder:
-        "[Buraya refactor edilmesini istediginiz dosyayi, modulu veya mevcut yapinin problemlerini yazin]",
+        "[Buraya refactor edilmesini istediğiniz dosyayı, modülü veya mevcut yapının problemlerini yazın]",
     },
     {
       id: "governance-fix",
-      title: "Kural Ihlali Giderme",
+      title: "Kural İhlali Giderme",
       badge: "Governance uyumu",
       summary:
-        "Kod yonetimi ekraninda gorulen ihlalleri dosya bazli ve standartlara uygun duzeltmek icin kullanin.",
+        "Kod yönetimi ekranında görülen ihlalleri dosya bazlı ve standartlara uygun düzeltmek için kullanın.",
       instructions: [
-        "Her ihlali tek tek ele al ve dosya bazli cozum ver.",
-        "Davranisi gereksiz buyuk rewrite ile bozma.",
-        "Ayni dosyada ilgili baska standartlari da mantikliysa beraber toparla.",
-        "Sonunda hangi ihlallerin kapandigini checklist olarak yaz.",
-        "Ihlali kapatirken dosyanin mevcut akislarini bozma ve duzeltmeyi yari birakma.",
+        "Her ihlali tek tek ele al ve dosya bazlı çözüm ver.",
+        "Davranışı gereksiz büyük rewrite ile bozma.",
+        "Aynı dosyada ilgili başka standartları da mantıklıysa beraber toparla.",
+        "Sonunda hangi ihlallerin kapandığını checklist olarak yaz.",
+        "İhlali kapatırken dosyanın mevcut akışlarını bozma ve düzeltmeyi yarı bırakma.",
       ],
-      requestLabel: "IHLAL VE DOSYALAR",
+      requestLabel: "İHLAL VE DOSYALAR",
       requestPlaceholder:
-        "[Buraya ihlal isimlerini, dosya yollarini, hata mesajlarini ve gerekiyorsa kod parcalarini yazin]",
+        "[Buraya ihlal isimlerini, dosya yollarını, hata mesajlarını ve gerekiyorsa kod parçalarını yazın]",
     },
   ];
 
   return {
     pageBadge: "AI Prompt Rehberi",
-    title: "Tum yapay zekalar icin ortak kod standardi prompt sistemi",
-    governance: "Kod Yonetimi",
-    codeRules: "Kod Kurallari",
+    title: "Tüm yapay zekalar için ortak kod standardı prompt sistemi",
+    governance: "Kod Yönetimi",
+    codeRules: "Kod Kuralları",
     copy: "Kopyala",
-    copied: "Kopyalandi",
-    copyGenerated: "Olusan promptu kopyala",
-    selectedTask: "Gorev tipi",
-    selectedRules: "Aktif kural dosyalari",
-    requirementLabel: "Ihtiyac / gorev detayi",
+    copied: "Kopyalandı",
+    copyGenerated: "Oluşan promptu kopyala",
+    selectedTask: "Görev tipi",
+    selectedRules: "Aktif kural dosyaları",
+    requirementLabel: "İhtiyaç / görev detayı",
     requirementHint:
-      "Buraya proje istegi, ekran tanimi, bug detaylari veya governance ihlallerini yazin.",
-    includeChecklist: "Cikti sonunda kurallara uyum checklisti iste",
-    includeFileDiff: "Dosya bazli degisiklik ozeti iste",
-    includeArchitecture: "Kisa mimari veya cozum yonu iste",
-    copySuccess: "AI promptu kopyalandi.",
-    copyFailed: "Prompt kopyalanamadi.",
-    hardRulesTitle: "Cevabi birbirine yaklastiran sert kisitlar",
+      "Buraya proje isteği, ekran tanımı, bug detayları veya governance ihlallerini yazın.",
+    includeChecklist: "Çıktı sonunda kurallara uyum checklisti iste",
+    includeFileDiff: "Dosya bazlı değişiklik özeti iste",
+    includeArchitecture: "Kısa mimari veya çözüm yönü iste",
+    copySuccess: "AI promptu kopyalandı.",
+    copyFailed: "Prompt kopyalanamadı.",
+    hardRulesTitle: "Cevabı birbirine yaklaştıran sert kısıtlar",
     masterPromptIntro:
-      "Sen kidemli bir yazilim muhendisisin. Asagidaki gorevi, secilen takim kural dosyalarina tamamen uyarak cozumle.",
-    deliveryContractTitle: "TESLIM ZORUNLULUKLARI",
-    outputTitle: "CIKTI FORMATI",
+      "Sen kıdemli bir yazılım mühendisisin. Aşağıdaki görevi, seçilen takım kural dosyalarına tamamen uyarak çözümle.",
+    projectContractTitle: "PROJEYE ÖZEL SABİT SÖZLEŞME",
+    deliveryContractTitle: "TESLİM ZORUNLULUKLARI",
+    outputTitle: "ÇIKTI FORMATI",
     outputLines: [
-      "1. Problemi veya istegi kisa analiz et.",
-      "2. Cozum yonunu veya mimari kararini acikla.",
-      "3. Dosya bazli degisiklik ozetini ver.",
-      "4. Calisir ve tutarli kodu ver.",
+      "1. Problemi veya isteği kısa analiz et.",
+      "2. Çözüm yönünü veya mimari kararını açıkla.",
+      "3. Dosya bazlı değişiklik özetini ver.",
+      "4. Çalışır ve tutarlı kodu ver.",
       "5. Sonunda kurallara uyum checklisti yaz.",
-      "6. Risk, varsayim veya eksik veri varsa acikca belirt.",
-      "7. Kodun yari kalmadigini ve tum ana baglantilarin tamamlandigini dogrula.",
+      "6. Risk, varsayım veya eksik veri varsa açıkça belirt.",
+      "7. Kodun yarı kalmadığını ve tüm ana bağlantıların tamamlandığını doğrula.",
     ],
-    genericAiLabel: "Tum AI araclarina uygun",
-    defaultRequirement: "Buraya kendi isteginizi yazin.",
+    genericAiLabel: "Tüm AI araçlarına uygun",
+    defaultRequirement: "Buraya kendi isteğinizi yazın.",
     deliveryContract,
+    projectContract,
+    teamCollaborationContract,
     hardRequirements,
     ruleModules,
     taskTemplates,
@@ -277,6 +328,36 @@ const buildEnglishLibrary = () => {
     "Finish imports, exports, state flow, and event flow so the files work together coherently.",
     "Do not use TODOs, FIXME notes, placeholder data, or 'example only' gaps unless the user explicitly requests them.",
     "Unless told otherwise, the result should be clean enough for a team to continue building on directly.",
+  ];
+
+  const projectContract = [
+    "The output must be an applicable patch for the existing SmartDevHub-ResourcePlanner project, not a new standalone demo screen.",
+    "The main frontend app uses React/Vite with JSX; new main-app screen code must use .jsx and pure helpers must use .js.",
+    "For the Software Assets screen, preserve the existing page path frontend/nexus-app/src/pages/SoftwareAssets.jsx.",
+    "If Software Assets components are needed, keep them under frontend/nexus-app/src/component/softwareAssets/ and follow the existing naming style.",
+    "Frontend API calls must use apiClient from frontend/nexus-app/src/refine/axios.js; do not create a second fetch or axios client.",
+    "Role checks must use the existing useUser flow and userData?.isAdmin value.",
+    "Do not rename backend fields: use license_mode, record_type, operational_status, provider_code, seats_total, billing_cycle, purchase_price, currency, assignments, primary_assignment, and license_requests.",
+    "Shared licenses must use license_mode === \"shared\" and assigned personal licenses must use license_mode === \"assigned\".",
+    "Do not add mock data, seed data, local-only demo state, or fake data in place of the real API flow.",
+    "Do not introduce a new route, framework, design system, or TypeScript migration unless explicitly requested.",
+    "The output must describe file-based changes against existing paths and clearly state which existing code changes.",
+    "When the same task is sent to different AI tools, file paths, model fields, component naming, and API contracts must remain the same.",
+  ];
+
+  const teamCollaborationContract = [
+    "Frontend work must be split into file ownership first; each developer may request changes only inside assigned files or folders.",
+    "Reject AI output that changes files outside the assigned ownership boundary.",
+    "If a shared file change is required, the AI must report it as a coordination risk instead of writing that code directly.",
+    "Do not apply AI output from multiple people to the same file at the same time.",
+    "The page owner is responsible for main state, route, and API-flow decisions.",
+    "A component owner is responsible only for the assigned component API, props contract, and visual behavior.",
+    "Every prompt must explicitly include allowed files, forbidden files, and expected output format.",
+    "Before suggesting a new route, dependency, or design system, the AI must provide a reason and coordination note.",
+    "Every developer must preserve the same component naming, API client, role-check convention, and file-extension standard.",
+    "AI answers do not need to be text-identical; they must be measurable against the same contract.",
+    "If the task conflicts with the project contract, the AI must report the conflict first and must not generate code until it is clarified.",
+    "Every output must end with a checklist for file ownership, API standard, no mock data, accessibility, lint, and build.",
   ];
 
   const ruleModules = [
@@ -341,8 +422,26 @@ const buildEnglishLibrary = () => {
       ],
     },
     {
+      id: "project-ai-contract",
+      title: "Rule File 5: Project AI Output Contract",
+      shortTitle: "AI Contract",
+      badge: "One team standard",
+      summary:
+        "Mandatory project contract that keeps different AI tools aligned on the same fields, paths, and patch-based delivery style.",
+      lines: projectContract,
+    },
+    {
+      id: "team-ai-collaboration",
+      title: "Rule File 6: Team AI Collaboration Contract",
+      shortTitle: "Team AI",
+      badge: "Parallel work",
+      summary:
+        "File ownership and review rules that keep frontend work consistent across Cursor, Codex, Gemini, ChatGPT, or other AI tools.",
+      lines: teamCollaborationContract,
+    },
+    {
       id: "quality-safety",
-      title: "Rule File 5: Security, Error Handling, and Quality",
+      title: "Rule File 7: Security, Error Handling, and Quality",
       shortTitle: "Safety",
       badge: "Risk control",
       summary:
@@ -357,7 +456,7 @@ const buildEnglishLibrary = () => {
     },
     {
       id: "performance-delivery",
-      title: "Rule File 6: Performance and Delivery",
+      title: "Rule File 8: Performance and Delivery",
       shortTitle: "Performance",
       badge: "Production quality",
       summary:
@@ -496,6 +595,7 @@ const buildEnglishLibrary = () => {
     hardRulesTitle: "Hard constraints that push outputs closer together",
     masterPromptIntro:
       "You are a senior software engineer. Solve the task below while fully complying with the selected team rule files.",
+    projectContractTitle: "PROJECT-SPECIFIC FIXED CONTRACT",
     deliveryContractTitle: "DELIVERY REQUIREMENTS",
     outputTitle: "OUTPUT FORMAT",
     outputLines: [
@@ -510,6 +610,8 @@ const buildEnglishLibrary = () => {
     genericAiLabel: "Works across AI tools",
     defaultRequirement: "Write your request here.",
     deliveryContract,
+    projectContract,
+    teamCollaborationContract,
     hardRequirements,
     ruleModules,
     taskTemplates,
@@ -538,11 +640,20 @@ export const buildCombinedAIPrompt = ({
   const lines = [
     library.masterPromptIntro,
     "",
-    "GOREV TIPI / TASK TYPE",
+    "GÖREV TİPİ / TASK TYPE",
     `${selectedTask.title}`,
     "",
-    "AKTIF KURAL DOSYALARI / ACTIVE RULE FILES",
+    library.projectContractTitle,
   ];
+
+  library.projectContract.forEach((line) => {
+    lines.push(`- ${line}`);
+  });
+
+  lines.push(
+    "",
+    "AKTİF KURAL DOSYALARI / ACTIVE RULE FILES",
+  );
 
   selectedRules.forEach((rule) => {
     lines.push(`- ${rule.title}`);
@@ -551,7 +662,7 @@ export const buildCombinedAIPrompt = ({
     });
   });
 
-  lines.push("", "GOREVE OZEL BEKLENTILER / TASK EXPECTATIONS");
+  lines.push("", "GÖREVE ÖZEL BEKLENTİLER / TASK EXPECTATIONS");
   selectedTask.instructions.forEach((line) => {
     lines.push(`- ${line}`);
   });
@@ -567,12 +678,12 @@ export const buildCombinedAIPrompt = ({
   });
 
   if (includeArchitecture || includeFileDiff || includeChecklist) {
-    lines.push("", "EK CIKTI ISTEKLERI / EXTRA OUTPUT REQUESTS");
+    lines.push("", "EK ÇIKTI İSTEKLERİ / EXTRA OUTPUT REQUESTS");
     if (includeArchitecture) {
-      lines.push("- Cozumden once kisa mimari veya uygulama yonu ver.");
+      lines.push("- Çözümden önce kısa mimari veya uygulama yönü ver.");
     }
     if (includeFileDiff) {
-      lines.push("- Dosya bazli degisiklik ozetini acik yaz.");
+      lines.push("- Dosya bazlı değişiklik özetini açık yaz.");
     }
     if (includeChecklist) {
       lines.push("- Sonda kurallara uyum checklisti ekle.");

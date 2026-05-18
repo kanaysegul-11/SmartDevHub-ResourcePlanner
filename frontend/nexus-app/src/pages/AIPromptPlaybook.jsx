@@ -73,17 +73,17 @@ function AIPromptPlaybook() {
 
   const shortSummary =
     language === "tr"
-      ? "Tum sirket standartlari otomatik eklenir. Sadece gorev tipini secip isteginizi yazin."
+      ? "Tüm şirket standartları otomatik eklenir. Sadece görev tipini seçip isteğinizi yazın."
       : "All company standards are included automatically. Just choose the task type and write your request.";
   const comparisonPoints =
     language === "tr"
       ? [
-          "Ayni gorev tipi mantigi kullanilir.",
-          "Ayni dosya duzeni ve naming standardi hedeflenir.",
-          "Ayni cikti akisi beklenir: analiz, mimari, dosya ozeti, kod, checklist, riskler.",
-          "Ayni zorunlu kurallar uygulanir: semantic HTML, responsive yapi, guvenlik, performans.",
-          "Yarim kod, placeholder ve kopuk component akislari engellenmeye calisilir.",
-          "Sonuc birebir ayni degil ama ayni kalite cizgisine yakin olur.",
+          "Aynı görev tipi mantigi kullanılır.",
+          "Aynı dosya düzeni ve naming standardı hedeflenir.",
+          "Aynı çıktı akışı beklenir: analiz, mimari, dosya özeti, kod, checklist, riskler.",
+          "Aynı zorunlu kurallar uygulanir: semantic HTML, responsive yapı, güvenlik, performans.",
+          "Yarım kod, placeholder ve kopuk component akışları engellenmeye çalışılır.",
+          "Sonuç birebir aynı değil ama aynı kalite çizgisine yakin olur.",
         ]
       : [
           "The same task-type logic is used.",
@@ -96,7 +96,7 @@ function AIPromptPlaybook() {
 
   const presentationNote =
     language === "tr"
-      ? "Sunumda anlatmaniz gereken sey, tum AI'larin ayni cevabi vermesi degil; ayni muhendislik omurgasina gore cevap vermesidir."
+      ? "Sunumda anlatmanız gereken şey, tüm AI'ların aynı cevabı vermesi değil; aynı mühendislik omurgasına göre cevap vermesidir."
       : "In the presentation, the key point is not that every AI returns the exact same answer, but that they follow the same engineering backbone.";
 
   return (
@@ -146,11 +146,11 @@ function AIPromptPlaybook() {
             <section className="grid grid-cols-1 gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
               <div className="rounded-[30px] border border-slate-200 bg-white/92 p-6 shadow-[0_18px_46px_rgba(148,163,184,0.1)]">
                 <h2 className="text-2xl font-black text-slate-950">
-                  {language === "tr" ? "Gorev tipi" : "Task type"}
+                  {language === "tr" ? "Görev tipi" : "Task type"}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
                   {language === "tr"
-                    ? "Hangi tur is yaptiracaginizi secin."
+                    ? "Hangi tür iş yaptıracağınızı seçin."
                     : "Choose what kind of work you want AI to do."}
                 </p>
 
@@ -182,7 +182,7 @@ function AIPromptPlaybook() {
 
                 <div className="mt-5 rounded-[22px] border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    {language === "tr" ? "Ihtiyac metni" : "Requirement text"}
+                    {language === "tr" ? "İhtiyaç metni" : "Requirement text"}
                   </p>
                   <textarea
                     value={requirement}
@@ -221,14 +221,14 @@ function AIPromptPlaybook() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <Badge variant="neutral" icon={<FeatherCode />}>
-                        {language === "tr" ? "Olusan prompt" : "Generated prompt"}
+                        {language === "tr" ? "Oluşan prompt" : "Generated prompt"}
                       </Badge>
                       <h2 className="mt-3 text-2xl font-black text-slate-950">
                         {selectedTask?.title}
                       </h2>
                       <p className="mt-2 text-sm leading-6 text-slate-500">
                         {language === "tr"
-                          ? "Bu tek promptun icinde tum sirket standartlari otomatik olarak bulunur."
+                          ? "Bu tek promptun içinde tüm şirket standartları otomatik olarak bulunur."
                           : "All company standards are already included in this single prompt."}
                       </p>
                     </div>
@@ -255,16 +255,16 @@ function AIPromptPlaybook() {
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     {[
                       language === "tr"
-                        ? "Tum sirket kurallari otomatik eklenir."
+                        ? "Tüm şirket kuralları otomatik eklenir."
                         : "All company rules are included automatically.",
                       language === "tr"
-                        ? "Tek naming ve dosya duzeni hedeflenir."
+                        ? "Tek naming ve dosya düzeni hedeflenir."
                         : "One naming and file structure style is targeted.",
                       language === "tr"
-                        ? "Eksik veya yari kalmis kod cikisi azaltilir."
+                        ? "Eksik veya yarı kalmış kod çıkışı azaltılır."
                         : "Incomplete or half-finished output is reduced.",
                       language === "tr"
-                        ? "Farkli AI'larda daha tutarli cevap alinmaya calisilir."
+                        ? "Farklı AI'larda daha tutarlı cevap alınmaya çalışılır."
                         : "More consistent answers are encouraged across AI tools.",
                     ].map((item) => (
                       <div
@@ -280,7 +280,7 @@ function AIPromptPlaybook() {
                 <section className="rounded-[30px] border border-slate-200 bg-white/92 p-6 shadow-[0_18px_46px_rgba(148,163,184,0.1)]">
                   <Badge variant="neutral" icon={<FeatherSparkles />}>
                     {language === "tr"
-                      ? "Farkli AI'larda ortak noktalar"
+                      ? "Farklı AI'larda ortak noktalar"
                       : "Shared points across AI tools"}
                   </Badge>
                   <p className="mt-4 rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900">

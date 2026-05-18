@@ -48,30 +48,30 @@ const normalizeRuleCode = (value = "") =>
 const RULE_GUIDES = {
   required_readme: {
     why:
-      "Dokumantasyon olmayan projelerde kurulum, calistirma ve test bilgisi kaybolur; ekip yeni projeye daha yavas adapte olur.",
+      "Dokümantasyon olmayan projelerde kurulum, çalıştırma ve test bilgisi kaybolur; ekip yeni projeye daha yavaş adapte olur.",
     wrong: "Repository kok dizininde README.md yok.",
     right:
-      "README.md icinde proje amaci, kurulum, gelistirme ve test basliklari bulunmali.",
+      "README.md içinde proje amacı, kurulum, geliştirme ve test başlıkları bulunmali.",
     autoFix: "Güvenli otomatik düzeltilebilir",
   },
   tests_required: {
     why:
-      "Test yapisi olmayan projelerde degisikliklerin yan etkisi gec fark edilir ve merge riski artar.",
-    wrong: "Projede tests/, __tests__ veya *.test.* gibi calistirilabilir test yapisi yok.",
+      "Test yapısı olmayan projelerde değişikliklerin yan etkisi geç fark edilir ve merge riski artar.",
+    wrong: "Projede tests/, __tests__ veya *.test.* gibi çalıştırılabilir test yapısı yok.",
     right:
-      "Davranisi kapsayan test dosyalari eklenmeli ve test komutu README ya da proje scriptlerinde belirtilmeli.",
+      "Davranışı kapsayan test dosyaları eklenmeli ve test komutu README ya da proje scriptlerinde belirtilmeli.",
     autoFix: "Kısmen otomatik, gerçek test içeriği inceleme ister",
   },
   no_var_keyword: {
     why:
-      "var function-scope oldugu icin beklenmeyen yeniden tanimlama ve scope hatalarina yol acabilir.",
+      "var function-scope olduğu için beklenmeyen yeniden tanımlama ve scope hatalarına yol açabilir.",
     wrong: "var total = calculateTotal(items);",
     right: "const total = calculateTotal(items); veya yeniden atama varsa let total = 0;",
     autoFix: "Güvenli otomatik düzeltilebilir",
   },
   python_snake_case_variables: {
     why:
-      "Python kodunda ortak isimlendirme standardi okunabilirligi ve review kalitesini artirir.",
+      "Python kodunda ortak isimlendirme standardı okunabilirligi ve review kalitesini artirir.",
     wrong: "userName = get_user()",
     right: "user_name = get_user()",
     autoFix: "İnceleme gerektirir",
@@ -80,29 +80,29 @@ const RULE_GUIDES = {
     why:
       "Uzun fonksiyonlar test etmeyi, review yapmayi ve hatanin kaynagini bulmayi zorlastirir.",
     wrong:
-      "Tek fonksiyon icinde veri hazirlama, event handler, validasyon ve render mantigi birlikte duruyor.",
+      "Tek fonksiyon içinde veri hazırlama, event handler, validasyon ve render mantigi birlikte duruyor.",
     right:
-      "Ana fonksiyon akisi yonetmeli; veri hazirlama, handler ve render/sonuc uretme adimlari helper fonksiyonlara ayrilmali.",
+      "Ana fonksiyon akışı yonetmeli; veri hazırlama, handler ve render/sonuc uretme adımları helper fonksiyonlara ayrılmali.",
     autoFix: "AI patch veya insan review gerektirir",
   },
   commit_message_pattern: {
     why:
-      "Standart commit mesaji gecmisi taramayi, changelog uretmeyi ve release takibini kolaylastirir.",
+      "Standart commit mesajı gecmisi taramayi, changelog uretmeyi ve release takibini kolaylastirir.",
     wrong: "update files",
     right: "feat(auth): add login validation",
     autoFix: "Bilgilendirme kuralı",
   },
   pull_request_description_required: {
     why:
-      "Aciklamasiz PR'larda reviewer degisikligin amacini, etkisini ve test durumunu anlamakta zorlanir.",
-    wrong: "Bos PR aciklamasi.",
-    right: "Ne degisti, neden degisti, nasil test edildi bilgisi yazilmali.",
+      "Açıklamasız PR'larda reviewer değişikliğin amacıni, etkisini ve test durumunu anlamakta zorlan?r.",
+    wrong: "Boş PR açıklaması.",
+    right: "Ne değişti, neden değişti, nasıl test edildi bilgisi yazilmali.",
     autoFix: "Bilgilendirme kuralı",
   },
 };
 
 const categoryLabels = {
-  documentation: "Dokumantasyon",
+  documentation: "Dokümantasyon",
   testing: "Test",
   quality: "Kod Kalitesi",
   complexity: "Karmasiklik",
@@ -113,22 +113,22 @@ const categoryLabels = {
 const EXTRA_RULE_GUIDES = {
   semantic_html_structure: {
     why:
-      "Semantik HTML yapisi SEO, ekran okuyucu uyumlulugu ve sayfa bolumlerinin daha net anlasilmasi icin onemlidir.",
-    wrong: "Tum sayfa yapisini anlamsiz div katmanlariyla kurmak.",
+      "Semantık HTML yapısı SEO, ekran okuyucu uyumluluğu ve sayfa bölümlerinin daha net anlaşılması için önemlidir.",
+    wrong: "Tüm sayfa yapısıni anlamsiz div katmanlariyla kurmak.",
     right:
-      "Icerige gore header, nav, main, section, article, aside ve footer etiketlerini tercih edin.",
+      "İçeriğe gore header, nav, main, section, article, aside ve footer etiketlerini tercih edin.",
     autoFix: "Mimari review gerekir",
   },
   image_alt_required: {
     why:
-      "Alt metinler erisilebilirlik icin zorunludur; ekran okuyucular gorselin amacini ancak alt metinle aktarabilir.",
+      "Alt metinler erişilebilirlik için zorunludur; ekran okuyucular görselin amacıni ancak alt metinle aktarabilir.",
     wrong: '<img src="/banner.png" />',
     right: '<img src="/banner.png" alt="Urun tanitim banneri" />',
     autoFix: "Inceleme gerektirir",
   },
   form_label_required: {
     why:
-      "Form alanlarinin label ile baglanmasi hem klavye kullanimi hem de ekran okuyucu deneyimi icin onemlidir.",
+      "Form alanlarının label ile bağlanması hem klavye kullanımı hem de ekran okuyucu deneyimi için önemlidir.",
     wrong: '<input id="email" type="email" placeholder="E-posta" />',
     right:
       '<label htmlFor="email">E-posta</label>\n<input id="email" type="email" />',
@@ -136,176 +136,176 @@ const EXTRA_RULE_GUIDES = {
   },
   strict_equality_required: {
     why:
-      "Gevsek esitlik operatorleri tip donusumu yaptigi icin beklenmeyen buglara yol acabilir.",
+      "Gevşek eşitlik operatörleri tip dönüşümü yaptığı için beklenmeyen buglara yol açabilir.",
     wrong: "if (value == 0) { ... }",
     right: "if (value === 0) { ... }",
-    autoFix: "Cogu durumda guvenli, yine de review onerilir",
+    autoFix: "Cogu durumda güvenli, yine de review önerilir",
   },
   no_dangerously_set_inner_html: {
     why:
-      "dangerouslySetInnerHTML kontrolsuz kullanildiginda XSS aciklarina neden olabilir.",
+      "dangerouslySetInnerHTML kontrolsüz kullanıldığında XSS açıklarina neden olabilir.",
     wrong: '<div dangerouslySetInnerHTML={{ __html: userContent }} />',
-    right: "Kullanici icerigini sanitize edin veya guvenli render yontemi kullanin.",
-    autoFix: "Guvenlik review gerekir",
+    right: "Kullanıcı içeriğini sanitize edin veya güvenli render yöntemi kullanın.",
+    autoFix: "Güvenlik review gerekir",
   },
   css_tokens_required: {
     why:
-      "Renk, bosluk ve tipografi tokenlari ortak tasarim dili saglar ve stil daginikligini azaltir.",
+      "Renk, boşluk ve tipografi tokenları ortak tasarım dili sağlar ve stil dağınıklığını azaltir.",
     wrong: "color: #1d4ed8; padding: 14px;",
     right: "color: var(--primary-color); padding: var(--space-3);",
     autoFix: "Mimari review gerekir",
   },
   mobile_first_css: {
     why:
-      "Mobil oncelikli stiller daha tutarli responsive davranis ve daha temiz override akisi saglar.",
-    wrong: "@media (max-width: 768px) ile tum mantigi sondan eklemek.",
-    right: "Temel stilleri mobil icin yazip daha sonra min-width ile buyutmek.",
+      "Mobil öncelikli stiller daha tutarlı responsive davranış ve daha temiz override akışı sağlar.",
+    wrong: "@media (max-width: 768px) ile tüm mantigi sondan eklemek.",
+    right: "Temel stilleri mobil için yazıp daha sonra min-width ile büyütmek.",
     autoFix: "Mimari review gerekir",
   },
   react_props_destructuring: {
     why:
-      "Props destructuring bilesen imzasini daha okunur yapar ve JSX icindeki props.xxx tekrarini azaltir.",
+      "Props destructuring bileşen imzasini daha okunur yapar ve JSX içindeki props.xxx tekrarini azaltir.",
     wrong: "const Card = (props) => <h1>{props.title}</h1>;",
     right: "const Card = ({ title }) => <h1>{title}</h1>;",
     autoFix: "Guvenli refactor olabilir",
   },
   react_hooks_top_level: {
     why:
-      "Hook'lar sadece bilesenlerin veya custom hook'larin en ust seviyesinde cagirilmalidir; aksi halde state sirasi bozulabilir.",
+      "Hook'lar sadece bileşenlerin veya custom hook'larin en ust seviyesinde cağırilmalidir; aksi halde state sirasi bozulabilir.",
     wrong: "if (isOpen) { useEffect(() => { ... }, []); }",
     right: "useEffect(() => { if (isOpen) { ... } }, [isOpen]);",
     autoFix: "Inceleme gerektirir",
   },
   jsx_logic_should_stay_simple: {
     why:
-      "Karmasik JSX ici mantik okunabilirligi ve test edilebilirligi dusurur.",
+      "Karmasik JSX ici mantık okunabilirligi ve test edilebilirligi düşürür.",
     wrong: "return <div>{items.filter(...).map(...).reduce(...)}</div>;",
-    right: "Hesaplamayi return oncesinde bir degiskene alip JSX'i sade tutun.",
+    right: "Hesaplamayi return öncesinde bir degiskene alip JSX'i sade tutun.",
     autoFix: "Inceleme gerektirir",
   },
   error_boundary_required: {
     why:
-      "Kritik arayuz bolumleri hata verdiginde tum sayfanin cokmesini engellemek gerekir.",
-    wrong: "Tum uygulama tek bir hata ile beyaz ekrana dusuyor.",
-    right: "Kritik bilesen agaclarini ErrorBoundary ile sarin.",
+      "Kritik arayüz bölümleri hata verdiğindende tüm sayfanın çökmesini engellemek gerekir.",
+    wrong: "Tüm uygulama tek bir hata ile beyaz ekrana düşüyor.",
+    right: "Kritik bileşen agaclarini ErrorBoundary ile sarin.",
     autoFix: "Mimari review gerekir",
   },
   button_type_required: {
     why:
-      "Form icindeki button elemanlari type belirtmezse beklenmeyen submit davranislari olusabilir.",
+      "Form içindeki button elemanları type belirtmezse beklenmeyen submit davranışlari oluşabilir.",
     wrong: "<button>Kapat</button>",
     right: '<button type="button">Kapat</button>',
     autoFix: "Guvenli refactor olabilir",
   },
   bem_class_naming: {
     why:
-      "BEM sinif isimlendirmesi buyuyen arayuzlerde stil cakismalarini azaltir ve okunabilirligi artirir.",
+      "BEM sınıf isimlendirmesi buyuyen arayüzlerde stil çakışmalarını azaltir ve okunabilirligi artirir.",
     wrong: '.bigBlueButton veya .cardButtonActive gibi daginik isimler',
-    right: ".card__button--active gibi blok__eleman--modifiye yapisi",
+    right: ".card__button--active gibi blok__eleman--modifiye yapısı",
     autoFix: "Mimari review gerekir",
   },
   css_scope_strategy_preferred: {
     why:
-      "Tailwind, CSS Modules veya benzeri scoped yaklasimlar global stil cakismalarini azaltir.",
-    wrong: "Genel CSS dosyalarinda birbirine carpan siniflar kullanmak.",
-    right: "Tailwind utility siniflari, CSS Modules veya benzeri yali bir yontem kullanin.",
+      "Tailwind, CSS Modules veya benzeri scoped yaklaşımlar global stil çakışmalarını azaltir.",
+    wrong: "Genel CSS dosyalarında birbirine çarpan sınıflar kullanmak.",
+    right: "Tailwind utility sınıfları, CSS Modules veya benzeri yalı bir yontem kullanın.",
     autoFix: "Mimari review gerekir",
   },
   component_naming_conventions: {
     why:
-      "PascalCase bilesen isimleri React tarafinda bilesenleri HTML etiketlerinden ayirmayi kolaylastirir.",
-    wrong: "userProfile.jsx icinde export default function userProfile()",
-    right: "UserProfile.jsx icinde export default function UserProfile()",
+      "PascalCase bileşen isimleri React tarafinda bileşenleri HTML etiketlerinden ayırmayı kolaylastirir.",
+    wrong: "userProfile.jsx içinde export default function userProfile()",
+    right: "UserProfile.jsx içinde export default function UserProfile()",
     autoFix: "Guvenli refactor olabilir",
   },
   function_naming_conventions: {
     why:
-      "camelCase isimlendirme JS/TS ekosisteminde ortak okunabilirlik saglar.",
+      "camelCase isimlendirme JS/TS ekosisteminde ortak okunabilirlik sağlar.",
     wrong: "Get_User_Data veya get_user_data",
     right: "getUserData",
     autoFix: "Inceleme gerektirir",
   },
   constant_naming_conventions: {
     why:
-      "Paylasilan sabitleri UPPER_SNAKE_CASE ile tutmak kritik konfigrasyonlari ayristirir.",
+      "Paylaşılan sabitleri UPPER_SNAKE_CASE ile tutmak kritik konfigürasyonları ayrıştırır.",
     wrong: "const apiUrl = '/api';",
     right: "const API_URL = '/api';",
     autoFix: "Inceleme gerektirir",
   },
   index_exports_preferred: {
     why:
-      "Index export dosyalari import yollarini sade tutar ve klasor sinirlarini netlestirir.",
-    wrong: "Her kullanimda derin dosya yoluna inmek.",
+      "Index export dosyaları import yollarını sade tutar ve klasör sınırlarını netlestirir.",
+    wrong: "Her kullanımda derin dosya yoluna inmek.",
     right: "components/Button/index.js veya benzeri bir barrel export kullanmak.",
     autoFix: "Mimari review gerekir",
   },
   component_file_extension_convention: {
     why:
-      "UI ve saf mantik dosyalarini uzanti bazinda ayirmak kod tabanini daha okunur hale getirir.",
-    wrong: "React bilesenini .js icinde, saf util dosyasini .jsx icinde tutmak.",
-    right: "Gorsel bilesenler icin .jsx, mantik dosyalari icin .js kullanin.",
+      "UI ve saf mantık dosyalarıni uzantı bazında ayırmak kod tabanıni daha okunur hale getirir.",
+    wrong: "React bileşenini .js içinde, saf util dosyasini .jsx içinde tutmak.",
+    right: "Görsel bileşenler için .jsx, mantık dosyaları için .js kullanın.",
     autoFix: "Guvenli refactor olabilir",
   },
   route_level_lazy_loading: {
     why:
-      "Sayfa seviyesinde lazy loading ilk bundle boyutunu dusurur ve acilis performansini iyilestirir.",
-    wrong: "Tum sayfalari ilk bundle icine almak.",
-    right: "React.lazy ve Suspense ile route veya agir bolumleri gec yuklemek.",
+      "Sayfa seviyesinde lazy loading ilk bundle boyutunu düşürür ve açılış performansini iyilestirir.",
+    wrong: "Tüm sayfaları ilk bundle içine almak.",
+    right: "React.lazy ve Suspense ile route veya ağır bölümleri geç yüklemek.",
     autoFix: "Mimari review gerekir",
   },
   commit_message_convention: {
     why:
-      "Standart commit mesaji gecmisi taramayi, changelog uretmeyi ve release takibini kolaylastirir.",
+      "Standart commit mesajı gecmisi taramayi, changelog uretmeyi ve release takibini kolaylastirir.",
     wrong: "update files",
     right: "feat(auth): add login validation",
     autoFix: "Bilgilendirme kurali",
   },
   eslint_config_required: {
     why:
-      "ESLint ortak bir stil ve hata yakalama bariyeri saglar; ekipte farkli yazim aliskanliklarini bir standarda ceker.",
-    wrong: "Projede hicbir ESLint config dosyasi yok.",
-    right: "eslint.config.js veya esdeger bir konfigrasyon dosyasi ekleyin.",
-    autoFix: "Yapilandirma gerekir",
+      "ESLint ortak bir stil ve hata yakalama bariyeri sağlar; ekipte farklı yazim alışkanlıklarını bir standarda çeker.",
+    wrong: "Projede hiçbir ESLint config dosyasi yok.",
+    right: "eslint.config.js veya eşdeğer bir konfigürasyon dosyasi ekleyin.",
+    autoFix: "Yapılandirma gerekir",
   },
   prettier_config_required: {
     why:
-      "Prettier ekipte ayni format duzenini korur ve gereksiz diffleri azaltir.",
+      "Prettier ekipte aynı format düzenini korur ve gereksiz diffleri azaltir.",
     wrong: "Projede .prettierrc veya prettier.config.js yok.",
-    right: "Paylasilan bir Prettier config dosyasi ekleyin.",
-    autoFix: "Yapilandirma gerekir",
+    right: "Paylaşılan bir Prettier config dosyasi ekleyin.",
+    autoFix: "Yapılandirma gerekir",
   },
   husky_pre_commit_required: {
     why:
       "Pre-commit hooklari bozuk kodun repoya girmesini daha commit aninda durdurur.",
-    wrong: "Commit oncesi hicbir otomatik kontrol yok.",
-    right: ".husky/pre-commit icinde lint veya test gibi hizli kontroller calissin.",
-    autoFix: "Yapilandirma gerekir",
+    wrong: "Commit öncesi hiçbir otomatik kontrol yok.",
+    right: ".husky/pre-commit içinde lint veya test gibi hızlı kontroller çalışsın.",
+    autoFix: "Yapılandirma gerekir",
   },
   lint_staged_required: {
     why:
-      "lint-staged sadece degisen dosyalarda kontrol calistirarak kaliteyi hizli korur.",
-    wrong: "Committe degisen dosyalarda hic staged-file kontrolu yok.",
-    right: "package.json veya ayri config icinde lint-staged tanimlayin.",
-    autoFix: "Yapilandirma gerekir",
+      "lint-staged sadece değişen dosyalarda kontrol çalıştırarak kaliteyi hızlı korur.",
+    wrong: "Committe değişen dosyalarda hic staged-file kontrolü yok.",
+    right: "package.json veya ayrı config içinde lint-staged tanımlayın.",
+    autoFix: "Yapılandirma gerekir",
   },
   lazy_loading_images: {
     why:
-      "Ekranin altinda kalan gorselleri gec yuklemek ilk acilis performansini iyilestirir.",
-    wrong: '<img src="/gallery/photo.jpg" alt="Galeri fotografi" />',
+      "Ekranın altında kalan görselleri geç yüklemek ilk açılış performansini iyilestirir.",
+    wrong: '<img src="/gallery/photo.jpg" alt="Galeri fotoğrafı" />',
     right:
-      '<img src="/gallery/photo.jpg" alt="Galeri fotografi" loading="lazy" />',
+      '<img src="/gallery/photo.jpg" alt="Galeri fotoğrafı" loading="lazy" />',
     autoFix: "Guvenli refactor olabilir",
   },
   optimized_images_preferred: {
     why:
-      "WebP ve AVIF gibi formatlar daha kucuk dosya boyutuyla daha hizli acilis saglar.",
-    wrong: "Buyuk kahraman gorselini agir PNG/JPEG olarak tutmak.",
-    right: "Uygun oldugunda WebP veya AVIF tercih edin.",
+      "WebP ve AVIF gibi formatlar daha küçük dosya boyutuyla daha hızlı açılış sağlar.",
+    wrong: "Büyük kahraman görselini ağır PNG/JPEG olarak tutmak.",
+    right: "Uygun olduğunda WebP veya AVIF tercih edin.",
     autoFix: "Asset optimizasyonu gerekir",
   },
   external_links_noopener: {
     why:
-      "Yeni sekmede acilan linklerde rel noopener/noreferrer kullanmak tab-nabbing riskini azaltir.",
+      "Yeni sekmede açılan linklerde rel noopener/noreferrer kullanmak tab-nabbing riskini azaltir.",
     wrong: '<a href="https://example.com" target="_blank">Detay</a>',
     right:
       '<a href="https://example.com" target="_blank" rel="noopener noreferrer">Detay</a>',
@@ -315,9 +315,9 @@ const EXTRA_RULE_GUIDES = {
 
 const EXTENDED_CATEGORY_LABELS = {
   ...categoryLabels,
-  structure: "Yapi",
-  naming: "Isimlendirme",
-  security: "Guvenlik",
+  structure: "Yapı",
+  naming: "İsimlendirme",
+  security: "Güvenlik",
   ai: "AI",
   architecture: "Mimari",
   performance: "Performans",
@@ -328,74 +328,74 @@ const createCompanyStandardSections = (language) => {
     return [
       {
         id: "delivery",
-        eyebrow: "Teslim standardi",
-        title: "Kod calisir, okunur ve aciklanabilir olmali",
+        eyebrow: "Teslim standardı",
+        title: "Kod çalışır, okunur ve açıklanabilir olmali",
         body:
-          "Sirket icinde kabul edilen kod sadece sonucu veren degil; ekipteki baska bir gelistiricinin okuyup devralabilecegi kadar duzenli kod olmalidir.",
+          "Şirket içinde kabul edilen kod sadece sonucu veren değil; ekipteki ba?ka bir geliştiricinin okuyup devralabileceği kadar düzenli kod olmalıdır.",
         bullets: [
-          "Placeholder veya yari kalmis kod kabul edilmez.",
-          "Dosya isimleri, component isimleri ve klasor duzeni tutarli olur.",
-          "Kod review yorumuna ihtiyac duymadan temel amacini anlatabilmelidir.",
+          "Placeholder veya yarı kalmış kod kabul edilmez.",
+          "Dosya isimleri, component isimleri ve klasör düzeni tutarlı olur.",
+          "Kod review yorumuna ihtiyaç duymadan temel amacıni anlatabilmelidir.",
         ],
       },
       {
         id: "frontend",
-        eyebrow: "Arayuz standardi",
-        title: "Erisilebilir ve semantik bir arayuz zorunludur",
+        eyebrow: "Arayuz standardı",
+        title: "Erişilebilir ve semantık bir arayüz zorunludur",
         body:
-          "Ozellikle urun, panel ve form ekranlarinda semantic HTML, label iliskisi ve guvenli buton davranisi standart kabul edilir.",
+          "Özellikle ürün, panel ve form ekranlar?nda semantic HTML, label ilişkisi ve güvenli buton davranışı standart kabul edilir.",
         bullets: [
-          "header, main, section, article gibi etiketler dogru yerde kullanilir.",
-          "img alt, form label/htmlFor ve button type gibi temel A11y kurallari atlanmaz.",
-          "Responsive davranis mobil oncelikli kurulur.",
+          "header, main, section, article gibi etiketler doğru yerde kullanılır.",
+          "img alt, form label/htmlFor ve button type gibi temel A11y kuralları atlanmaz.",
+          "Responsive davranış mobil öncelikli kurulur.",
         ],
       },
       {
         id: "architecture",
         eyebrow: "Mimari standard",
-        title: "Kod buyudukce degil, parcalandikca yonetilebilir olmali",
+        title: "Kod büyüdükçe değil, parçalandıkça yönetilebilir olmali",
         body:
-          "Sirket projelerinde tek dosyada yigilan mantik yerine moduler, isimlendirmesi net ve test eklemeye uygun bir yapi beklenir.",
+          "Şirket projelerinde tek dosyada yığılan mantık yerine modüler, isimlendirmesi net ve test eklemeye uygun bir yapı beklenir.",
         bullets: [
-          "Buyuk bilesenler daha kucuk parcalara bolunur.",
-          "Agir hesaplar JSX disina tasinir.",
-          "Hook kullanimi top-level ve tahmin edilebilir olur.",
+          "Büyük bileşenler daha küçük parçalara bölünür.",
+          "Ağır hesaplar JSX dışına taşınır.",
+          "Hook kullanımı top-level ve tahmin edilebilir olur.",
         ],
       },
       {
         id: "workflow",
-        eyebrow: "Takim is akisi",
-        title: "Kod kadar commit ve PR kalitesi de standardin parcasi",
+        eyebrow: "Takım iş akışı",
+        title: "Kod kadar commit ve PR kalitesi de standardın parcasi",
         body:
-          "Gercek yazilim sirketlerinde kalite sadece kod satirinda degil; commit mesaji, PR aciklamasi ve degisikligin izlenebilirliginde de olculur.",
+          "Gerçek yazılım şirketlerinde kalite sadece kod satırında değil; commit mesajı, PR açıklaması ve değişikliğin izlenebilirliginde de ölçülür.",
         bullets: [
-          "Commit mesaji standart prefix ve anlamli ozet icerir.",
-          "PR aciklamasi ne degisti, neden degisti ve nasil test edildi bilgisini verir.",
-          "Kod bir sonraki gelistiriciye temiz devir mantigiyla teslim edilir.",
+          "Commit mesajı standart prefix ve anlamlı özet içerir.",
+          "PR açıklaması ne değişti, neden değişti ve nasıl test edildi bilgisini verir.",
+          "Kod bir sonraki geliştiriciye temiz devir mantigiyla teslim edilir.",
         ],
       },
       {
         id: "quality",
         eyebrow: "Kalite kapisi",
-        title: "Prompt yonlendirir, denetim dogrular",
+        title: "Prompt yönlendirir, denetim doğrular",
         body:
-          "AI ile kod yazilsa bile sirket standardi ancak tarama, lint ve review ile gercekten korunabilir.",
+          "AI ile kod yazılsa bile şirket standardı ancak tarama, lint ve review ile gerçekten korunabilir.",
         bullets: [
-          "Prompt sadece yonlendirme katmanidir.",
-          "Kurallar sayfasi ortak standardi tanimlar.",
-          "Governance ve review sureci standarda gercek uyumu kontrol eder.",
+          "Prompt sadece yönlendirme katmanidir.",
+          "Kurallar sayfası ortak standardı tanımlar.",
+          "Governance ve review sureci standarda gerçek uyumu kontrol eder.",
         ],
       },
       {
         id: "performance",
-        eyebrow: "Performans tabani",
-        title: "Ilk acilis ve bakim maliyeti birlikte dusunulur",
+        eyebrow: "Performans tabanı",
+        title: "Ilk açılış ve bakım maliyeti birlikte düşünülür",
         body:
-          "Ozellikle frontend islerinde performans yalnizca hiz degil; bundle boyutu, lazy loading ve gorsel optimizasyonu ile birlikte ele alinir.",
+          "Özellikle frontend işlerinde performans yalnızca hız değil; bundle boyutu, lazy loading ve görsel optimizasyonu ile birlikte ele alınır.",
         bullets: [
-          "Route veya agir bolumler lazy load edilmeye uygun tasarlanir.",
-          "Gorsellerde uygun yerde loading='lazy' kullanilir.",
-          "Gereksiz bagimlilik ve tekrarli yapi olusturulmaz.",
+          "Route veya ağır bölümler lazy load edilmeye uygun tasarlanır.",
+          "Görsellerde uygun yerde loading='lazy' kullanılır.",
+          "Gereksiz bağımlılık ve tekrarlı yapı oluşturulmaz.",
         ],
       },
     ];
@@ -782,23 +782,23 @@ function CodeStandards() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                     {language === "tr"
-                      ? "Sirket muhendislik omurgasi"
+                      ? "Şirket mühendislik omurgası"
                       : "Company engineering baseline"}
                   </p>
                   <h2 className="mt-2 text-2xl font-black text-slate-950">
                     {language === "tr"
-                      ? "Az ama net kurallar: gercek yazilim sirketi standardi"
+                      ? "Az ama net kurallar: gerçek yazılım şirketi standardı"
                       : "Few but sharp rules: a realistic software company standard"}
                   </h2>
                   <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-500">
                     {language === "tr"
-                      ? "Bu bolum tek tek teknik kurallarin ustunde duran ortak sirket mantigini anlatir. Yeni gelen bir gelistirici AI kullansa bile once bu omurgaya uymali."
+                      ? "Bu bölüm tek tek teknik kuralların üstünde duran ortak şirket mantığını anlatır. Yeni gelen bir geliştirici AI kullansa bile önce bu omurgaya uymalı."
                       : "This section explains the company baseline above the individual technical rules. Even when a new engineer uses AI, the work should first align with this shared foundation."}
                   </p>
                 </div>
                 <Badge variant="neutral">
                   {companyStandardSections.length}{" "}
-                  {language === "tr" ? "ana baslik" : "core sections"}
+                  {language === "tr" ? "ana başlık" : "core sections"}
                 </Badge>
               </div>
 

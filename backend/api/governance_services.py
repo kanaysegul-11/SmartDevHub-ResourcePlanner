@@ -874,25 +874,13 @@ def _starter_rule_definitions():
             "config": {"extensions": [".py"]},
         },
         {
-            "code": "max_function_length",
-            "title": "Keep functions focused and short",
-            "description": "Large functions should be split into smaller helpers with a single responsibility.",
-            "category": "complexity",
-            "severity": "medium",
-            "weight": 6,
-            "order": 5,
-            "config": {
-                "max_lines": 20,
-            },
-        },
-        {
             "code": "commit_message_pattern",
             "title": "Commit messages should follow the team convention",
             "description": "Commit messages should use a conventional prefix and an explicit summary.",
             "category": "workflow",
             "severity": "medium",
             "weight": 5,
-            "order": 6,
+            "order": 5,
             "config": {
                 "commit_message_pattern": DEFAULT_COMMIT_MESSAGE_PATTERN,
                 "min_length": 10,
@@ -905,7 +893,7 @@ def _starter_rule_definitions():
             "category": "workflow",
             "severity": "medium",
             "weight": 5,
-            "order": 7,
+            "order": 6,
             "config": {
                 "min_body_length": 40,
                 "large_change_threshold": 600,
@@ -926,6 +914,7 @@ def ensure_default_standard_profile(*, created_by=None):
             StandardRule(profile=profile, **rule_data)
             for rule_data in _starter_rule_definitions()
             if rule_data["code"] not in existing_codes
+            and rule_data["code"] not in DISABLED_GOVERNANCE_RULE_CODES
         ]
         if missing_rules:
             StandardRule.objects.bulk_create(missing_rules)
@@ -971,13 +960,17 @@ def restore_core_standard_rule_library(*, created_by=None):
     profile = ensure_default_standard_profile(created_by=created_by)
     starter_rules = _starter_rule_definitions()
     starter_by_code = {rule_data["code"]: rule_data for rule_data in starter_rules}
-    starter_codes = set(starter_by_code.keys())
+    starter_codes = {
+        code for code in starter_by_code if code not in DISABLED_GOVERNANCE_RULE_CODES
+    }
 
     existing_rules = {
         rule.code: rule for rule in profile.rules.all()
     }
 
     for code, rule_data in starter_by_code.items():
+        if code in DISABLED_GOVERNANCE_RULE_CODES:
+            continue
         existing_rule = existing_rules.get(code)
         if existing_rule is None:
             StandardRule.objects.create(profile=profile, **rule_data)
@@ -2646,6 +2639,11 @@ def build_developer_governance_overview(repositories, *, viewer=None):
         repository_files_touched = 0
         repository_commit_count = 0
         for developer_score in scan.developer_scores.all():
+            if restrict_to_viewer and (
+                _normalize_github_login(developer_score.github_login)
+                not in visible_logins
+            ):
+                continue
             repository_violation_count += developer_score.violation_count or 0
             repository_files_touched += developer_score.files_touched or 0
             repository_commit_count += developer_score.commit_count or 0
@@ -2682,6 +2680,12 @@ def build_developer_governance_overview(repositories, *, viewer=None):
             "repository"
         )
     )
+    if restrict_to_viewer:
+        all_commits = [
+            commit
+            for commit in all_commits
+            if _normalize_github_login(commit.author_login) in visible_logins
+        ]
     for commit in all_commits:
         repository = repository_by_id.get(commit.repository_id)
         if not repository:
@@ -2707,6 +2711,12 @@ def build_developer_governance_overview(repositories, *, viewer=None):
             repository_id__in=repository_ids
         ).select_related("repository")
     )
+    if restrict_to_viewer:
+        all_pull_requests = [
+            pull_request
+            for pull_request in all_pull_requests
+            if _normalize_github_login(pull_request.author_login) in visible_logins
+        ]
     for pull_request in all_pull_requests:
         repository = repository_by_id.get(pull_request.repository_id)
         if not repository:
