@@ -1283,6 +1283,92 @@ class ApiBehaviorTests(APITestCase):
         self.assertIn("sync_error", alert_kinds)
         self.assertEqual(response.data["renewals"]["next_7_days"][0]["id"], expiring_asset.id)
 
+    def test_past_renewal_date_is_treated_as_paid_not_expired(self):
+        admin_user = User.objects.create_user(
+            username="software-paid-renewal-admin",
+            password="strong-pass-123",
+            email="software-paid-renewal-admin@example.com",
+            is_staff=True,
+        )
+        paid_asset = SoftwareAsset.objects.create(
+            name="Auto Paid License",
+            vendor="Adobe",
+            record_type="saas",
+            license_mode="assigned",
+            provider_code="adobe",
+            operational_status="active",
+            renewal_date=timezone.localdate() - timedelta(days=14),
+            created_by=admin_user,
+        )
+        inactive_asset = SoftwareAsset.objects.create(
+            name="Stopped License",
+            vendor="Figma",
+            record_type="saas",
+            license_mode="assigned",
+            provider_code="figma",
+            operational_status="inactive",
+            renewal_date=timezone.localdate() - timedelta(days=30),
+            created_by=admin_user,
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        list_response = self.client.get("/api/software-assets/")
+        summary_response = self.client.get("/api/software-assets/summary/")
+
+        paid_payload = next(item for item in list_response.data if item["id"] == paid_asset.id)
+        inactive_payload = next(
+            item for item in list_response.data if item["id"] == inactive_asset.id
+        )
+
+        self.assertEqual(paid_payload["renewal_window"], "paid")
+        self.assertEqual(paid_payload["lifecycle_status"], "active")
+        self.assertEqual(inactive_payload["renewal_window"], "paid")
+        self.assertEqual(inactive_payload["lifecycle_status"], "inactive")
+        self.assertEqual(summary_response.data["stats"]["paid_renewal_records"], 2)
+        self.assertIn(
+            paid_asset.id,
+            [item["id"] for item in summary_response.data["renewals"]["payment_history"]],
+        )
+        alert_kinds = {alert["kind"] for alert in summary_response.data["alerts"]}
+        self.assertNotIn("expired", alert_kinds)
+
+    def test_stop_payment_sets_inactive_and_disables_auto_renew(self):
+        admin_user = User.objects.create_user(
+            username="software-stop-payment-admin",
+            password="strong-pass-123",
+            email="software-stop-payment-admin@example.com",
+            is_staff=True,
+        )
+        asset = SoftwareAsset.objects.create(
+            name="Renewing Tool",
+            vendor="Cursor",
+            record_type="saas",
+            license_mode="assigned",
+            provider_code="cursor",
+            operational_status="active",
+            auto_renew=True,
+            renewal_date=timezone.localdate() + timedelta(days=3),
+            created_by=admin_user,
+        )
+        SoftwareAssetAssignment.objects.create(
+            asset=asset,
+            user=self.user,
+            access_email=self.user.email,
+        )
+
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.patch(
+            f"/api/software-assets/{asset.id}/",
+            {"operational_status": "inactive", "auto_renew": False},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        asset.refresh_from_db()
+        self.assertEqual(asset.operational_status, "inactive")
+        self.assertFalse(asset.auto_renew)
+        self.assertEqual(response.data["lifecycle_status"], "inactive")
+
     def test_software_asset_summary_excludes_archived_records_from_totals(self):
         admin_user = User.objects.create_user(
             username="software-summary-archive-admin",

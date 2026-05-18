@@ -35,7 +35,7 @@ import {
   safeParseMetadataText,
 } from "../component/softwareAssets/softwareAssetsContent.js";
 
-const TAB_ITEMS = ["shared", "assigned", "renewals", "cost", "sync", "alerts"];
+const TAB_ITEMS = ["shared", "assigned", "renewals", "payment_history", "cost", "sync", "alerts"];
 
 const normalizeImportToken = (value) =>
   String(value || "")
@@ -235,7 +235,7 @@ function SoftwareAssets() {
   const [summary, setSummary] = useState({
     stats: {},
     provider_spend: [],
-    renewals: { expired: [], next_7_days: [] },
+    renewals: { payment_history: [], next_7_days: [] },
     alerts: [],
     sync_logs: [],
     audit_logs: [],
@@ -281,6 +281,7 @@ function SoftwareAssets() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isReclaiming, setIsReclaiming] = useState(false);
+  const [isStoppingPayment, setIsStoppingPayment] = useState(false);
   const [processingRequestId, setProcessingRequestId] = useState(null);
   const [filters, setFilters] = useState({
     search: "",
@@ -348,22 +349,20 @@ function SoftwareAssets() {
   );
 
   const getLifecycleVariant = (status) =>
-    ["expired", "inactive", "archived"].includes(status)
+    ["inactive", "archived"].includes(status)
       ? "error"
       : status === "expiring_soon"
         ? "warning"
         : "success";
 
   const getLifecycleLabel = (status) =>
-    status === "expired"
-      ? copy.expired
-      : status === "expiring_soon"
-        ? copy.expiringLabel
-        : status === "inactive"
-          ? copy.inactive
-          : status === "archived"
-            ? copy.archived
-            : copy.active;
+    status === "expiring_soon"
+      ? copy.expiringLabel
+      : status === "inactive"
+        ? copy.inactive
+        : status === "archived"
+          ? copy.archived
+          : copy.active;
 
   const getRecordSourceLabel = (value) =>
     value === "provider_sync" ? copy.providerSync : copy.manualRecord;
@@ -489,9 +488,34 @@ function SoftwareAssets() {
     [filteredAssets]
   );
   const renewalAssets = useMemo(
-    () => filteredAssets.filter((asset) => asset.renewal_date),
+    () =>
+      filteredAssets.filter(
+        (asset) => asset.renewal_window === "7_days" || asset.renewal_window === "future"
+      ),
     [filteredAssets]
   );
+  const paymentHistoryAssets = useMemo(() => {
+    const summaryIds = new Set(
+      (summary.renewals?.payment_history || []).map((asset) => String(asset.id))
+    );
+    const fromList = filteredAssets.filter((asset) => asset.renewal_window === "paid");
+    if (!summaryIds.size) {
+      return fromList;
+    }
+    const merged = new Map(fromList.map((asset) => [String(asset.id), asset]));
+    (summary.renewals?.payment_history || []).forEach((asset) => {
+      const id = String(asset.id);
+      if (!merged.has(id)) {
+        const fullAsset = assets.find((item) => String(item.id) === id);
+        if (fullAsset) {
+          merged.set(id, fullAsset);
+        }
+      }
+    });
+    return Array.from(merged.values()).sort((left, right) =>
+      String(right.renewal_date || "").localeCompare(String(left.renewal_date || ""))
+    );
+  }, [assets, filteredAssets, summary.renewals]);
 
   const startCreate = (licenseMode) => {
     if (!isAdmin) return;
@@ -659,6 +683,24 @@ function SoftwareAssets() {
       toast.error(copy.errorReclaim);
     } finally {
       setIsReclaiming(false);
+    }
+  };
+
+  const handleStopPayment = async () => {
+    if (!selectedAsset) return;
+
+    try {
+      setIsStoppingPayment(true);
+      await apiClient.patch(`/software-assets/${selectedAsset.id}/`, {
+        operational_status: "inactive",
+        auto_renew: false,
+      });
+      toast.success(copy.successStopPayment);
+      await refreshAll();
+    } catch {
+      toast.error(copy.errorStopPayment);
+    } finally {
+      setIsStoppingPayment(false);
     }
   };
 
@@ -1125,6 +1167,9 @@ function SoftwareAssets() {
     if (activeTab === "shared") return renderTable(copy.tabs.shared, sharedAssets);
     if (activeTab === "assigned") return renderTable(copy.tabs.assigned, assignedAssets);
     if (activeTab === "renewals") return renderTable(copy.tabs.renewals, renewalAssets);
+    if (activeTab === "payment_history") {
+      return renderTable(copy.tabs.payment_history, paymentHistoryAssets);
+    }
 
     if (activeTab === "cost" && isAdmin) {
       return (
@@ -1303,7 +1348,6 @@ function SoftwareAssets() {
                         all: copy.filterAll,
                         active: copy.active,
                         expiring_soon: copy.expiringLabel,
-                        expired: copy.expired,
                         inactive: copy.inactive,
                         archived: copy.archived,
                       },
@@ -1324,7 +1368,7 @@ function SoftwareAssets() {
                       options: {
                         all: copy.filterAll,
                         "7_days": "7",
-                        expired: copy.expired,
+                        paid: copy.paidRenewal,
                         future: copy.future,
                       },
                     },
@@ -1524,6 +1568,14 @@ function SoftwareAssets() {
                 isDeleting={isDeleting}
                 isSyncing={isSyncing}
                 isReclaiming={isReclaiming}
+                isStoppingPayment={isStoppingPayment}
+                canStopPayment={Boolean(
+                  isAdmin &&
+                    selectedAsset &&
+                    !isCreateMode &&
+                    selectedAsset.operational_status === "active"
+                )}
+                onStopPayment={handleStopPayment}
                 onSubmit={handleSubmit}
                 onDeleteClick={() => setDeleteConfirmOpen(true)}
                 onCancelCreate={() => setIsCreateMode(false)}

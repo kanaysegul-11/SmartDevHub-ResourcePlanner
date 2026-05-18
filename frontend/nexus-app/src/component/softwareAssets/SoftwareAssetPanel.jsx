@@ -2,6 +2,7 @@ import React from "react";
 import {
   FeatherDatabase,
   FeatherExternalLink,
+  FeatherPauseCircle,
   FeatherRefreshCw,
   FeatherShield,
   FeatherSparkles,
@@ -142,6 +143,9 @@ function SoftwareAssetPanel(props) {
     isDeleting,
     isSyncing,
     isReclaiming,
+    isStoppingPayment,
+    canStopPayment,
+    onStopPayment,
     onSubmit,
     onDeleteClick,
     onCancelCreate,
@@ -434,6 +438,12 @@ function SoftwareAssetPanel(props) {
             <button type="button" onClick={onSyncRecord} disabled={isSyncing} className="inline-flex items-center justify-center gap-2 rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
               <FeatherRefreshCw size={16} />
               {copy.syncNow}
+            </button>
+          ) : null}
+          {!isCreateMode && canStopPayment ? (
+            <button type="button" onClick={onStopPayment} disabled={isStoppingPayment} className="inline-flex items-center justify-center gap-2 rounded-[18px] border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-800 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60">
+              <FeatherPauseCircle size={16} />
+              {copy.stopPayment}
             </button>
           ) : null}
           {!isCreateMode && selectedAsset ? (

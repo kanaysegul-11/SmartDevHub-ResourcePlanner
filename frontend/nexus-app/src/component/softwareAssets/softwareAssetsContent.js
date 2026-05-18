@@ -258,7 +258,6 @@ export function getSoftwareAssetAlertCopy(alert, copy) {
   };
 
   const keyMap = {
-    expired: ["expiredTitle", "expiredDescription"],
     renewal_due: ["renewalDueTitle", "renewalDueDescription"],
     paid_unused: ["paidUnusedTitle", "paidUnusedDescription"],
     seat_full: ["seatFullTitle", "seatFullDescription"],

@@ -596,18 +596,19 @@ class SoftwareAssetSerializer(serializers.ModelSerializer):
             return "archived"
         if obj.operational_status == "inactive":
             return "inactive"
-        if obj.renewal_date and obj.renewal_date < timezone.localdate():
-            return "expired"
-        if obj.renewal_date and obj.renewal_date <= timezone.localdate() + timedelta(days=7):
-            return "expiring_soon"
+        if obj.renewal_date:
+            today = timezone.localdate()
+            if today <= obj.renewal_date <= today + timedelta(days=7):
+                return "expiring_soon"
         return "active"
 
     def get_renewal_window(self, obj):
         if not obj.renewal_date:
             return "none"
-        if obj.renewal_date < timezone.localdate():
-            return "expired"
-        if obj.renewal_date <= timezone.localdate() + timedelta(days=7):
+        today = timezone.localdate()
+        if obj.renewal_date < today:
+            return "paid"
+        if obj.renewal_date <= today + timedelta(days=7):
             return "7_days"
         return "future"
 

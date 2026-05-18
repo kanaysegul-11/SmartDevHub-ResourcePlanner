@@ -227,19 +227,20 @@ def get_asset_lifecycle_status(asset):
         return "archived"
     if asset.operational_status == "inactive":
         return "inactive"
-    if asset.renewal_date and asset.renewal_date < timezone.localdate():
-        return "expired"
-    if asset.renewal_date and asset.renewal_date <= timezone.localdate() + timedelta(days=7):
-        return "expiring_soon"
+    if asset.renewal_date:
+        today = timezone.localdate()
+        if today <= asset.renewal_date <= today + timedelta(days=7):
+            return "expiring_soon"
     return "active"
 
 
 def get_asset_renewal_window(asset):
     if not asset.renewal_date:
         return "none"
-    if asset.renewal_date < timezone.localdate():
-        return "expired"
-    if asset.renewal_date <= timezone.localdate() + timedelta(days=7):
+    today = timezone.localdate()
+    if asset.renewal_date < today:
+        return "paid"
+    if asset.renewal_date <= today + timedelta(days=7):
         return "7_days"
     return "future"
 
@@ -879,7 +880,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
         today = timezone.localdate()
         if renewal_bucket == "7_days":
             queryset = queryset.filter(renewal_date__gte=today, renewal_date__lte=today + timedelta(days=7))
-        elif renewal_bucket == "expired":
+        elif renewal_bucket == "paid":
             queryset = queryset.filter(renewal_date__lt=today)
         elif renewal_bucket == "future":
             queryset = queryset.filter(renewal_date__gt=today + timedelta(days=7))
@@ -889,7 +890,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(operational_status="inactive")
         elif lifecycle_status == "archived":
             queryset = queryset.filter(operational_status="archived")
-        elif lifecycle_status == "expired":
+        elif lifecycle_status == "paid":
             queryset = queryset.filter(operational_status="active", renewal_date__lt=today)
         elif lifecycle_status == "expiring_soon":
             queryset = queryset.filter(
@@ -898,9 +899,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
                 renewal_date__lte=today + timedelta(days=7),
             )
         elif lifecycle_status == "active":
-            queryset = queryset.filter(
-                operational_status="active"
-            ).exclude(renewal_date__lt=today)
+            queryset = queryset.filter(operational_status="active")
 
         return queryset
 
@@ -1052,18 +1051,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             lifecycle_status = get_asset_lifecycle_status(asset)
             utilization_rate = round((seats_used / max(int(asset.seats_total or 1), 1)) * 100, 2)
 
-            if renewal_window == "expired":
-                alerts.append(
-                    {
-                        "kind": "expired",
-                        "severity": "error",
-                        "asset_id": asset.id,
-                        "asset_name": asset.name,
-                        "title": f"{asset.name} already expired",
-                        "description": "Renewal date has passed and action is required.",
-                    }
-                )
-            elif renewal_window == "7_days":
+            if renewal_window == "7_days":
                 alerts.append(
                     {
                         "kind": "renewal_due",
@@ -1220,7 +1208,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
 
         provider_rollup = {}
         renewals = {
-            "expired": [],
+            "payment_history": [],
             "next_7_days": [],
         }
         stats = {
@@ -1230,7 +1218,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             "shared_records": 0,
             "assigned_records": 0,
             "expiring_7_days": 0,
-            "expired_records": 0,
+            "paid_renewal_records": 0,
             "monthly_cost_total": 0,
             "annual_cost_total": 0,
             "total_seats": 0,
@@ -1276,9 +1264,9 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             stats["paid_unused_records"] += 1 if annual_cost > 0 and seats_used == 0 else 0
 
             serialized_asset = self._serialize_asset_brief(asset)
-            if renewal_window == "expired":
-                stats["expired_records"] += 1
-                renewals["expired"].append(serialized_asset)
+            if renewal_window == "paid":
+                stats["paid_renewal_records"] += 1
+                renewals["payment_history"].append(serialized_asset)
             elif renewal_window == "7_days":
                 stats["expiring_7_days"] += 1
                 renewals["next_7_days"].append(serialized_asset)
@@ -1334,7 +1322,7 @@ class SoftwareAssetViewSet(viewsets.ModelViewSet):
             {
                 "stats": stats,
                 "renewals": {
-                    "expired": renewals["expired"][:8],
+                    "payment_history": renewals["payment_history"][:24],
                     "next_7_days": renewals["next_7_days"][:8],
                 },
                 "alerts": self._build_alerts(
